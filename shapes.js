@@ -267,6 +267,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     AppState.imageObj = null;
     AppState.shapes = AppState.shapes || [];
     AppState.selectedShape = null;
+    AppState.selectedShapes = [];
     AppState.transformer = null;
 
     async function renderCanvas(imageSrc) {
@@ -318,6 +319,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection)
           AppState.selectedShape.showSelection(false);
         AppState.selectedShape = shape;
+        AppState.selectedShapes = [shape];
         if (!shape) return;
 
         if (shape._type === "rect") {
@@ -375,6 +377,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
           AppState.transformer = null;
         }
         AppState.selectedShape = null;
+        AppState.selectedShapes = [];
         layer.draw();
       }
 
@@ -454,6 +457,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
       AppState.selectedShape = point;
+      AppState.selectedShapes = [point];
       point.showSelection(true);
     }
 
@@ -483,6 +487,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
       AppState.selectedShape = rect;
+      AppState.selectedShapes = [rect];
       if (AppState.transformer) {
         AppState.transformer.destroy();
         AppState.transformer = null;
@@ -535,6 +540,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
       AppState.selectedShape = circle;
+      AppState.selectedShapes = [circle];
       if (AppState.transformer) {
         AppState.transformer.destroy();
         AppState.transformer = null;
@@ -573,9 +579,23 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       if (addBtn) {
         addBtn.onclick = addShapeFromToolbar;
       }
+      // --- Select All button logic ---
+      const selectAllBtn = document.getElementById("selectAllBtn");
+      if (selectAllBtn) {
+        selectAllBtn.onclick = function () {
+          if (!AppState.shapes || AppState.shapes.length === 0) return;
+          AppState.selectedShapes = AppState.shapes.slice();
+          AppState.selectedShape = null;
+          if (AppState.transformer) {
+            AppState.transformer.destroy();
+            AppState.transformer = null;
+          }
+          // Redraw layer to show multiselect highlight (if implemented)
+          if (AppState.konvaLayer) AppState.konvaLayer.draw();
+        };
+      }
     }, 0);
   };
-})();
 /*********************************************************
  * PART 3: SettingsPanel Stub (Hello World)
  * ----------------------------------------
