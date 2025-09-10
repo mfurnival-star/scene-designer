@@ -1,155 +1,154 @@
-/*******************************************************
- * shapes.part6.utils.js
- * Part 6 of N for shapes.js modular build
- * 
- * Feature Area: Utility functions, general helpers, debug tools, and export/import logic
- * Line Limit: ~350 lines max per part for copy-paste reliability.
- * 
- * Naming/Build Scheme:
- *   - Parts are grouped by feature (not arbitrary line count).
- *   - Features exceeding 350 lines split as partNa, partNb, etc.
- *   - To build: concatenate all part files in order: cat shapes.part*.js > shapes.js
- *   - To update: copy-paste the full part file.
- * 
- * This file is intended to be used as a modular chunk.
- * DO NOT remove or modify this header unless updating the schema.
- *******************************************************/
+/**
+ * shapes.part2b.konva.js
+ * Konva shapes/tools/extensions for scene-designer
+ * - Sets up shape tools (point, rect, circle)
+ * - Handles drawing, selection, and tool logic
+ * - Depends on part2a (stage/layer creation)
+ */
 
-/*************************************
- * Utility: Export/Import Shapes as JSON
- *************************************/
-function exportShapesToJSON() {
-  const data = shapes.map(s => ({
-    type: s._type,
-    label: s._label,
-    attrs: s.getAttrs(),
-    locked: !!s.locked
-  }));
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "shapes-export.json";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 100);
-}
+let currentTool = "point";
+let shapes = [];
+let selectedShape = null;
 
-function importShapesFromJSON(jsonStr) {
-  logEnter("importShapesFromJSON");
-  try {
-    const arr = JSON.parse(jsonStr);
-    layer.destroyChildren();
-    shapes.length = 0;
-    arr.forEach(obj => {
-      let s;
-      if (obj.type === "rect") {
-        s = new Konva.Rect(obj.attrs);
-      } else if (obj.type === "circle") {
-        s = new Konva.Circle(obj.attrs);
-      } else if (obj.type === "point") {
-        s = new Konva.Circle(obj.attrs);
-      }
-      if (s) {
-        s._type = obj.type;
-        s._label = obj.label;
-        s.locked = !!obj.locked;
-        setupShapeEvents(s);
-        shapes.push(s);
-        layer.add(s);
-      }
-    });
-    layer.draw();
-    updateList();
-  } catch (e) {
-    window.alert("Failed to import shapes: " + e);
+// Tool setup: called after stage/layer is created
+function setupShapeTools() {
+  // Tool dropdown
+  const toolSelect = document.getElementById("shapeType");
+  if (toolSelect) {
+    toolSelect.value = currentTool;
+    toolSelect.onchange = e => {
+      currentTool = e.target.value;
+      handleToolChange();
+    };
   }
-  logExit("importShapesFromJSON");
+
+  // Add shape button
+  const addBtn = document.getElementById("newBtn");
+  if (addBtn) addBtn.onclick = addShapeHandler;
+
+  // Delete shape button
+  const delBtn = document.getElementById("deleteBtn");
+  if (delBtn) delBtn.onclick = deleteShapeHandler;
+
+  // Duplicate shape button
+  const dupBtn = document.getElementById("duplicateBtn");
+  if (dupBtn) dupBtn.onclick = duplicateShapeHandler;
+
+  // Init layer events for drawing
+  if (window.layer) {
+    window.layer.on("mousedown touchstart", onCanvasDown);
+  }
 }
 
-/*************************************
- * Utility: Download PNG of current canvas
- *************************************/
-function downloadCanvasAsPNG() {
-  logEnter("downloadCanvasAsPNG");
-  if (!stage) return;
-  const dataURL = stage.toDataURL({ pixelRatio: 2 });
-  const a = document.createElement("a");
-  a.href = dataURL;
-  a.download = "scene.png";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-  }, 100);
-  logExit("downloadCanvasAsPNG");
+function handleToolChange() {
+  clearSelection();
+  // Future: update UI for tool-specific options
 }
 
-/*************************************
- * Debug: Dump all shapes to console
- *************************************/
-function debugDumpShapes() {
-  logEnter("debugDumpShapes");
-  console.log("Current shapes:", shapes.map(s => ({
-    type: s._type,
-    label: s._label,
-    attrs: s.getAttrs(),
-    locked: !!s.locked
-  })));
-  logExit("debugDumpShapes");
-}
-
-/*************************************
- * General Helper: Enable edit on shape from list
- *************************************/
-function enableEdit(shape) {
-  if (!shape) return;
-  selectedShapes = [shape];
-  updateSelectionHighlights();
-  updateList();
-}
-
-/*************************************
- * Redraw all points (used by settings changes)
- *************************************/
-function redrawAllPoints() {
-  shapes.forEach(s => {
-    if (s._type === "point") {
-      s.radius(getSetting("pointHitRadius"));
-      s.strokeWidth(2);
-      s.fill(getSetting("defaultFillColor"));
-      s.stroke(getSetting("defaultStrokeColor"));
-    }
-  });
-  layer.batchDraw();
-}
-window.redrawAllPoints = redrawAllPoints;
-
-/*************************************
- * Export/Import Buttons Setup
- *************************************/
-document.addEventListener("DOMContentLoaded", () => {
-  const btnExport = document.getElementById("btnExportShapes");
-  const btnImport = document.getElementById("btnImportShapes");
-  const btnDownload = document.getElementById("btnDownloadPNG");
-  if (btnExport) btnExport.onclick = exportShapesToJSON;
-  if (btnImport) btnImport.onclick = () => {
-    const fileInput = document.createElement('input');
-    fileInput.type = "file";
-    fileInput.accept = ".json,application/json";
-    fileInput.addEventListener('change', (e) => {
-      if (!e.target.files.length) return;
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        importShapesFromJSON(ev.target.result);
-      };
-      reader.readAsText(file);
+function addShapeHandler() {
+  if (!window.layer) return;
+  const stage = window.stage;
+  const pointer = stage.getPointerPosition() || { x: 100, y: 100 };
+  let shape;
+  if (currentTool === "point") {
+    shape = new Konva.Circle({
+      x: pointer.x,
+      y: pointer.y,
+      radius: window.getSetting ? window.getSetting("pointHitRadius") : 12,
+      stroke: window.getSetting ? window.getSetting("defaultStrokeColor") : "#2176ff",
+      fill: window.getSetting ? window.getSetting("defaultFillColor") : "#e3eeff",
+      strokeWidth: 2,
+      draggable: true,
+      _type: "point"
     });
-    fileInput.click();
-  };
-  if (btnDownload) btnDownload.onclick = downloadCanvasAsPNG;
-});
+  } else if (currentTool === "rect") {
+    shape = new Konva.Rect({
+      x: pointer.x - 30,
+      y: pointer.y - 20,
+      width: 60,
+      height: 40,
+      stroke: "#2176ff",
+      fill: "#e3eeff",
+      strokeWidth: 2,
+      draggable: true,
+      _type: "rect"
+    });
+  } else if (currentTool === "circle") {
+    shape = new Konva.Circle({
+      x: pointer.x,
+      y: pointer.y,
+      radius: 32,
+      stroke: "#2176ff",
+      fill: "#e3eeff",
+      strokeWidth: 2,
+      draggable: true,
+      _type: "circle"
+    });
+  }
+  if (shape) {
+    shapes.push(shape);
+    window.layer.add(shape);
+    window.layer.draw();
+    selectShape(shape);
+  }
+}
+
+function deleteShapeHandler() {
+  if (!selectedShape) return;
+  shapes = shapes.filter(s => s !== selectedShape);
+  selectedShape.destroy();
+  selectedShape = null;
+  window.layer.draw();
+}
+
+function duplicateShapeHandler() {
+  if (!selectedShape) return;
+  let clone;
+  if (selectedShape._type === "point" || selectedShape._type === "circle") {
+    clone = selectedShape.clone({ x: selectedShape.x() + 16, y: selectedShape.y() + 16 });
+  } else if (selectedShape._type === "rect") {
+    clone = selectedShape.clone({ x: selectedShape.x() + 20, y: selectedShape.y() + 20 });
+  }
+  if (clone) {
+    shapes.push(clone);
+    window.layer.add(clone);
+    window.layer.draw();
+    selectShape(clone);
+  }
+}
+
+function clearSelection() {
+  if (selectedShape) {
+    selectedShape.strokeEnabled(true);
+    selectedShape = null;
+    window.layer.draw();
+  }
+}
+
+function selectShape(shape) {
+  clearSelection();
+  selectedShape = shape;
+  if (shape) {
+    shape.strokeEnabled(true);
+    window.layer.draw();
+  }
+}
+
+function onCanvasDown(e) {
+  if (e.target === window.layer) {
+    clearSelection();
+  } else {
+    selectShape(e.target);
+  }
+}
+
+function addShapeHandlers() {
+  // For extension: add event handlers to shapes (e.g. drag, transform)
+}
+
+if (typeof window !== "undefined") {
+  window.setupShapeTools = setupShapeTools;
+  window.addShapeHandlers = addShapeHandlers;
+  window.shapes = shapes;
+}
+

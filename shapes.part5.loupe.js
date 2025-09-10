@@ -1,144 +1,92 @@
-/*******************************************************
+/**
  * shapes.part5.loupe.js
- * Part 5 of N for shapes.js modular build
- * 
- * Feature Area: Loupe (magnifier) logic, loupe UI management, loupe rendering
- * Line Limit: ~350 lines max per part for copy-paste reliability.
- * 
- * Naming/Build Scheme:
- *   - Parts are grouped by feature (not arbitrary line count).
- *   - Features exceeding 350 lines split as partNa, partNb, etc.
- *   - To build: concatenate all part files in order: cat shapes.part*.js > shapes.js
- *   - To update: copy-paste the full part file.
- * 
- * This file is intended to be used as a modular chunk.
- * DO NOT remove or modify this header unless updating the schema.
- *******************************************************/
+ * Loupe/magnifier feature for scene-designer
+ * - Displays a magnifier lens over the canvas
+ * - Handles zoom logic and drawing
+ */
 
-/*************************************
- * Loupe (Magnifier) Feature
- *************************************/
-
-// Loupe state and settings
+let loupeEnabled = false;
+let loupeZoom = 3;
 let loupeCanvas = null;
 let loupeCtx = null;
-let loupeVisible = false;
-let loupeLastX = 0, loupeLastY = 0;
-let loupeRAF = null;
 
-// Loupe DOM creation and setup
-function setupLoupe() {
-  logEnter("setupLoupe");
-  loupeCanvas = document.getElementById("loupeCanvas");
-  if (!loupeCanvas) {
-    loupeCanvas = document.createElement("canvas");
-    loupeCanvas.id = "loupeCanvas";
-    loupeCanvas.style.position = "absolute";
-    loupeCanvas.style.display = "none";
-    loupeCanvas.style.zIndex = 1000;
-    document.body.appendChild(loupeCanvas);
-  }
-  loupeCtx = loupeCanvas.getContext("2d");
-  loupeVisible = false;
-  logExit("setupLoupe");
-}
+function setupLoupe(containerId = "container") {
+  const container = document.getElementById(containerId);
+  if (!container) return;
 
-// Loupe show/hide logic
-function showLoupe(x, y) {
-  logEnter("showLoupe", { x, y });
-  loupeVisible = true;
-  loupeLastX = x;
-  loupeLastY = y;
-  loupeCanvas.style.display = "block";
-  updateLoupePosition(x, y);
-  if (!loupeRAF) loupeRAF = requestAnimationFrame(drawLoupe);
-  logExit("showLoupe");
-}
-function hideLoupe() {
-  loupeVisible = false;
+  // Remove any old loupe
+  const existing = document.getElementById("loupeCanvas");
+  if (existing) existing.remove();
+
+  loupeCanvas = document.createElement("canvas");
+  loupeCanvas.id = "loupeCanvas";
+  loupeCanvas.width = 160;
+  loupeCanvas.height = 160;
+  loupeCanvas.style.position = "absolute";
+  loupeCanvas.style.pointerEvents = "none";
+  loupeCanvas.style.border = "2px solid #2176ff";
+  loupeCanvas.style.borderRadius = "50%";
   loupeCanvas.style.display = "none";
-  if (loupeRAF) cancelAnimationFrame(loupeRAF);
-  loupeRAF = null;
+  loupeCanvas.style.zIndex = 10;
+
+  container.appendChild(loupeCanvas);
+  loupeCtx = loupeCanvas.getContext("2d");
+
+  // Mouse events for loupe
+  container.addEventListener("mousemove", loupeMouseMove);
+  container.addEventListener("mouseleave", loupeMouseLeave);
 }
 
-// Update loupe position (so it doesn't cover the cursor)
-function updateLoupePosition(x, y) {
-  const size = getSetting("loupeSize");
-  const offsetX = getSetting("loupeOffsetX");
-  const offsetY = getSetting("loupeOffsetY");
-  loupeCanvas.width = size;
-  loupeCanvas.height = size;
-  loupeCanvas.style.width = size + "px";
-  loupeCanvas.style.height = size + "px";
-  loupeCanvas.style.left = (x + 30 + offsetX) + "px";
-  loupeCanvas.style.top = (y - size / 2 + offsetY) + "px";
-}
+function loupeMouseMove(e) {
+  if (!loupeEnabled || !loupeCanvas || !window.stage) return;
+  const rect = e.target.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
 
-// Loupe drawing logic (copies a region of the stage canvas, scales it up)
-function drawLoupe() {
-  if (!loupeVisible || !stage) return;
-  const size = getSetting("loupeSize");
-  const zoom = getSetting("loupeZoom");
-  const fps = getSetting("loupeFPS");
-  const showCrosshair = getSetting("loupeCrosshair");
-  loupeCanvas.width = size;
-  loupeCanvas.height = size;
-  const stageCanvas = stage.content.getElementsByTagName('canvas')[0];
-  const scale = zoom;
-  const sx = Math.max(0, loupeLastX - size / (2 * scale));
-  const sy = Math.max(0, loupeLastY - size / (2 * scale));
-  const sw = size / scale;
-  const sh = size / scale;
+  // Position loupe near the cursor
+  loupeCanvas.style.left = `${mx + 18}px`;
+  loupeCanvas.style.top = `${my + 18}px`;
+  loupeCanvas.style.display = "block";
 
+  // Draw magnified area from Konva stage
+  const stage = window.stage;
+  const pixelRatio = window.devicePixelRatio || 1;
+  const size = 160;
+  const zoom = loupeZoom;
   loupeCtx.clearRect(0, 0, size, size);
-  loupeCtx.save();
-  loupeCtx.beginPath();
-  loupeCtx.arc(size / 2, size / 2, size / 2, 0, 2 * Math.PI);
-  loupeCtx.closePath();
-  loupeCtx.clip();
 
-  // Draw zoomed region from stage canvas into loupe
-  loupeCtx.drawImage(stageCanvas, sx, sy, sw, sh, 0, 0, size, size);
+  // Render stage to temp canvas, draw portion into loupe
+  const dataURL = stage.toDataURL({
+    x: mx - size / (2 * zoom),
+    y: my - size / (2 * zoom),
+    width: size / zoom,
+    height: size / zoom,
+    pixelRatio: zoom * pixelRatio
+  });
 
-  if (showCrosshair) {
-    loupeCtx.strokeStyle = "#2176ff";
-    loupeCtx.lineWidth = 1.2;
+  const img = new window.Image();
+  img.onload = function () {
+    loupeCtx.save();
     loupeCtx.beginPath();
-    loupeCtx.moveTo(size / 2, 0);
-    loupeCtx.lineTo(size / 2, size);
-    loupeCtx.moveTo(0, size / 2);
-    loupeCtx.lineTo(size, size / 2);
-    loupeCtx.stroke();
-  }
-  loupeCtx.restore();
-
-  if (loupeVisible) {
-    loupeRAF = setTimeout(() => requestAnimationFrame(drawLoupe), 1000 / fps);
-  }
+    loupeCtx.arc(size / 2, size / 2, size / 2 - 2, 0, 2 * Math.PI);
+    loupeCtx.closePath();
+    loupeCtx.clip();
+    loupeCtx.drawImage(img, 0, 0, size, size);
+    loupeCtx.restore();
+  };
+  img.src = dataURL;
 }
 
-// Loupe event handlers
-function handleLoupeMouseMove(e) {
-  if (!getSetting("loupeEnabled")) return;
-  const rect = stage.content.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  showLoupe(x, y);
-}
-function handleLoupeMouseOut() {
-  hideLoupe();
+function loupeMouseLeave() {
+  if (loupeCanvas) loupeCanvas.style.display = "none";
 }
 
-// Loupe panel setup (to be called after stage exists)
-function setupLoupeEvents() {
-  if (!stage) return;
-  stage.content.addEventListener("mousemove", handleLoupeMouseMove);
-  stage.content.addEventListener("mouseout", handleLoupeMouseOut);
+function loupeZoomHandler(zoomIn) {
+  loupeZoom = Math.max(1, Math.min(8, loupeZoom + (zoomIn ? 1 : -1)));
 }
 
-// Initialize on DOMContentLoaded
-document.addEventListener("DOMContentLoaded", () => {
-  setupLoupe();
-  if (typeof stage !== "undefined") setupLoupeEvents();
-});
-
+if (typeof window !== "undefined") {
+  window.setupLoupe = setupLoupe;
+  window.loupeZoomHandler = loupeZoomHandler;
+  window.loupeEnabled = loupeEnabled;
+}

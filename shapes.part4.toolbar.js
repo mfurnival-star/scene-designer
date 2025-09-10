@@ -1,162 +1,72 @@
-/*******************************************************
+/**
  * shapes.part4.toolbar.js
- * Part 4 of N for shapes.js modular build
- * 
- * Feature Area: Toolbar actions, shape creation, deletion, and general shape utilities
- * Line Limit: ~350 lines max per part for copy-paste reliability.
- * 
- * Naming/Build Scheme:
- *   - Parts are grouped by feature (not arbitrary line count).
- *   - Features exceeding 350 lines split as partNa, partNb, etc.
- *   - To build: concatenate all part files in order: cat shapes.part*.js > shapes.js
- *   - To update: copy-paste the full part file.
- * 
- * This file is intended to be used as a modular chunk.
- * DO NOT remove or modify this header unless updating the schema.
- *******************************************************/
-
-/*************************************
- * Toolbar and shape creation logic
- *************************************/
-function createRectangle(x = 50, y = 50, w = getSetting("defaultRectWidth"), h = getSetting("defaultRectHeight")) {
-  const rect = new Konva.Rect({
-    x: x,
-    y: y,
-    width: w,
-    height: h,
-    fill: getSetting("defaultFillColor"),
-    stroke: getSetting("defaultStrokeColor"),
-    strokeWidth: 2,
-    draggable: true,
-    name: 'rect'
-  });
-  rect._type = 'rect';
-  rect._label = `Rect ${shapes.length + 1}`;
-  rect.locked = false;
-  setupShapeEvents(rect);
-  shapes.push(rect);
-  layer.add(rect);
-  layer.draw();
-  updateList();
-  return rect;
-}
-
-function createCircle(x = 120, y = 90, r = getSetting("defaultCircleRadius")) {
-  const circ = new Konva.Circle({
-    x: x,
-    y: y,
-    radius: r,
-    fill: getSetting("defaultFillColor"),
-    stroke: getSetting("defaultStrokeColor"),
-    strokeWidth: 2,
-    draggable: true,
-    name: 'circle'
-  });
-  circ._type = 'circle';
-  circ._label = `Circle ${shapes.length + 1}`;
-  circ.locked = false;
-  setupShapeEvents(circ);
-  shapes.push(circ);
-  layer.add(circ);
-  layer.draw();
-  updateList();
-  return circ;
-}
-
-function createPoint(x = 80, y = 80) {
-  const pt = new Konva.Circle({
-    x: x,
-    y: y,
-    radius: getSetting("pointHitRadius"),
-    fill: getSetting("defaultFillColor"),
-    stroke: getSetting("defaultStrokeColor"),
-    strokeWidth: 2,
-    draggable: true,
-    name: 'point'
-  });
-  pt._type = 'point';
-  pt._label = `Point ${shapes.length + 1}`;
-  pt.locked = false;
-  setupShapeEvents(pt);
-  shapes.push(pt);
-  layer.add(pt);
-  layer.draw();
-  updateList();
-  return pt;
-}
-
-function deleteSelectedShapes() {
-  logEnter("deleteSelectedShapes");
-  if (!selectedShapes.length) return;
-  selectedShapes.forEach(s => {
-    shapes = shapes.filter(obj => obj !== s);
-    s.destroy();
-  });
-  selectedShapes = [];
-  updateList();
-  layer.draw();
-  highlightLayer.draw();
-  logExit("deleteSelectedShapes");
-}
+ * Toolbar and tool selection for scene-designer
+ * - Renders toolbar
+ * - Handles tool selection and tool switching logic
+ * - Integrates with Konva tool logic (part2b)
+ */
 
 function setupToolbar() {
-  logEnter("setupToolbar");
-  const btnRect = document.getElementById("btnAddRect");
-  const btnCircle = document.getElementById("btnAddCircle");
-  const btnPoint = document.getElementById("btnAddPoint");
-  const btnDelete = document.getElementById("btnDeleteShape");
-
-  if (btnRect) btnRect.onclick = () => createRectangle();
-  if (btnCircle) btnCircle.onclick = () => createCircle();
-  if (btnPoint) btnPoint.onclick = () => createPoint();
-  if (btnDelete) btnDelete.onclick = () => deleteSelectedShapes();
-
-  logExit("setupToolbar");
-}
-document.addEventListener("DOMContentLoaded", setupToolbar);
-
-/*************************************
- * Shape Events and Utility
- *************************************/
-function setupShapeEvents(shape) {
-  shape.on('mousedown touchstart', (e) => {
-    if (e.evt && (e.evt.shiftKey || e.evt.ctrlKey)) {
-      if (selectedShapes.includes(shape)) {
-        selectedShapes = selectedShapes.filter(s => s !== shape);
-      } else {
-        selectedShapes.push(shape);
+  // Shape type dropdown
+  const shapeType = document.getElementById("shapeType");
+  if (shapeType) {
+    shapeType.onchange = function (e) {
+      if (window.currentTool !== undefined) {
+        window.currentTool = e.target.value;
       }
-    } else {
-      selectedShapes = [shape];
-    }
-    updateSelectionHighlights();
-    updateList();
-  });
-  shape.on('dragmove', (e) => {
-    updateSelectionHighlights();
-    updateList();
-  });
-  shape.on('mouseenter', () => {
-    document.body.style.cursor = 'pointer';
-  });
-  shape.on('mouseleave', () => {
-    document.body.style.cursor = '';
-  });
-  // Lock logic (for completeness; can be extended)
-  shape.on('dragstart', (e) => {
-    if (shape.locked) {
-      shape.stopDrag();
-      showLockedHighlightForShapes([shape]);
-    }
-  });
+      if (window.handleToolChange) window.handleToolChange();
+    };
+  }
+
+  // Toolbar buttons
+  const addBtn = document.getElementById("newBtn");
+  if (addBtn) {
+    addBtn.onclick = function () {
+      if (window.addShapeHandler) window.addShapeHandler();
+    };
+  }
+  const duplicateBtn = document.getElementById("duplicateBtn");
+  if (duplicateBtn) {
+    duplicateBtn.onclick = function () {
+      if (window.duplicateShapeHandler) window.duplicateShapeHandler();
+    };
+  }
+  const deleteBtn = document.getElementById("deleteBtn");
+  if (deleteBtn) {
+    deleteBtn.onclick = function () {
+      if (window.deleteShapeHandler) window.deleteShapeHandler();
+    };
+  }
+
+  // Color pickers (stroke/fill)
+  const strokePickr = document.getElementById("strokePickr");
+  const fillPickr = document.getElementById("fillPickr");
+  if (strokePickr) {
+    strokePickr.style.background = window.getSetting ? window.getSetting("defaultStrokeColor") : "#2176ff";
+    strokePickr.onclick = function () {
+      // Placeholder: open color picker dialog, or integrate Pickr lib if needed
+      // For now, fallback to prompt
+      const color = prompt("Enter stroke color (hex)", strokePickr.style.background);
+      if (color) {
+        strokePickr.style.background = color;
+        if (window.saveSetting) window.saveSetting("defaultStrokeColor", color);
+        if (window.redrawAllPoints) window.redrawAllPoints();
+      }
+    };
+  }
+  if (fillPickr) {
+    fillPickr.style.background = window.getSetting ? window.getSetting("defaultFillColor") : "#e3eeff";
+    fillPickr.onclick = function () {
+      const color = prompt("Enter fill color (hex)", fillPickr.style.background);
+      if (color) {
+        fillPickr.style.background = color;
+        if (window.saveSetting) window.saveSetting("defaultFillColor", color);
+        if (window.redrawAllPoints) window.redrawAllPoints();
+      }
+    };
+  }
 }
 
-/*************************************
- * Lock Shape Utility
- *************************************/
-function setShapeLocked(shape, locked) {
-  shape.locked = locked;
-  shape.draggable(!locked);
-  updateList();
+if (typeof window !== "undefined") {
+  window.setupToolbar = setupToolbar;
 }
-

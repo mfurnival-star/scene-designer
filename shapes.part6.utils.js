@@ -1,182 +1,120 @@
-/*******************************************************
+/**
  * shapes.part6.utils.js
- * Part 6 of N for shapes.js modular build
- * 
- * Feature Area: Utility functions, general helpers, debug tools, and export/import logic
- * Line Limit: ~350 lines max per part for copy-paste reliability.
- * 
- * Naming/Build Scheme:
- *   - Parts are grouped by feature (not arbitrary line count).
- *   - Features exceeding 350 lines split as partNa, partNb, etc.
- *   - To build: concatenate all part files in order: cat shapes.part*.js > shapes.js
- *   - To update: copy-paste the full part file.
- * 
- * This file is intended to be used as a modular chunk.
- * DO NOT remove or modify this header unless updating the schema.
- *******************************************************/
+ * Utility functions/helpers for scene-designer
+ * - Common helpers for exporting/importing shapes, etc.
+ * - Export: exportShapes, importShapes, helpers
+ */
 
-/*************************************
- * Image Upload/Server Image Loader
- * (Now called after Canvas panel is ready)
- *************************************/
-function setupImageLoaderHandlers() {
-  // Server image dropdown
-  const serverSelect = document.getElementById("serverImageSelect");
-  if (serverSelect) {
-    serverSelect.onchange = function () {
-      if (serverSelect.value) setBackgroundImage("images/" + serverSelect.value);
+// Export shapes to JSON
+function exportShapes() {
+  if (!window.shapes) return "[]";
+  return JSON.stringify(window.shapes.map(shape => {
+    // Only basic shape properties (extend as needed)
+    return {
+      type: shape._type,
+      x: shape.x(),
+      y: shape.y(),
+      ...(shape._type === "point" || shape._type === "circle"
+        ? { radius: shape.radius() }
+        : {}),
+      ...(shape._type === "rect"
+        ? { width: shape.width(), height: shape.height() }
+        : {}),
+      stroke: shape.stroke(),
+      fill: shape.fill(),
+      strokeWidth: shape.strokeWidth(),
+      label: shape._label || ""
     };
-  }
-  // File input
-  const fileInput = document.getElementById("imageUpload");
-  if (fileInput) {
-    fileInput.onchange = function (e) {
-      if (!e.target.files.length) return;
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = function (ev) {
-        setBackgroundImage(ev.target.result);
-      };
-      reader.readAsDataURL(file);
-    };
-  }
+  }), null, 2);
 }
 
-/*************************************
- * Export/Import Shapes as JSON
- *************************************/
+// Import shapes from JSON
+function importShapes(json) {
+  let arr = [];
+  try {
+    arr = JSON.parse(json);
+  } catch (e) {
+    alert("Import failed: Invalid JSON");
+    return;
+  }
+  if (!Array.isArray(arr)) {
+    alert("Import failed: Not a shape array");
+    return;
+  }
+  if (!window.layer) return;
+  window.layer.removeChildren();
+  window.shapes.length = 0;
+  arr.forEach(obj => {
+    let shape;
+    if (obj.type === "point" || obj.type === "circle") {
+      shape = new Konva.Circle({
+        x: obj.x,
+        y: obj.y,
+        radius: obj.radius || 12,
+        stroke: obj.stroke || "#2176ff",
+        fill: obj.fill || "#e3eeff",
+        strokeWidth: obj.strokeWidth || 2,
+        draggable: true,
+        _type: obj.type
+      });
+    } else if (obj.type === "rect") {
+      shape = new Konva.Rect({
+        x: obj.x,
+        y: obj.y,
+        width: obj.width || 60,
+        height: obj.height || 40,
+        stroke: obj.stroke || "#2176ff",
+        fill: obj.fill || "#e3eeff",
+        strokeWidth: obj.strokeWidth || 2,
+        draggable: true,
+        _type: obj.type
+      });
+    }
+    if (shape) {
+      shape._label = obj.label || "";
+      window.shapes.push(shape);
+      window.layer.add(shape);
+    }
+  });
+  window.layer.draw();
+  if (window.updateLabelsList) window.updateLabelsList();
+}
+
+// Helpers
 function exportShapesToJSON() {
-  const data = shapes.map(s => ({
-    type: s._type,
-    label: s._label,
-    attrs: s.getAttrs(),
-    locked: !!s.locked
-  }));
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const data = exportShapes();
+  const blob = new Blob([data], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "shapes-export.json";
+  a.download = "shapes.json";
   document.body.appendChild(a);
   a.click();
   setTimeout(() => {
-    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, 100);
+    a.remove();
+  }, 200);
 }
 
-function importShapesFromJSON(jsonStr) {
-  logEnter("importShapesFromJSON");
-  try {
-    const arr = JSON.parse(jsonStr);
-    layer.destroyChildren();
-    shapes.length = 0;
-    arr.forEach(obj => {
-      let s;
-      if (obj.type === "rect") {
-        s = new Konva.Rect(obj.attrs);
-      } else if (obj.type === "circle") {
-        s = new Konva.Circle(obj.attrs);
-      } else if (obj.type === "point") {
-        s = new Konva.Circle(obj.attrs);
-      }
-      if (s) {
-        s._type = obj.type;
-        s._label = obj.label;
-        s.locked = !!obj.locked;
-        setupShapeEvents(s);
-        shapes.push(s);
-        layer.add(s);
-      }
-    });
-    layer.draw();
-    updateList();
-  } catch (e) {
-    window.alert("Failed to import shapes: " + e);
-  }
-  logExit("importShapesFromJSON");
+function importShapesFromJSON(json) {
+  importShapes(json);
 }
 
-/*************************************
- * Download PNG of current canvas
- *************************************/
 function downloadCanvasAsPNG() {
-  logEnter("downloadCanvasAsPNG");
-  if (!stage) return;
-  const dataURL = stage.toDataURL({ pixelRatio: 2 });
+  if (!window.stage) return;
+  const dataURL = window.stage.toDataURL();
   const a = document.createElement("a");
   a.href = dataURL;
-  a.download = "scene.png";
+  a.download = "canvas.png";
   document.body.appendChild(a);
   a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-  }, 100);
-  logExit("downloadCanvasAsPNG");
+  setTimeout(() => a.remove(), 200);
 }
 
-/*************************************
- * Debug: Dump all shapes to console
- *************************************/
-function debugDumpShapes() {
-  logEnter("debugDumpShapes");
-  console.log("Current shapes:", shapes.map(s => ({
-    type: s._type,
-    label: s._label,
-    attrs: s.getAttrs(),
-    locked: !!s.locked
-  })));
-  logExit("debugDumpShapes");
+if (typeof window !== "undefined") {
+  window.exportShapes = exportShapes;
+  window.importShapes = importShapes;
+  window.exportShapesToJSON = exportShapesToJSON;
+  window.importShapesFromJSON = importShapesFromJSON;
+  window.downloadCanvasAsPNG = downloadCanvasAsPNG;
 }
-
-/*************************************
- * General Helper: Enable edit on shape from list
- *************************************/
-function enableEdit(shape) {
-  if (!shape) return;
-  selectedShapes = [shape];
-  updateSelectionHighlights();
-  updateList();
-}
-
-/*************************************
- * Redraw all points (used by settings changes)
- *************************************/
-function redrawAllPoints() {
-  shapes.forEach(s => {
-    if (s._type === "point") {
-      s.radius(getSetting("pointHitRadius"));
-      s.strokeWidth(2);
-      s.fill(getSetting("defaultFillColor"));
-      s.stroke(getSetting("defaultStrokeColor"));
-    }
-  });
-  layer.batchDraw();
-}
-window.redrawAllPoints = redrawAllPoints;
-
-/*************************************
- * Export/Import Buttons Setup
- *************************************/
-document.addEventListener("DOMContentLoaded", () => {
-  const btnExport = document.getElementById("btnExportShapes");
-  const btnImport = document.getElementById("btnImportShapes");
-  const btnDownload = document.getElementById("btnDownloadPNG");
-  if (btnExport) btnExport.onclick = exportShapesToJSON;
-  if (btnImport) btnImport.onclick = () => {
-    const fileInput = document.createElement('input');
-    fileInput.type = "file";
-    fileInput.accept = ".json,application/json";
-    fileInput.addEventListener('change', (e) => {
-      if (!e.target.files.length) return;
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        importShapesFromJSON(ev.target.result);
-      };
-      reader.readAsText(file);
-    });
-    fileInput.click();
-  };
-  if (btnDownload) btnDownload.onclick = downloadCanvasAsPNG;
-});
