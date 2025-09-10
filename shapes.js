@@ -152,7 +152,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  *   - Displays an image (from upload or server select) using Konva.
  *   - Shapes are added by clicking the "Add" button, not by clicking the canvas.
  *   - Supports "Point" shape: reticle (circle + crosshair), draggable.
- *   - Points are placed at a default position (centered, offset down).
+ *   - Points are placed at the visible center of the canvas panel.
  *   - Future: Rectangle and Circle support.
  *
  * Integration:
@@ -269,10 +269,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     const outer = document.createElement("div");
     outer.style.width = "100%";
     outer.style.height = "100%";
-    outer.style.display = "flex";
-    outer.style.alignItems = "center";
-    outer.style.justifyContent = "center";
-    outer.style.overflow = "auto";
+    outer.style.display = "block"; // anchor at top-left
+    outer.style.alignItems = "";
+    outer.style.justifyContent = "";
+    outer.style.overflow = "auto"; // allow scrollbars if needed
 
     // Konva container
     const konvaDiv = document.createElement("div");
@@ -413,9 +413,30 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     function addPointShape() {
       const img = AppState.imageObj;
       if (!img || !AppState.konvaLayer) return;
-      // Default position: halfway across, same distance from left and from top
-      const x = Math.round(img.width / 2);
-      const y = Math.round(img.width / 2); // Note: width, not height, to match your original logic
+
+      // Find visible panel center within image
+      const canvasArea = document.getElementById("canvas-area");
+      let x = Math.round(img.width / 2), y = Math.round(img.height / 2); // fallback
+
+      if (canvasArea && AppState.konvaDiv) {
+        // Get scroll position of canvas panel relative to image
+        const scrollLeft = AppState.konvaDiv.parentElement.scrollLeft || 0;
+        const scrollTop = AppState.konvaDiv.parentElement.scrollTop || 0;
+        const panelRect = canvasArea.getBoundingClientRect();
+        const containerRect = AppState.konvaDiv.getBoundingClientRect();
+
+        const visibleWidth = Math.min(panelRect.width, img.width);
+        const visibleHeight = Math.min(panelRect.height, img.height);
+
+        // The visible center in image coordinates is:
+        x = Math.round(scrollLeft + visibleWidth / 2);
+        y = Math.round(scrollTop + visibleHeight / 2);
+
+        // Clamp to image bounds
+        x = Math.max(0, Math.min(img.width, x));
+        y = Math.max(0, Math.min(img.height, y));
+      }
+
       const color = "#2176ff";
       const point = makeReticlePointShape(x, y, color);
       AppState.shapes.push(point);
