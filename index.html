@@ -8,16 +8,16 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css">
   <link rel="stylesheet" href="styles.css">
 
-  <!-- Golden Layout CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.7.0/dist/css/goldenlayout-base.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.7.0/dist/css/themes/goldenlayout-light-theme.css">
+  <!-- Golden Layout v1.x CSS -->
+  <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-base.css">
+  <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-light-theme.css">
 
   <!-- Konva.js for canvas manipulation -->
   <script src="https://cdn.jsdelivr.net/npm/konva@9.2.0/konva.min.js"></script>
   <!-- Pickr color picker -->
   <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
-  <!-- Golden Layout JS -->
-  <script src="https://cdn.jsdelivr.net/npm/golden-layout@2.7.0/dist/goldenlayout.min.js"></script>
+  <!-- Golden Layout v1.x JS (global GoldenLayout variable) -->
+  <script src="https://golden-layout.com/files/latest/js/goldenlayout.min.js"></script>
   <!-- Your main JS app -->
   <script src="shapes.js"></script>
 </head>
@@ -106,61 +106,60 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
-      // Define initial Golden Layout configuration
-      const config = {
-        root: {
+      // Define initial Golden Layout configuration (v1.x API)
+      var config = {
+        content: [{
           type: 'row',
           content: [
             {
               type: 'component',
-              componentType: 'Sidebar',
+              componentName: 'Sidebar',
               title: 'Sidebar',
               width: 20
             },
             {
               type: 'component',
-              componentType: 'Canvas',
+              componentName: 'Canvas',
               title: 'Canvas',
               width: 60
             },
             {
               type: 'component',
-              componentType: 'Settings',
+              componentName: 'Settings',
               title: 'Settings',
               width: 20
             }
           ]
-        }
+        }]
       };
 
-      // Create Golden Layout instance
-      const myLayout = new GoldenLayout.GoldenLayout(config, document.getElementById('gl-root'));
+      // Create Golden Layout instance (v1.x API)
+      var myLayout = new GoldenLayout(config, $('#gl-root'));
 
       // Register panel components
-      myLayout.registerComponentConstructor('Sidebar', function (container, state) {
-        const el = document.getElementById('sidebar-container');
+      myLayout.registerComponent('Sidebar', function (container, state) {
+        var el = document.getElementById('sidebar-container');
         el.style.display = 'block';
-        el.classList.add('gl-panel-content');
-        container.element.append(el);
+        container.getElement().append(el);
       });
 
-      myLayout.registerComponentConstructor('Canvas', function (container, state) {
-        const el = document.getElementById('canvas-area-container');
+      myLayout.registerComponent('Canvas', function (container, state) {
+        var el = document.getElementById('canvas-area-container');
         el.style.display = 'block';
-        el.classList.add('gl-panel-content');
-        container.element.append(el);
+        container.getElement().append(el);
       });
 
-      myLayout.registerComponentConstructor('Settings', function (container, state) {
-        const el = document.getElementById('settingsPanel-container');
+      myLayout.registerComponent('Settings', function (container, state) {
+        var el = document.getElementById('settingsPanel-container');
         el.style.display = 'block';
-        el.classList.add('gl-panel-content');
-        container.element.append(el);
+        container.getElement().append(el);
       });
 
       // Initialize layout
       myLayout.init();
     });
   </script>
+  <!-- jQuery required for Golden Layout v1.x -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 </body>
 </html>
