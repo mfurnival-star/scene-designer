@@ -586,3 +586,11 @@
 2025-09-10 21:52:57,716 INFO: Server will auto-shutdown after 5 minutes.
 2025-09-10 21:52:57,716 INFO: Serving HTTP on port 80 with restricted files only.
 2025-09-10 21:57:27,340 INFO: Server stopped by user.
+2025-09-10 21:57:45,889 INFO: Server will auto-shutdown after 5 minutes.
+2025-09-10 21:57:45,889 INFO: Serving HTTP on port 80 with restricted files only.
+2025-09-10 21:57:52,905 INFO: Serving allowed file: /index.html from 86.181.240.200
+2025-09-10 21:57:52,955 INFO: Serving allowed file: /styles.css from 86.181.240.200
+2025-09-10 21:57:52,956 INFO: Serving allowed file: /shapes.js from 86.181.240.200
+2025-09-10 21:57:53,032 INFO: Serving allowed file: /favicon.ico from 86.181.240.200
+2025-09-10 21:57:57,566 INFO: Serving allowed file: /images/mainmenu.png from 86.181.240.200
+2025-09-10 22:01:27,358 INFO: Server stopped by user.
