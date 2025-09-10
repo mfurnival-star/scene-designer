@@ -94,6 +94,8 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
   - Table is brief and readable for scanning, but full details/actions are readily available via the info/expand control.
 - **Future Option:**  
   - Table could support row expansion (accordion style) or modal for detailed editing.
+- **NEW IDEA:**  
+  - The table can have a “details” icon that pops up a modal overlay (full workspace) for expanded info, per your earlier plan.
 
 ---
 
@@ -152,3 +154,4 @@ To restart or fork:
 - Add color sampling
 - Add config export
 - UI/logic must always match the `.ini` schema and ADB automation workflow
+
