@@ -208,6 +208,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   rootDiv.appendChild(h2);
   rootDiv.appendChild(p);
 };
+
 /*********************************************************
  * PART 2A: CanvasPanel – Image Display & Point Placement
  * ------------------------------------------------------
@@ -218,6 +219,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  * - Hooks for future rectangle/circle shapes.
  * - Multiselect: "Select All" button shows dashed highlight for all shapes.
  * - Multiselect drag (with clamped bounding box, including rotation/scale), and orange debug box (always on for now)
+ * - Locking: Locked shapes cannot be moved/dragged/transformed, and show red highlight if multi-drag is attempted.
  *********************************************************/
 
 (function () {
@@ -229,6 +231,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   let multiSelectHighlightShapes = [];
   let multiDrag = { moving: false, dragOrigin: null, origPositions: null };
   let debugMultiDragBox = null;
+  let _lockedDragAttemptedIDs = [];
 
   /** Draw dashed highlight outlines for all selected shapes (multi only) */
   function updateSelectionHighlights() {
@@ -239,9 +242,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     }
     if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
     const pad = 6;
-    const color = "#2176ff";
     AppState.selectedShapes.forEach(shape => {
       let highlight;
+      // Red if drag attempt on locked, else blue
+      let color = _lockedDragAttemptedIDs.includes(shape._id) ? "#e53935" : "#2176ff";
       if (shape._type === 'rect') {
         highlight = new Konva.Rect({
           x: shape.x() - pad / 2,
@@ -284,6 +288,15 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       }
     });
     AppState.konvaLayer.batchDraw();
+  }
+
+  function showLockedHighlightForShapes(shapesArr) {
+    _lockedDragAttemptedIDs = shapesArr.map(s => s._id);
+    updateSelectionHighlights();
+    setTimeout(() => {
+      _lockedDragAttemptedIDs = [];
+      updateSelectionHighlights();
+    }, 1000);
   }
 
   // --- Multi-drag bounding box/logic ---
@@ -393,8 +406,9 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     // --- Drag logic ---
     shape.on('dragstart.shape', (e) => {
       if (AppState.selectedShapes.length > 1 && AppState.selectedShapes.includes(shape)) {
-        // If any are locked, block drag
         if (AppState.selectedShapes.some(s => s.locked)) {
+          // Block drag, show red highlight on locked shapes
+          showLockedHighlightForShapes(AppState.selectedShapes.filter(s => s.locked));
           shape.stopDrag();
           return;
         }
@@ -405,6 +419,11 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         multiDrag.origPositions = AppState.selectedShapes.map(s => ({ shape: s, x: s.x(), y: s.y() }));
         AppState.konvaStage.on('mousemove.multidrag touchmove.multidrag', onMultiDragMove);
         AppState.konvaStage.on('mouseup.multidrag touchend.multidrag', onMultiDragEnd);
+      } else if (AppState.selectedShapes.length === 1 && AppState.selectedShapes[0].locked) {
+        // Single locked shape: block drag
+        showLockedHighlightForShapes([AppState.selectedShapes[0]]);
+        shape.stopDrag();
+        return;
       }
     });
 
@@ -507,7 +526,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     });
     group.add(selHalo); group.add(halo); group.add(crossH); group.add(crossV);
     group.showSelection = function(isSelected) { selHalo.visible(isSelected); };
-    group._type = "point"; group._label = "Point"; group.locked = false;
+    group._type = "point"; group._label = "Point";
+    group.locked = false;
+    // Give each shape a unique _id for highlight logic
+    group._id = "pt_" + Math.random().toString(36).slice(2, 10);
     // Attach drag/selection events
     attachShapeEvents(group);
     group.on("dragstart", () => { group.showSelection(true); });
@@ -524,7 +546,9 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       fill: fill, opacity: 0.92, draggable: true, name: "rect-shape"
     });
     rect.showSelection = function() {};
-    rect._type = "rect"; rect._label = "Rectangle"; rect.locked = false;
+    rect._type = "rect"; rect._label = "Rectangle";
+    rect.locked = false;
+    rect._id = "rect_" + Math.random().toString(36).slice(2, 10);
     attachShapeEvents(rect);
     rect.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     rect.on("mouseleave", () => { document.body.style.cursor = ''; });
@@ -538,11 +562,32 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       fill: fill, opacity: 0.92, draggable: true, name: "circle-shape"
     });
     circle.showSelection = function() {};
-    circle._type = "circle"; circle._label = "Circle"; circle.locked = false;
+    circle._type = "circle"; circle._label = "Circle";
+    circle.locked = false;
+    circle._id = "circ_" + Math.random().toString(36).slice(2, 10);
     attachShapeEvents(circle);
     circle.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     circle.on("mouseleave", () => { document.body.style.cursor = ''; });
     return circle;
+  }
+
+  function setShapeLocked(shape, locked) {
+    shape.locked = !!locked;
+    if (shape.draggable) shape.draggable(!locked);
+    if (shape instanceof Konva.Group) shape.draggable(!locked);
+    // If there's a transformer and this shape is selected, lock disables transform
+    if (AppState.transformer && AppState.transformer.nodes().includes(shape)) {
+      if (locked) {
+        AppState.transformer.enabledAnchors([]);
+        AppState.transformer.rotateEnabled(false);
+      } else {
+        let anchors = ['top-left','top-center','top-right','middle-left','middle-right','bottom-left','bottom-center','bottom-right'];
+        if(shape._type==='circle') anchors = ['top-left','top-right','bottom-left','bottom-right'];
+        if(shape._type==='point') anchors = [];
+        AppState.transformer.enabledAnchors(anchors);
+        AppState.transformer.rotateEnabled(shape._type !== 'point');
+      }
+    }
   }
 
   function selectShape(shape) {
@@ -560,12 +605,12 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     if (shape._type === "rect") {
       const transformer = new Konva.Transformer({
         nodes: [shape],
-        enabledAnchors: [
+        enabledAnchors: shape.locked ? [] : [
           "top-left", "top-center", "top-right",
           "middle-left", "middle-right",
           "bottom-left", "bottom-center", "bottom-right"
         ],
-        rotateEnabled: true
+        rotateEnabled: !shape.locked
       });
       AppState.konvaLayer.add(transformer);
       AppState.transformer = transformer;
@@ -581,10 +626,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     } else if (shape._type === "circle") {
       const transformer = new Konva.Transformer({
         nodes: [shape],
-        enabledAnchors: [
+        enabledAnchors: shape.locked ? [] : [
           "top-left", "top-right", "bottom-left", "bottom-right"
         ],
-        rotateEnabled: false
+        rotateEnabled: !shape.locked
       });
       AppState.konvaLayer.add(transformer);
       AppState.transformer = transformer;
@@ -796,12 +841,12 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       }
       const transformer = new Konva.Transformer({
         nodes: [rect],
-        enabledAnchors: [
+        enabledAnchors: rect.locked ? [] : [
           "top-left", "top-center", "top-right",
           "middle-left", "middle-right",
           "bottom-left", "bottom-center", "bottom-right"
         ],
-        rotateEnabled: true
+        rotateEnabled: !rect.locked
       });
       AppState.konvaLayer.add(transformer);
       AppState.transformer = transformer;
@@ -850,10 +895,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       }
       const transformer = new Konva.Transformer({
         nodes: [circle],
-        enabledAnchors: [
+        enabledAnchors: circle.locked ? [] : [
           "top-left", "top-right", "bottom-left", "bottom-right"
         ],
-        rotateEnabled: false
+        rotateEnabled: !circle.locked
       });
       AppState.konvaLayer.add(transformer);
       AppState.transformer = transformer;
@@ -896,6 +941,16 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
           updateSelectionHighlights();
           if (AppState.konvaLayer) AppState.konvaLayer.draw();
         };
+      }
+      // --- Lock checkbox logic ---
+      const lockCheckbox = document.getElementById("lockCheckbox");
+      if (lockCheckbox) {
+        lockCheckbox.addEventListener("change", () => {
+          if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
+          const newLocked = lockCheckbox.checked;
+          AppState.selectedShapes.forEach(s => setShapeLocked(s, newLocked));
+          updateSelectionHighlights();
+        });
       }
     }, 0);
   };

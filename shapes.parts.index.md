@@ -21,18 +21,24 @@ Descriptions are updated as new logic is added or stubs are replaced.
 - **Responsibility:**  
   - Implements the content and UI logic for the Sidebar panel (shape table/list).
   - Current: Placeholder/hello world.
-  - Future: Will show the table of annotation shapes and handle selection, lock, delete, etc.
+  - **Planned:** Will show the table of annotation shapes and handle selection, lock, delete, etc.
 
 ---
 
-### **PART 2A: CanvasPanel – Image Display & Point Placement**  
+### **PART 2A: CanvasPanel – Image Display, Annotation, Multi-Select, Drag & Bounding Box**  
 - **Filename:** `shapes.part2a.konva.js`
 - **Responsibility:**  
-  - Fully implements the Canvas panel using Konva.
+  - Implements the full Canvas panel using Konva.
   - Loads and displays the selected/uploaded image.
-  - Allows "Point" annotation placement via click.
-  - Renders draggable points as colored circles.
-  - Hooks for future rectangle/circle shapes.
+  - Allows placement and manipulation of "Point", "Rectangle", and "Circle" shapes.
+  - Implements robust selection logic:
+    - Single and multi-selection (including "Select All" and marquee/box selection).
+    - Dashed highlight outlines for multi-selected shapes.
+    - Multi-select drag with custom bounding box logic (including rotation/scale).
+    - Movement clamped so that no shape can be dragged out of the image/stage bounds.
+    - **Debug:** Orange bounding box for multi-select group (always shown during drag; toggleable when settings are fully enabled).
+  - Attaches shape events for selection, drag, and interaction.
+  - Hooks for future color annotation and export logic.
 
 ---
 
@@ -41,7 +47,7 @@ Descriptions are updated as new logic is added or stubs are replaced.
 - **Responsibility:**  
   - Implements the content and UI for the Settings panel.
   - Current: Placeholder/hello world.
-  - Future: Scene name, logic selector, color/tolerance, export, etc.
+  - **Planned:** Scene name, logic selector, color/tolerance, export, etc.
 
 ---
 
@@ -57,13 +63,11 @@ Descriptions are updated as new logic is added or stubs are replaced.
 ## Change Log
 
 - **2025-09-10**:  
-  - Confirmed only four modular parts needed: layout, sidebar, canvas (Konva), and settings.
-  - Verified all stub/duplicate CanvasPanel code removed.
-  - Updated descriptions for accuracy.
-- **2024-09-10**:  
-  - Standardized on `shapes.part0.layout.js` for Golden Layout bootstrap.
-  - Added description for each part, clarified stub vs. real logic.
+  - Updated PART 2A to reflect restoration of full multi-select, bounding box, drag, and highlight logic.
+  - Clarified current/planned responsibilities for Sidebar and Settings panels.
+  - Confirmed modular structure matches delivered code and legacy feature parity.
 
 ---
 
-*Update this index whenever a part file is added, removed, or renamed, or its description/role changes.*
+*Update this index whenever a part file is added, removed, renamed, or its description/role changes.*
+
