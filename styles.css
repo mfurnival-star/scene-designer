@@ -99,7 +99,7 @@ body {
 #canvas-area,
 #settingsPanel {
   height: 100%;
-  width: 100%;
+  /* width: 100%;   <--- REMOVE THIS LINE! */
   box-sizing: border-box;
   min-width: 0;
   max-width: none;
