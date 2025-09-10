@@ -1,11 +1,12 @@
 /*********************************************************
  * PART 2A: CanvasPanel - Image Display & Point Placement
  * ------------------------------------------------------
- * This file implements the Canvas panel logic:
+ * Implements the Canvas panel logic for Golden Layout:
  *   - Displays an image (from upload or server select) using Konva.
- *   - Allows "Point" shape placement on click.
- *   - Points are displayed as small colored circles.
- *   - Integrates with image loader in header.
+ *   - Shapes are added by clicking the "Add" button, not by clicking the canvas.
+ *   - Supports "Point" shape: reticle (circle + crosshair), draggable.
+ *   - Points are placed at a default position (centered, offset down).
+ *   - Future: Rectangle and Circle support.
  *
  * Integration:
  * - Requires Konva.js loaded globally.
@@ -14,7 +15,7 @@
  *********************************************************/
 
 (function () {
-  // Global app state for demo (replace with proper state mgmt later)
+  // App-wide state for the canvas panel
   window._sceneDesigner = window._sceneDesigner || {};
   const AppState = window._sceneDesigner;
 
@@ -24,7 +25,7 @@
       const img = new window.Image();
       img.onload = () => resolve(img);
       img.onerror = reject;
-      img.crossOrigin = "Anonymous"; // supports CORS for server images
+      img.crossOrigin = "Anonymous";
       img.src = src;
     });
   }
@@ -32,6 +33,84 @@
   // Utility: Clear a DOM node
   function clearNode(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  // Helper: Draw a point as a reticle (circle + crosshair)
+  function makeReticlePointShape(x, y, color = "#ff3b3b") {
+    const group = new Konva.Group({ x, y, draggable: true, name: "reticle-point" });
+
+    // Main circle (halo)
+    const halo = new Konva.Circle({
+      x: 0,
+      y: 0,
+      radius: 12,
+      stroke: color,
+      strokeWidth: 2,
+      opacity: 0.8,
+      listening: false
+    });
+
+    // Crosshair lines
+    const crossLen = 14;
+    const crossH = new Konva.Line({
+      points: [-crossLen / 2, 0, crossLen / 2, 0],
+      stroke: color,
+      strokeWidth: 2,
+      lineCap: 'round',
+      listening: false
+    });
+    const crossV = new Konva.Line({
+      points: [0, -crossLen / 2, 0, crossLen / 2],
+      stroke: color,
+      strokeWidth: 2,
+      lineCap: 'round',
+      listening: false
+    });
+
+    // Select halo (thicker, only visible when selected)
+    const selHalo = new Konva.Circle({
+      x: 0, y: 0,
+      radius: 16,
+      stroke: "#2176ff",
+      strokeWidth: 2,
+      opacity: 0.6,
+      visible: false,
+      listening: false
+    });
+
+    group.add(selHalo);
+    group.add(halo);
+    group.add(crossH);
+    group.add(crossV);
+
+    // For selection
+    group.showSelection = function(isSelected) {
+      selHalo.visible(isSelected);
+    };
+
+    // For list/table
+    group._type = "point";
+    group._label = "Point";
+    group.locked = false;
+
+    // Dragging: update state and selection halo
+    group.on("dragstart", () => {
+      group.showSelection(true);
+    });
+    group.on("dragend", () => {
+      group.showSelection(false);
+      // Clamp to image bounds if needed (optional)
+    });
+
+    // UI cursor feedback
+    group.on("mouseenter", () => {
+      document.body.style.cursor = 'pointer';
+    });
+    group.on("mouseleave", () => {
+      document.body.style.cursor = '';
+    });
+
+    return group;
   }
 
   // Main builder for the Canvas panel
@@ -57,15 +136,14 @@
     rootDiv.appendChild(outer);
 
     // --- 2. Setup state & handlers ---
-    // Store refs for resize/redraw
     AppState.konvaDiv = konvaDiv;
     AppState.konvaStage = null;
     AppState.konvaLayer = null;
     AppState.imageObj = null;
-    AppState.points = AppState.points || [];
+    AppState.shapes = AppState.shapes || [];
+    AppState.selectedShape = null;
 
     // --- 3. Image loading logic ---
-    // Function to actually set up the Konva Stage and Layer
     async function renderCanvas(imageSrc) {
       // Remove previous stage if exists
       if (AppState.konvaStage) {
@@ -75,7 +153,6 @@
       clearNode(konvaDiv);
 
       if (!imageSrc) {
-        // No image selected
         const msg = document.createElement("div");
         msg.innerHTML = "<p style='text-align:center;font-size:1.1em;color:#888;'>Select or upload an image to begin.</p>";
         konvaDiv.appendChild(msg);
@@ -118,80 +195,35 @@
       });
       layer.add(konvaImage);
 
-      // Draw all points
-      AppState.points.forEach(pt => drawPoint(pt, layer));
-
+      // Draw all shapes
+      for (const shape of AppState.shapes) {
+        layer.add(shape);
+      }
       layer.batchDraw();
 
-      // --- 4. Click handler for placing points ---
-      stage.on("mousedown touchstart", function (evt) {
-        // Only add if shapeType is "point"
-        const shapeType = document.getElementById("shapeType")?.value || "point";
-        if (shapeType !== "point") return;
-
-        // Don't add if click is not on image
-        const pos = stage.getPointerPosition();
-        if (!pos) return;
-
-        // Add point to state
-        const newPoint = {
-          x: Math.round(pos.x),
-          y: Math.round(pos.y),
-          color: "#ff3b3b", // default color for now
-        };
-        AppState.points.push(newPoint);
-
-        // Draw new point
-        drawPoint(newPoint, layer);
-        layer.batchDraw();
+      // --- 4. Selection logic (click shape to select) ---
+      stage.on("mousedown tap", function(evt) {
+        if (evt.target === stage || evt.target === konvaImage) {
+          if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function") {
+            AppState.selectedShape.showSelection(false);
+            AppState.selectedShape = null;
+          }
+        } else if (evt.target.getParent()?.name() === "reticle-point") {
+          // select parent group if child is clicked
+          const group = evt.target.getParent();
+          if (AppState.selectedShape && AppState.selectedShape !== group && AppState.selectedShape.showSelection)
+            AppState.selectedShape.showSelection(false);
+          AppState.selectedShape = group;
+          group.showSelection(true);
+        }
       });
-    }
-
-    // Helper: Draw a point shape at given location
-    function drawPoint(pt, layer) {
-      const circle = new Konva.Circle({
-        x: pt.x,
-        y: pt.y,
-        radius: 7,
-        fill: pt.color || "#ff3b3b",
-        stroke: "#222",
-        strokeWidth: 2,
-        draggable: true,
-        shadowColor: "#000",
-        shadowBlur: 2,
-        shadowOpacity: 0.2,
-        name: "pointShape"
-      });
-
-      // Dragging: update point coordinates
-      circle.on("dragend", function (evt) {
-        pt.x = Math.round(circle.x());
-        pt.y = Math.round(circle.y());
-      });
-
-      // Optional: highlight on hover
-      circle.on("mouseenter", () => {
-        document.body.style.cursor = "pointer";
-        circle.stroke("#2176ff");
-        layer.batchDraw();
-      });
-      circle.on("mouseleave", () => {
-        document.body.style.cursor = "";
-        circle.stroke("#222");
-        layer.batchDraw();
-      });
-
-      layer.add(circle);
     }
 
     // --- 5. Image source management ---
-    // Helper: get the current image source from app state or UI
     function getCurrentImageSrc() {
-      // Priority: uploaded image > server image select
       if (AppState.uploadedImageURL) return AppState.uploadedImageURL;
       const serverSel = document.getElementById("serverImageSelect");
       if (serverSel && serverSel.value) {
-        // adjust path as needed for your server; placeholder:
         return "images/" + serverSel.value;
       }
       return null;
@@ -199,7 +231,6 @@
 
     // Listen to image loader UI
     function setupImageLoaderListeners() {
-      // File upload
       const imageUpload = document.getElementById("imageUpload");
       if (imageUpload) {
         imageUpload.addEventListener("change", function (e) {
@@ -210,12 +241,10 @@
           renderCanvas(url);
         });
       }
-
-      // Server image select
       const serverSel = document.getElementById("serverImageSelect");
       if (serverSel) {
         serverSel.addEventListener("change", function (e) {
-          AppState.uploadedImageURL = null; // clear uploaded image if picking from server
+          AppState.uploadedImageURL = null;
           const src = getCurrentImageSrc();
           renderCanvas(src);
         });
@@ -228,8 +257,48 @@
     const startingImage = getCurrentImageSrc();
     await renderCanvas(startingImage);
 
-    // --- 6. Responsive: re-render on resize ---
-    // (Optional, for MVP: skip for now, or implement as needed)
-  };
+    // --- 6. "Add" button logic for shape creation ---
+    function getSelectedShapeType() {
+      const sel = document.getElementById("shapeType");
+      return sel ? sel.value : "point";
+    }
 
+    function addPointShape() {
+      const img = AppState.imageObj;
+      if (!img || !AppState.konvaLayer) return;
+      // Default position: halfway across, same distance from left and from top
+      const x = Math.round(img.width / 2);
+      const y = Math.round(img.width / 2); // Note: width, not height, to match your original logic
+      const color = "#ff3b3b";
+      const point = makeReticlePointShape(x, y, color);
+      AppState.shapes.push(point);
+      AppState.konvaLayer.add(point);
+      AppState.konvaLayer.batchDraw();
+      // select and show halo
+      if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
+        AppState.selectedShape.showSelection(false);
+      AppState.selectedShape = point;
+      point.showSelection(true);
+    }
+
+    function addShapeFromToolbar() {
+      const type = getSelectedShapeType();
+      if (type === "point") {
+        addPointShape();
+      } else {
+        // Rectangle and Circle logic to be implemented
+        alert("Only point shape is implemented in this build.");
+      }
+    }
+
+    // Wire up the "Add" button
+    setTimeout(() => {
+      const addBtn = document.getElementById("newBtn");
+      if (addBtn) {
+        addBtn.onclick = addShapeFromToolbar;
+      }
+    }, 0);
+
+    // Remove any click-to-add logic from the canvas (enforced by not wiring it up).
+  };
 })();
