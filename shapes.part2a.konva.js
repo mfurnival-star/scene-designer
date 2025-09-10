@@ -5,7 +5,7 @@
  *   - Displays an image (from upload or server select) using Konva.
  *   - Shapes are added by clicking the "Add" button, not by clicking the canvas.
  *   - Supports "Point" shape: reticle (circle + crosshair), draggable (with hit area).
- *   - Supports "Rectangle" shape: draggable, selection halo.
+ *   - Supports "Rectangle" shape: plain Konva.Rect, square corners, draggable, transformer on select.
  *   - Shapes are placed at the visible center of the canvas panel.
  *   - Future: Circle support.
  *
@@ -124,72 +124,48 @@
     return group;
   }
 
-  // Helper: Draw a rectangle shape, draggable, selection halo
+  // Helper: Make a classic Konva.Rect (draggable, square corners, transformer on select)
   function makeRectShape(x, y, width = 80, height = 48, stroke = "#2176ff", fill = "#ffffff00") {
-    const group = new Konva.Group({ x, y, draggable: true, name: "rect-shape" });
-
-    // Main rectangle
     const rect = new Konva.Rect({
-      x: 0,
-      y: 0,
+      x: x,
+      y: y,
       width: width,
       height: height,
       stroke: stroke,
       strokeWidth: 2,
       fill: fill,
-      cornerRadius: 6,
       opacity: 0.92,
-      draggable: false, // drag the group instead
-      listening: false
+      draggable: true,
+      name: "rect-shape"
+      // NO cornerRadius!
     });
 
-    // Selection halo (only visible when selected)
-    const selHalo = new Konva.Rect({
-      x: -4,
-      y: -4,
-      width: width + 8,
-      height: height + 8,
-      stroke: "#0057d8",
-      strokeWidth: 2,
-      opacity: 0.32,
-      visible: false,
-      dash: [8, 4],
-      cornerRadius: 10,
-      listening: false
-    });
-
-    group.add(selHalo);
-    group.add(rect);
-
-    // For selection
-    group.showSelection = function(isSelected) {
-      selHalo.visible(isSelected);
+    // For selection (for compatibility with old logic)
+    rect.showSelection = function(isSelected) {
+      // No-op; selection is shown by Konva.Transformer
     };
 
-    group._type = "rect";
-    group._label = "Rectangle";
-    group.locked = false;
-    group._rect = rect; // for later access
+    rect._type = "rect";
+    rect._label = "Rectangle";
+    rect.locked = false;
 
-    // Dragging: update state and selection halo
-    group.on("dragstart", () => {
-      group.showSelection(true);
+    // Dragging: update state
+    rect.on("dragstart", () => {
+      // No custom visual needed; transformer handles show selection
     });
-    group.on("dragend", () => {
-      group.showSelection(false);
+    rect.on("dragend", () => {
+      // No custom visual needed
     });
 
     // UI cursor feedback
-    group.on("mouseenter", () => {
+    rect.on("mouseenter", () => {
       document.body.style.cursor = 'move';
     });
-    group.on("mouseleave", () => {
+    rect.on("mouseleave", () => {
       document.body.style.cursor = '';
     });
 
-    // Optional: future resize handles go here
-
-    return group;
+    return rect;
   }
 
   // Main builder for the Canvas panel
@@ -221,6 +197,7 @@
     AppState.imageObj = null;
     AppState.shapes = AppState.shapes || [];
     AppState.selectedShape = null;
+    AppState.transformer = null;
 
     // --- 3. Image loading logic ---
     async function renderCanvas(imageSrc) {
@@ -281,29 +258,57 @@
       layer.batchDraw();
 
       // --- 4. Selection logic (click shape to select) ---
+      // Only one transformer (handles) at a time
+      function selectShape(shape) {
+        if (AppState.transformer) {
+          AppState.transformer.destroy();
+          AppState.transformer = null;
+        }
+        AppState.selectedShape = shape;
+        if (!shape) return;
+
+        if (shape._type === "rect") {
+          const transformer = new Konva.Transformer({
+            nodes: [shape],
+            enabledAnchors: [
+              "top-left", "top-center", "top-right",
+              "middle-left", "middle-right",
+              "bottom-left", "bottom-center", "bottom-right"
+            ],
+            rotateEnabled: true
+          });
+          layer.add(transformer);
+          AppState.transformer = transformer;
+          layer.draw();
+        } else if (shape._type === "point") {
+          // No transformer for point, use custom selection
+          shape.showSelection(true);
+        }
+      }
+
+      // Deselect shape, remove transformer
+      function deselectShape() {
+        if (AppState.selectedShape && AppState.selectedShape._type === "point") {
+          AppState.selectedShape.showSelection(false);
+        }
+        if (AppState.transformer) {
+          AppState.transformer.destroy();
+          AppState.transformer = null;
+        }
+        AppState.selectedShape = null;
+        layer.draw();
+      }
+
+      // Click-to-select logic
       stage.on("mousedown tap", function(evt) {
         if (evt.target === stage || evt.target === konvaImage) {
-          if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function") {
+          deselectShape();
+        } else if (evt.target.getParent()?.name() === "reticle-point" || evt.target.name() === "reticle-point") {
+          if (AppState.selectedShape && AppState.selectedShape !== evt.target.getParent() && AppState.selectedShape.showSelection)
             AppState.selectedShape.showSelection(false);
-            AppState.selectedShape = null;
-          }
-        } else {
-          // Point selection
-          if (evt.target.getParent()?.name() === "reticle-point" || evt.target.name() === "reticle-point") {
-            const group = evt.target.getParent();
-            if (AppState.selectedShape && AppState.selectedShape !== group && AppState.selectedShape.showSelection)
-              AppState.selectedShape.showSelection(false);
-            AppState.selectedShape = group;
-            group.showSelection(true);
-          }
-          // Rectangle selection
-          else if (evt.target.getParent()?.name() === "rect-shape" || evt.target.name() === "rect-shape") {
-            const group = evt.target.getParent();
-            if (AppState.selectedShape && AppState.selectedShape !== group && AppState.selectedShape.showSelection)
-              AppState.selectedShape.showSelection(false);
-            AppState.selectedShape = group;
-            group.showSelection(true);
-          }
+          selectShape(evt.target.getParent());
+        } else if (evt.target.name() === "rect-shape") {
+          selectShape(evt.target);
         }
       });
     }
@@ -377,6 +382,7 @@
       AppState.shapes.push(point);
       AppState.konvaLayer.add(point);
       AppState.konvaLayer.batchDraw();
+
       // select and show halo
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
@@ -409,11 +415,29 @@
       AppState.shapes.push(rect);
       AppState.konvaLayer.add(rect);
       AppState.konvaLayer.batchDraw();
-      // select and show halo
+
+      // select and show transformer
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
       AppState.selectedShape = rect;
-      rect.showSelection(true);
+
+      // Use transformer for selection/resize handles
+      if (AppState.transformer) {
+        AppState.transformer.destroy();
+        AppState.transformer = null;
+      }
+      const transformer = new Konva.Transformer({
+        nodes: [rect],
+        enabledAnchors: [
+          "top-left", "top-center", "top-right",
+          "middle-left", "middle-right",
+          "bottom-left", "bottom-center", "bottom-right"
+        ],
+        rotateEnabled: true
+      });
+      AppState.konvaLayer.add(transformer);
+      AppState.transformer = transformer;
+      AppState.konvaLayer.draw();
     }
 
     function addShapeFromToolbar() {
@@ -423,7 +447,6 @@
       } else if (type === "rect") {
         addRectShape();
       } else {
-        // Circle logic to be implemented
         alert("Only point and rectangle shapes are implemented in this build.");
       }
     }
