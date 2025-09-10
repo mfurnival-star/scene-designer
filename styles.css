@@ -63,29 +63,16 @@ body {
   transition: background 0.18s;
   cursor: pointer;
 }
-
 #toolbar button:hover,
 #toolbar select:hover {
   background: #eaf2ff;
 }
-
 #toolbar button:active {
   background: #dbeaff;
 }
 
-/* Main layout: sidebar | canvas | settings */
-#main-content {
-  display: flex;
-  flex-direction: row;
-  height: 100%;
-  flex: 1 1 auto;
-  min-height: 0;
-  position: relative; /* needed for toggle positioning */
-}
-
-/* Sidebar */
+/* Panel content styles - now inside GL panels */
 #sidebar {
-  width: 300px;
   background: #fff;
   border-right: 1.5px solid #e1e4ea;
   display: flex;
@@ -94,6 +81,7 @@ body {
   box-shadow: 1px 0 3px #0001;
   min-width: 220px;
   max-width: 350px;
+  height: 100%;
 }
 
 #labelEditBox {
@@ -173,7 +161,6 @@ body {
 
 /* Canvas Area */
 #canvas-area {
-  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -184,9 +171,9 @@ body {
   position: relative;
   padding: 28px 0 0 0;
   overflow: auto;
+  height: 100%;
 }
 
-/* The trick: let #container size to its content (canvas/image) */
 #container {
   display: inline-block;
   position: relative;
@@ -196,12 +183,10 @@ body {
   box-shadow: 0 2px 16px #0001;
   margin: 0 auto;
   overflow: visible;
-  /* No width/height here! */
 }
 
 /* Settings Panel - Collapsible */
 #settingsPanel {
-  width: 340px;
   background: #fff;
   border-left: 1.5px solid #e1e4ea;
   padding: 20px 18px 30px 18px;
@@ -217,6 +202,7 @@ body {
   z-index: 101;
   transition: transform 0.28s cubic-bezier(.4,2,.6,1), box-shadow 0.2s;
   will-change: transform;
+  height: 100%;
 }
 
 #settingsPanelToggle {
