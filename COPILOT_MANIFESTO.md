@@ -39,7 +39,7 @@ This file defines the working agreement between the user (`mfurnival-star`) and 
 - Copilot will always provide complete files for modular parts upon request or when making changes.
 - Copilot will never provide partial snippets for modular files unless explicitly requested.
 - The index will serve as the canonical reference for modular structure and responsibilities.
-
+- When multiple files are being changed, Copiloy will send one per message waiting for the user to ask for the next by saying "ready" or similar
 ---
 
 **This manifesto is intended as a living agreement.  
