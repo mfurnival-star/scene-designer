@@ -391,7 +391,13 @@ let bgImageObj = null;
 let stageWidth = 1400;
 let stageHeight = 1000;
 
-function setupCanvasPanel(root) {
+/**
+ * Sets up the main canvas panel with Konva and layers.
+ * 
+ * @param {Element} root - The root DOM element (or null for default)
+ * @param {Function} onReady - Optional callback after canvas/layers are fully initialized
+ */
+function setupCanvasPanel(root, onReady) {
   // Find container element
   const el = root && root.querySelector ? root.querySelector("#canvas-panel") : document.getElementById("canvas-panel");
   if (!el) {
@@ -428,6 +434,11 @@ function setupCanvasPanel(root) {
   // Callbacks for other systems (loupe, drag feedback)
   if (window.setupLoupeEvents) window.setupLoupeEvents();
   if (window.setupLockedDragFeedback) window.setupLockedDragFeedback();
+
+  // If a callback is provided, call it after setup
+  if (typeof onReady === "function") {
+    onReady();
+  }
 }
 
 /*************************************
@@ -514,7 +525,6 @@ function logEnter(fn, obj) {
 function logExit(fn) {
   if (window.DEBUG) console.log("←", fn);
 }
-
 /*******************************************************
  * shapes.part6.utils.js
  * Part 6 of N for shapes.js modular build
@@ -1125,33 +1135,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
 /*************************************
  * Image Upload/Server Image Loader
+ * (Now called after Canvas panel is ready)
  *************************************/
-document.addEventListener("DOMContentLoaded", () => {
-  // Handle server image dropdown
+function setupImageLoaderHandlers() {
+  // Server image dropdown
   const serverSelect = document.getElementById("serverImageSelect");
   if (serverSelect) {
-    serverSelect.addEventListener("change", function () {
-      const val = serverSelect.value;
-      if (val) {
-        setBackgroundImage("images/" + val); // Change path if needed
-      }
-    });
+    serverSelect.onchange = function () {
+      if (serverSelect.value) setBackgroundImage("images/" + serverSelect.value);
+    };
   }
-
-  // Handle file upload
+  // File input
   const fileInput = document.getElementById("imageUpload");
   if (fileInput) {
-    fileInput.addEventListener("change", function (e) {
+    fileInput.onchange = function (e) {
       if (!e.target.files.length) return;
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.onload = function (ev) {
-        setBackgroundImage(ev.target.result); // data URL
+        setBackgroundImage(ev.target.result);
       };
       reader.readAsDataURL(file);
-    });
+    };
   }
-});
+}
 
 /*************************************
  * Export/Import Shapes as JSON
@@ -1291,3 +1298,14 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   if (btnDownload) btnDownload.onclick = downloadCanvasAsPNG;
 });
+
+| Part | Filename                  | Description                                      | Key Features / Responsibilities              | Main Functions/Classes (or Exports)      | Keywords/Notes                | See Also                  |
+|------|---------------------------|--------------------------------------------------|----------------------------------------------|------------------------------------------|-------------------------------|---------------------------|
+| 1    | shapes.part1.settings.js  | App settings and config management               | Settings loading, user prefs                 | setupSettingsPanel                       | settings, config              |                           |
+| 2a   | shapes.part2a.konva.js    | Konva stage and layer setup                      | Stage init, main drawing surface             | konvaStageInit, createKonvaStage         | konva, stage, canvas          | part2b.konva.js           |
+| 2b   | shapes.part2b.konva.js    | Konva shapes/tools/extensions                    | Shape tool setup, drawing logic              | setupShapeTools, addShapeHandlers        | shape, tool, konva            | part2a.konva.js           |
+| 3    | shapes.part3.sidebar.js   | Sidebar UI: component layout & events            | Sidebar rendering, events                    | setupSidebar, sidebarEventHandlers       | sidebar, ui                   |                           |
+| 4    | shapes.part4.toolbar.js   | Toolbar and tool selection                       | Toolbar rendering, tool switching            | setupToolbar, handleToolChange           | toolbar, tools                |                           |
+| 5    | shapes.part5.loupe.js     | Loupe/magnifier feature                          | Magnifier display, zoom logic                | setupLoupe, loupeZoomHandler             | loupe, zoom                   |                           |
+| 6    | shapes.part6.utils.js     | Utility functions/helpers                        | Common helpers, export/import                | exportShapes, importShapes, helpers      | utils, helpers                |                           |
+| 7    | shapes.part7.layout.js    | Golden Layout setup & integration                | GoldenLayout config/registration, Canvas/Sidebar panel setup, Canvas panel calls setupCanvasPanel and setupImageLoaderHandlers | registerGoldenLayout, setupCanvasPanel, setupImageLoaderHandlers | goldenlayout, layout, canvas | part2a.konva.js, part2b.konva.js |

@@ -28,7 +28,13 @@ let bgImageObj = null;
 let stageWidth = 1400;
 let stageHeight = 1000;
 
-function setupCanvasPanel(root) {
+/**
+ * Sets up the main canvas panel with Konva and layers.
+ * 
+ * @param {Element} root - The root DOM element (or null for default)
+ * @param {Function} onReady - Optional callback after canvas/layers are fully initialized
+ */
+function setupCanvasPanel(root, onReady) {
   // Find container element
   const el = root && root.querySelector ? root.querySelector("#canvas-panel") : document.getElementById("canvas-panel");
   if (!el) {
@@ -65,6 +71,11 @@ function setupCanvasPanel(root) {
   // Callbacks for other systems (loupe, drag feedback)
   if (window.setupLoupeEvents) window.setupLoupeEvents();
   if (window.setupLockedDragFeedback) window.setupLockedDragFeedback();
+
+  // If a callback is provided, call it after setup
+  if (typeof onReady === "function") {
+    onReady();
+  }
 }
 
 /*************************************
@@ -151,4 +162,3 @@ function logEnter(fn, obj) {
 function logExit(fn) {
   if (window.DEBUG) console.log("←", fn);
 }
-

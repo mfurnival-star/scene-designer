@@ -3,18 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>Shape Editor</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Pickr color picker theme -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="styles.css">
-  <!-- Golden Layout v1.x CSS -->
-  <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-base.css">
-  <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-light-theme.css">
-  <!-- Konva.js for canvas manipulation -->
-  <script src="https://cdn.jsdelivr.net/npm/konva@9.2.0/konva.min.js"></script>
-  <!-- Pickr color picker -->
-  <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
-  <!-- jQuery required for Golden Layout v1.x -->
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <!-- Golden Layout v1.x JS (global GoldenLayout variable) -->
   <script src="https://golden-layout.com/files/latest/js/goldenlayout.min.js"></script>
@@ -57,102 +47,52 @@
         <button type="button" id="newBtn">Add</button>
         <button type="button" id="duplicateBtn">Duplicate</button>
         <button type="button" id="deleteBtn">Delete</button>
-        <button type="button" id="resetRotationBtn">Reset Rotation</button>
-        <button type="button" id="selectAllBtn">Select All</button>
-      </div>
-      <div class="toolbar-section">
-        <label><input type="checkbox" id="lockCheckbox"> Lock</label>
-        <label style="margin-left:18px;">Align:</label>
-        <select id="alignSelect">
-          <option value="">--</option>
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
-          <option value="top">Top</option>
-          <option value="middle">Middle</option>
-          <option value="bottom">Bottom</option>
-        </select>
       </div>
     </nav>
-    <!-- Golden Layout Mount Point -->
-    <div id="gl-root" style="width:100vw;height:calc(100vh - 116px);"></div>
+    <div id="main-layout">
+      <div id="canvas-panel"></div>
+      <aside id="sidebar">
+        <div id="labelEditBox">
+          <label for="labelInput">Label:</label>
+          <input type="text" id="labelInput" maxlength="40">
+          <button type="button" id="saveLabelBtn">Save</button>
+        </div>
+        <div id="labels-list"></div>
+      </aside>
+    </div>
+    <template id="canvas-template">
+      <main id="canvas-area">
+        <div id="container"></div>
+        <div id="errorBox"></div>
+      </main>
+    </template>
+    <template id="settings-template">
+      <aside id="settingsPanel" class="settings-panel open">
+        <button id="settingsPanelToggle" aria-label="Toggle settings panel">
+          <span id="settingsPanelChevron">&#x25B6;</span>
+        </button>
+        <!-- Settings form content will be dynamically injected here -->
+      </aside>
+    </template>
   </div>
-
-  <!-- Panel templates (not rendered, safe for duplicate IDs) -->
-  <template id="sidebar-template">
-    <aside id="sidebar">
-      <div id="labelEditBox">
-        <label for="labelInput">Label:</label>
-        <input type="text" id="labelInput" maxlength="40">
-        <button type="button" id="saveLabelBtn">Save</button>
-      </div>
-      <div id="labels-list"></div>
-    </aside>
-  </template>
-  <template id="canvas-template">
-    <main id="canvas-area">
-      <div id="container"></div>
-      <div id="errorBox"></div>
-    </main>
-  </template>
-  <template id="settings-template">
-    <aside id="settingsPanel" class="settings-panel open">
-      <button id="settingsPanelToggle" aria-label="Toggle settings panel">
-        <span id="settingsPanelChevron">&#x25B6;</span>
-      </button>
-      <!-- Settings form content will be dynamically injected here -->
-    </aside>
-  </template>
-
   <script>
-    $(function () {
-      var config = {
-        content: [{
-          type: 'row',
-          content: [
-            {
-              type: 'component',
-              componentName: 'Sidebar',
-              title: 'Sidebar',
-              width: 20
-            },
-            {
-              type: 'component',
-              componentName: 'Canvas',
-              title: 'Canvas',
-              width: 60
-            },
-            {
-              type: 'component',
-              componentName: 'Settings',
-              title: 'Settings',
-              width: 20
-            }
-          ]
-        }]
-      };
-
-      var myLayout = new GoldenLayout(config, $('#gl-root'));
-
-      myLayout.registerComponent('Sidebar', function (container, state) {
-        var tpl = document.getElementById('sidebar-template');
-        var content = tpl.content.cloneNode(true);
-        container.getElement().append(content);
-      });
-
-      myLayout.registerComponent('Canvas', function (container, state) {
-        var tpl = document.getElementById('canvas-template');
-        var content = tpl.content.cloneNode(true);
-        container.getElement().append(content);
-      });
-
-      myLayout.registerComponent('Settings', function (container, state) {
-        var tpl = document.getElementById('settings-template');
-        var content = tpl.content.cloneNode(true);
-        container.getElement().append(content);
-      });
-
-      myLayout.init();
+    document.addEventListener("DOMContentLoaded", function () {
+      // Ensure the image loader handlers are not attached until canvas is ready!
+      if (window.setupCanvasPanel && window.setupImageLoaderHandlers) {
+        // Call setupCanvasPanel and pass setupImageLoaderHandlers as the onReady callback
+        window.setupCanvasPanel(null, window.setupImageLoaderHandlers);
+      } else {
+        // Fallback: retry until both are available
+        let tries = 0;
+        function tryInit() {
+          if (window.setupCanvasPanel && window.setupImageLoaderHandlers) {
+            window.setupCanvasPanel(null, window.setupImageLoaderHandlers);
+          } else if (tries++ < 10) {
+            setTimeout(tryInit, 100);
+          }
+        }
+        tryInit();
+      }
     });
   </script>
 </body>
