@@ -146,14 +146,15 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   rootDiv.appendChild(p);
 };
 /*********************************************************
- * PART 2A: CanvasPanel - Image Display & Point Placement
+ * PART 2A: CanvasPanel - Image Display & Point & Rectangle Placement
  * ------------------------------------------------------
  * Implements the Canvas panel logic for Golden Layout:
  *   - Displays an image (from upload or server select) using Konva.
  *   - Shapes are added by clicking the "Add" button, not by clicking the canvas.
- *   - Supports "Point" shape: reticle (circle + crosshair), draggable (now with improved hit area for touch/mobile).
- *   - Points are placed at the visible center of the canvas panel.
- *   - Future: Rectangle and Circle support.
+ *   - Supports "Point" shape: reticle (circle + crosshair), draggable (with hit area).
+ *   - Supports "Rectangle" shape: draggable, selection halo.
+ *   - Shapes are placed at the visible center of the canvas panel.
+ *   - Future: Circle support.
  *
  * Integration:
  * - Requires Konva.js loaded globally.
@@ -257,7 +258,6 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     });
     group.on("dragend", () => {
       group.showSelection(false);
-      // Clamp to image bounds if needed (optional)
     });
 
     // UI cursor feedback
@@ -267,6 +267,74 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     group.on("mouseleave", () => {
       document.body.style.cursor = '';
     });
+
+    return group;
+  }
+
+  // Helper: Draw a rectangle shape, draggable, selection halo
+  function makeRectShape(x, y, width = 80, height = 48, stroke = "#2176ff", fill = "#ffffff00") {
+    const group = new Konva.Group({ x, y, draggable: true, name: "rect-shape" });
+
+    // Main rectangle
+    const rect = new Konva.Rect({
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+      stroke: stroke,
+      strokeWidth: 2,
+      fill: fill,
+      cornerRadius: 6,
+      opacity: 0.92,
+      draggable: false, // drag the group instead
+      listening: false
+    });
+
+    // Selection halo (only visible when selected)
+    const selHalo = new Konva.Rect({
+      x: -4,
+      y: -4,
+      width: width + 8,
+      height: height + 8,
+      stroke: "#0057d8",
+      strokeWidth: 2,
+      opacity: 0.32,
+      visible: false,
+      dash: [8, 4],
+      cornerRadius: 10,
+      listening: false
+    });
+
+    group.add(selHalo);
+    group.add(rect);
+
+    // For selection
+    group.showSelection = function(isSelected) {
+      selHalo.visible(isSelected);
+    };
+
+    group._type = "rect";
+    group._label = "Rectangle";
+    group.locked = false;
+    group._rect = rect; // for later access
+
+    // Dragging: update state and selection halo
+    group.on("dragstart", () => {
+      group.showSelection(true);
+    });
+    group.on("dragend", () => {
+      group.showSelection(false);
+    });
+
+    // UI cursor feedback
+    group.on("mouseenter", () => {
+      document.body.style.cursor = 'move';
+    });
+    group.on("mouseleave", () => {
+      document.body.style.cursor = '';
+    });
+
+    // Optional: future resize handles go here
 
     return group;
   }
@@ -366,13 +434,23 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
             AppState.selectedShape.showSelection(false);
             AppState.selectedShape = null;
           }
-        } else if (evt.target.getParent()?.name() === "reticle-point" || evt.target.name() === "reticle-point") {
-          // select parent group if child is clicked
-          const group = evt.target.getParent();
-          if (AppState.selectedShape && AppState.selectedShape !== group && AppState.selectedShape.showSelection)
-            AppState.selectedShape.showSelection(false);
-          AppState.selectedShape = group;
-          group.showSelection(true);
+        } else {
+          // Point selection
+          if (evt.target.getParent()?.name() === "reticle-point" || evt.target.name() === "reticle-point") {
+            const group = evt.target.getParent();
+            if (AppState.selectedShape && AppState.selectedShape !== group && AppState.selectedShape.showSelection)
+              AppState.selectedShape.showSelection(false);
+            AppState.selectedShape = group;
+            group.showSelection(true);
+          }
+          // Rectangle selection
+          else if (evt.target.getParent()?.name() === "rect-shape" || evt.target.name() === "rect-shape") {
+            const group = evt.target.getParent();
+            if (AppState.selectedShape && AppState.selectedShape !== group && AppState.selectedShape.showSelection)
+              AppState.selectedShape.showSelection(false);
+            AppState.selectedShape = group;
+            group.showSelection(true);
+          }
         }
       });
     }
@@ -430,20 +508,13 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       let x = Math.round(img.width / 2), y = Math.round(img.height / 2); // fallback
 
       if (canvasArea && AppState.konvaDiv) {
-        // Get scroll position of canvas panel relative to image
         const scrollLeft = AppState.konvaDiv.parentElement.scrollLeft || 0;
         const scrollTop = AppState.konvaDiv.parentElement.scrollTop || 0;
         const panelRect = canvasArea.getBoundingClientRect();
-        const containerRect = AppState.konvaDiv.getBoundingClientRect();
-
         const visibleWidth = Math.min(panelRect.width, img.width);
         const visibleHeight = Math.min(panelRect.height, img.height);
-
-        // The visible center in image coordinates is:
         x = Math.round(scrollLeft + visibleWidth / 2);
         y = Math.round(scrollTop + visibleHeight / 2);
-
-        // Clamp to image bounds
         x = Math.max(0, Math.min(img.width, x));
         y = Math.max(0, Math.min(img.height, y));
       }
@@ -460,13 +531,47 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       point.showSelection(true);
     }
 
+    function addRectShape() {
+      const img = AppState.imageObj;
+      if (!img || !AppState.konvaLayer) return;
+      // Default size
+      const defaultW = 80, defaultH = 48;
+      // Center in visible panel
+      const canvasArea = document.getElementById("canvas-area");
+      let x = Math.round(img.width / 2 - defaultW / 2), y = Math.round(img.height / 2 - defaultH / 2);
+      if (canvasArea && AppState.konvaDiv) {
+        const scrollLeft = AppState.konvaDiv.parentElement.scrollLeft || 0;
+        const scrollTop = AppState.konvaDiv.parentElement.scrollTop || 0;
+        const panelRect = canvasArea.getBoundingClientRect();
+        const visibleWidth = Math.min(panelRect.width, img.width);
+        const visibleHeight = Math.min(panelRect.height, img.height);
+        x = Math.round(scrollLeft + visibleWidth / 2 - defaultW / 2);
+        y = Math.round(scrollTop + visibleHeight / 2 - defaultH / 2);
+        x = Math.max(0, Math.min(img.width - defaultW, x));
+        y = Math.max(0, Math.min(img.height - defaultH, y));
+      }
+      const stroke = "#2176ff";
+      const fill = "#ffffff00";
+      const rect = makeRectShape(x, y, defaultW, defaultH, stroke, fill);
+      AppState.shapes.push(rect);
+      AppState.konvaLayer.add(rect);
+      AppState.konvaLayer.batchDraw();
+      // select and show halo
+      if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
+        AppState.selectedShape.showSelection(false);
+      AppState.selectedShape = rect;
+      rect.showSelection(true);
+    }
+
     function addShapeFromToolbar() {
       const type = getSelectedShapeType();
       if (type === "point") {
         addPointShape();
+      } else if (type === "rect") {
+        addRectShape();
       } else {
-        // Rectangle and Circle logic to be implemented
-        alert("Only point shape is implemented in this build.");
+        // Circle logic to be implemented
+        alert("Only point and rectangle shapes are implemented in this build.");
       }
     }
 
@@ -477,11 +582,8 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         addBtn.onclick = addShapeFromToolbar;
       }
     }, 0);
-
-    // Remove any click-to-add logic from the canvas (enforced by not wiring it up).
   };
 })();
-
 /*********************************************************
  * PART 3: SettingsPanel Stub (Hello World)
  * ----------------------------------------
