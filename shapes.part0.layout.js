@@ -22,7 +22,7 @@
         showPopoutIcon: false,
         showCloseIcon: false,
         showMaximiseIcon: false,
-        hasHeaders: false
+        hasHeaders: true
       },
       content: [{
         type: "row",
