@@ -1124,7 +1124,37 @@ document.addEventListener("DOMContentLoaded", () => {
  *******************************************************/
 
 /*************************************
- * Utility: Export/Import Shapes as JSON
+ * Image Upload/Server Image Loader
+ *************************************/
+document.addEventListener("DOMContentLoaded", () => {
+  // Handle server image dropdown
+  const serverSelect = document.getElementById("serverImageSelect");
+  if (serverSelect) {
+    serverSelect.addEventListener("change", function () {
+      const val = serverSelect.value;
+      if (val) {
+        setBackgroundImage("images/" + val); // Change path if needed
+      }
+    });
+  }
+
+  // Handle file upload
+  const fileInput = document.getElementById("imageUpload");
+  if (fileInput) {
+    fileInput.addEventListener("change", function (e) {
+      if (!e.target.files.length) return;
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function (ev) {
+        setBackgroundImage(ev.target.result); // data URL
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+});
+
+/*************************************
+ * Export/Import Shapes as JSON
  *************************************/
 function exportShapesToJSON() {
   const data = shapes.map(s => ({
@@ -1179,7 +1209,7 @@ function importShapesFromJSON(jsonStr) {
 }
 
 /*************************************
- * Utility: Download PNG of current canvas
+ * Download PNG of current canvas
  *************************************/
 function downloadCanvasAsPNG() {
   logEnter("downloadCanvasAsPNG");
@@ -1261,4 +1291,3 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   if (btnDownload) btnDownload.onclick = downloadCanvasAsPNG;
 });
-
