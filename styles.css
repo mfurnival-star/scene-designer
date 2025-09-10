@@ -63,16 +63,29 @@ body {
   transition: background 0.18s;
   cursor: pointer;
 }
+
 #toolbar button:hover,
 #toolbar select:hover {
   background: #eaf2ff;
 }
+
 #toolbar button:active {
   background: #dbeaff;
 }
 
-/* Panel content styles - now inside GL panels */
+/* Main layout: sidebar | canvas | settings */
+#main-content {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative; /* needed for toggle positioning */
+}
+
+/* Sidebar */
 #sidebar {
+  width: 300px;
   background: #fff;
   border-right: 1.5px solid #e1e4ea;
   display: flex;
@@ -81,7 +94,6 @@ body {
   box-shadow: 1px 0 3px #0001;
   min-width: 220px;
   max-width: 350px;
-  height: 100%;
 }
 
 #labelEditBox {
@@ -161,6 +173,7 @@ body {
 
 /* Canvas Area */
 #canvas-area {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -171,9 +184,9 @@ body {
   position: relative;
   padding: 28px 0 0 0;
   overflow: auto;
-  height: 100%;
 }
 
+/* The trick: let #container size to its content (canvas/image) */
 #container {
   display: inline-block;
   position: relative;
@@ -183,10 +196,12 @@ body {
   box-shadow: 0 2px 16px #0001;
   margin: 0 auto;
   overflow: visible;
+  /* No width/height here! */
 }
 
 /* Settings Panel - Collapsible */
 #settingsPanel {
+  width: 340px;
   background: #fff;
   border-left: 1.5px solid #e1e4ea;
   padding: 20px 18px 30px 18px;
@@ -202,27 +217,34 @@ body {
   z-index: 101;
   transition: transform 0.28s cubic-bezier(.4,2,.6,1), box-shadow 0.2s;
   will-change: transform;
-  height: 100%;
+  /* Don't let the panel clip its children! */
+  overflow: visible !important;
 }
 
 #settingsPanelToggle {
   position: absolute !important;
-  left: -32px !important;
-  top: 16px !important;
-  width: 32px !important;
-  height: 32px !important;
-  background: #e1e4ea !important;
-  border: none !important;
-  border-radius: 16px 0 0 16px !important;
-  box-shadow: 0 2px 8px #0001 !important;
+  left: -44px !important;  /* Stick out more */
+  top: 32px !important;
+  width: 44px !important;
+  height: 44px !important;
+  background: #2176ff !important;
+  border: 3.5px solid #1452a3 !important;
+  border-radius: 24px 0 0 24px !important;
+  box-shadow: 0 2px 12px #0002, 0 0px 0px #0000 !important;
   cursor: pointer !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  z-index: 9999 !important;
-  font-size: 1.25em !important;
+  z-index: 999999 !important;
+  font-size: 2em !important;
   opacity: 1 !important;
   pointer-events: auto !important;
+  color: #fff !important;
+  transition: background 0.2s, border 0.2s;
+}
+#settingsPanelToggle:hover {
+  background: #1452a3 !important;
+  border-color: #2176ff !important;
 }
 
 #settingsPanel.open {
@@ -236,12 +258,13 @@ body {
 }
 
 #settingsPanel:not(.open) #settingsPanelToggle {
-  left: -32px !important;
+  left: -44px !important;
 }
 
 #settingsPanelChevron {
   display: inline-block;
   transition: transform 0.2s;
+  font-size: 2em;
 }
 #settingsPanel.open #settingsPanelChevron {
   transform: rotate(180deg); /* Chevron points left when open */
@@ -302,5 +325,10 @@ body {
   #settingsPanelToggle {
     left: -28px !important;
     top: 8px !important;
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 20px 0 0 20px !important;
+    font-size: 1.5em !important;
   }
 }
+

@@ -51,51 +51,7 @@
         <button type="button" id="deleteBtn">Delete</button>
       </div>
     </nav>
-    <div id="main-layout">
-      <div id="canvas-panel"></div>
-      <aside id="sidebar">
-        <div id="labelEditBox">
-          <label for="labelInput">Label:</label>
-          <input type="text" id="labelInput" maxlength="40">
-          <button type="button" id="saveLabelBtn">Save</button>
-        </div>
-        <div id="labels-list"></div>
-      </aside>
-    </div>
-    <template id="canvas-template">
-      <main id="canvas-area">
-        <div id="container"></div>
-        <div id="errorBox"></div>
-      </main>
-    </template>
-    <template id="settings-template">
-      <aside id="settingsPanel" class="settings-panel open">
-        <button id="settingsPanelToggle" aria-label="Toggle settings panel">
-          <span id="settingsPanelChevron">&#x25B6;</span>
-        </button>
-        <!-- Settings form content will be dynamically injected here -->
-      </aside>
-    </template>
+    <div id="main-layout" style="width:100vw;height:calc(100vh - 108px);"></div>
   </div>
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      // Ensure the image loader handlers are not attached until canvas is ready!
-      if (window.setupCanvasPanel && window.setupImageLoaderHandlers) {
-        // Call setupCanvasPanel and pass setupImageLoaderHandlers as the onReady callback
-        window.setupCanvasPanel(null, window.setupImageLoaderHandlers);
-      } else {
-        // Fallback: retry until both are available
-        let tries = 0;
-        function tryInit() {
-          if (window.setupCanvasPanel && window.setupImageLoaderHandlers) {
-            window.setupCanvasPanel(null, window.setupImageLoaderHandlers);
-          } else if (tries++ < 10) {
-            setTimeout(tryInit, 100);
-          }
-        }
-        tryInit();
-      }
-    });
-  </script>
 </body>
 </html>
