@@ -73,7 +73,7 @@ body {
   background: #dbeaff;
 }
 
-/* Ensure Golden Layout container fills all space */
+/* Golden Layout container fills all space */
 #main-layout {
   width: 100%;
   height: 100%;
@@ -91,20 +91,74 @@ body {
   /* No rules here! Golden Layout manages panel layout. */
 }
 
-/* Sidebar */
-#sidebar {
-  width: 100%;
+/* Sidebar, Canvas, SettingsPanel:
+   Let GL manage their size; just use 100% for content to fill panel container. */
+#sidebar,
+#canvas-area,
+#settingsPanel {
   height: 100%;
+  box-sizing: border-box;
+  /* Remove width: 100%; so GL controls width! */
+  /* Remove min-width/max-width that would restrict panel width. */
+  min-width: 0;
+  max-width: none;
+  min-height: 0;
+}
+
+#sidebar {
   background: #fff;
   border-right: 1.5px solid #e1e4ea;
   display: flex;
   flex-direction: column;
   padding: 18px 16px 18px 16px;
   box-shadow: 1px 0 3px #0001;
-  min-width: 220px;
-  max-width: 350px;
   box-sizing: border-box;
 }
+
+#canvas-area {
+  background: #f2f5fa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  position: relative;
+  padding: 28px 0 0 0;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+#container {
+  display: inline-block;
+  position: relative;
+  background: #fff;
+  border: 1.5px solid #d2d7e3;
+  border-radius: 7px;
+  box-shadow: 0 2px 16px #0001;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+/* Settings Panel - Collapsible */
+#settingsPanel {
+  background: #fff;
+  border-left: 1.5px solid #e1e4ea;
+  padding: 20px 18px 30px 18px;
+  box-shadow: -1px 0 3px #0001;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-y: auto;
+  position: relative !important;
+  z-index: 101;
+  transition: transform 0.28s cubic-bezier(.4,2,.6,1), box-shadow 0.2s;
+  will-change: transform;
+  overflow: visible !important;
+  box-sizing: border-box;
+}
+
+/* The rest of your rules remain as before (table, swatch, loupe, etc) */
 
 /* Labels List (table) */
 #labels-list {
@@ -157,63 +211,11 @@ body {
   cursor: pointer;
 }
 
-/* Canvas Area */
-#canvas-area {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  background: #f2f5fa;
-  min-width: 400px;
-  min-height: 0;
-  position: relative;
-  padding: 28px 0 0 0;
-  overflow: auto;
-  box-sizing: border-box;
-}
-
-/* The trick: let #container size to its content (canvas/image) */
-#container {
-  display: inline-block;
-  position: relative;
-  background: #fff;
-  border: 1.5px solid #d2d7e3;
-  border-radius: 7px;
-  box-shadow: 0 2px 16px #0001;
-  margin: 0 auto;
-  overflow: visible;
-  /* No width/height here! */
-}
-
-/* Settings Panel - Collapsible */
-#settingsPanel {
-  width: 100%;
-  height: 100%;
-  background: #fff;
-  border-left: 1.5px solid #e1e4ea;
-  padding: 20px 18px 30px 18px;
-  box-shadow: -1px 0 3px #0001;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 220px;
-  font-size: 15px;
-  line-height: 1.5;
-  overflow-y: auto;
-  position: relative !important;
-  z-index: 101;
-  transition: transform 0.28s cubic-bezier(.4,2,.6,1), box-shadow 0.2s;
-  will-change: transform;
-  /* Don't let the panel clip its children! */
-  overflow: visible !important;
-  box-sizing: border-box;
-}
+/* Misc + settings panel toggle, loupe, etc as previous... (unchanged) */
 
 #settingsPanelToggle {
   position: absolute !important;
-  left: -44px !important;  /* Stick out more */
+  left: -44px !important;
   top: 32px !important;
   width: 44px !important;
   height: 44px !important;
@@ -260,12 +262,10 @@ body {
   transform: rotate(180deg); /* Chevron points left when open */
 }
 
-/* Color picker popup z-index */
 .pcr-app {
   z-index: 200 !important;
 }
 
-/* Error box */
 #errorBox {
   color: #a22d13;
   font-size: 14px;
@@ -273,7 +273,6 @@ body {
   min-height: 22px;
 }
 
-/* Misc */
 .lock-checkbox {
   transform: scale(1.2);
   margin-left: 5px;
@@ -285,7 +284,6 @@ body {
   margin-left: 7px;
 }
 
-/* Scrollbar for lists */
 #labels-list::-webkit-scrollbar {
   width: 8px;
   background: #e6eaf2;
@@ -295,7 +293,6 @@ body {
   border-radius: 5px;
 }
 
-/* Loupe magnifier */
 #loupeDiv {
   display: none;
   position: fixed;
@@ -310,7 +307,6 @@ body {
   overflow: hidden;
 }
 
-/* Responsive adjustment for toggle if needed */
 @media (max-width: 800px) {
   #settingsPanelToggle {
     left: -28px !important;
@@ -322,4 +318,3 @@ body {
   }
 }
 
-/*--- Remove any global or legacy flex rules that affect Golden Layout ---*/
