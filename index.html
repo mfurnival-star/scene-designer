@@ -4,14 +4,21 @@
   <meta charset="UTF-8">
   <title>Shape Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Pickr color picker theme -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css">
   <link rel="stylesheet" href="styles.css">
+  <!-- Golden Layout v1.x CSS -->
   <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-base.css">
   <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-light-theme.css">
+  <!-- Konva.js for canvas manipulation -->
   <script src="https://cdn.jsdelivr.net/npm/konva@9.2.0/konva.min.js"></script>
+  <!-- Pickr color picker -->
   <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
+  <!-- jQuery required for Golden Layout v1.x -->
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <!-- Golden Layout v1.x JS (global GoldenLayout variable) -->
   <script src="https://golden-layout.com/files/latest/js/goldenlayout.min.js"></script>
+  <!-- Your main JS app -->
   <script src="shapes.js"></script>
 </head>
 <body>
@@ -67,28 +74,35 @@
         </select>
       </div>
     </nav>
+    <!-- Golden Layout Mount Point -->
     <div id="gl-root" style="width:100vw;height:calc(100vh - 116px);"></div>
   </div>
 
-  <!-- Panel content, now without any extra wrappers -->
-  <aside id="sidebar" style="display:none;">
-    <div id="labelEditBox">
-      <label for="labelInput">Label:</label>
-      <input type="text" id="labelInput" maxlength="40">
-      <button type="button" id="saveLabelBtn">Save</button>
-    </div>
-    <div id="labels-list"></div>
-  </aside>
-  <main id="canvas-area" style="display:none;">
-    <div id="container"></div>
-    <div id="errorBox"></div>
-  </main>
-  <aside id="settingsPanel" class="settings-panel open" style="display:none;">
-    <button id="settingsPanelToggle" aria-label="Toggle settings panel">
-      <span id="settingsPanelChevron">&#x25B6;</span>
-    </button>
-    <!-- Settings form content will be dynamically injected here -->
-  </aside>
+  <!-- Panel templates (not rendered, safe for duplicate IDs) -->
+  <template id="sidebar-template">
+    <aside id="sidebar">
+      <div id="labelEditBox">
+        <label for="labelInput">Label:</label>
+        <input type="text" id="labelInput" maxlength="40">
+        <button type="button" id="saveLabelBtn">Save</button>
+      </div>
+      <div id="labels-list"></div>
+    </aside>
+  </template>
+  <template id="canvas-template">
+    <main id="canvas-area">
+      <div id="container"></div>
+      <div id="errorBox"></div>
+    </main>
+  </template>
+  <template id="settings-template">
+    <aside id="settingsPanel" class="settings-panel open">
+      <button id="settingsPanelToggle" aria-label="Toggle settings panel">
+        <span id="settingsPanelChevron">&#x25B6;</span>
+      </button>
+      <!-- Settings form content will be dynamically injected here -->
+    </aside>
+  </template>
 
   <script>
     $(function () {
@@ -121,21 +135,21 @@
       var myLayout = new GoldenLayout(config, $('#gl-root'));
 
       myLayout.registerComponent('Sidebar', function (container, state) {
-        var el = document.getElementById('sidebar');
-        el.style.display = 'block';
-        container.getElement().append(el);
+        var tpl = document.getElementById('sidebar-template');
+        var content = tpl.content.cloneNode(true);
+        container.getElement().append(content);
       });
 
       myLayout.registerComponent('Canvas', function (container, state) {
-        var el = document.getElementById('canvas-area');
-        el.style.display = 'block';
-        container.getElement().append(el);
+        var tpl = document.getElementById('canvas-template');
+        var content = tpl.content.cloneNode(true);
+        container.getElement().append(content);
       });
 
       myLayout.registerComponent('Settings', function (container, state) {
-        var el = document.getElementById('settingsPanel');
-        el.style.display = 'block';
-        container.getElement().append(el);
+        var tpl = document.getElementById('settings-template');
+        var content = tpl.content.cloneNode(true);
+        container.getElement().append(content);
       });
 
       myLayout.init();
