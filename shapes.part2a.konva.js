@@ -36,7 +36,7 @@
   }
 
   // Helper: Draw a point as a reticle (circle + crosshair)
-  function makeReticlePointShape(x, y, color = "#ff3b3b") {
+  function makeReticlePointShape(x, y, color = "#2176ff") {
     const group = new Konva.Group({ x, y, draggable: true, name: "reticle-point" });
 
     // Main circle (halo)
@@ -71,7 +71,7 @@
     const selHalo = new Konva.Circle({
       x: 0, y: 0,
       radius: 16,
-      stroke: "#2176ff",
+      stroke: "#0057d8",
       strokeWidth: 2,
       opacity: 0.6,
       visible: false,
@@ -269,7 +269,7 @@
       // Default position: halfway across, same distance from left and from top
       const x = Math.round(img.width / 2);
       const y = Math.round(img.width / 2); // Note: width, not height, to match your original logic
-      const color = "#ff3b3b";
+      const color = "#2176ff";
       const point = makeReticlePointShape(x, y, color);
       AppState.shapes.push(point);
       AppState.konvaLayer.add(point);
@@ -302,3 +302,4 @@
     // Remove any click-to-add logic from the canvas (enforced by not wiring it up).
   };
 })();
+
