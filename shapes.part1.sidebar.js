@@ -1,12 +1,9 @@
 /*********************************************************
- * PART 1: SidebarPanel Stub (Hello World)
+ * PART 1: SidebarPanel Logic
  * ----------------------------------------
- * This file defines the placeholder logic for the Sidebar panel
- * in the Golden Layout workspace. For "hello world" testing,
- * it simply renders a static message.
- *
- * When you are ready to implement the real shape table,
- * replace this with the actual UI logic.
+ * Implements the content and UI logic for the Sidebar panel (shape table/list).
+ * Current: Placeholder/hello world.
+ * Future: Will show the table of annotation shapes and handle selection, lock, delete, etc.
  *********************************************************/
 
 window.buildSidebarPanel = function(rootDiv, container, state) {

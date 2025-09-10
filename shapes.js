@@ -188,14 +188,11 @@ function logExit(fnName, ...result) {
   }
 })();
 /*********************************************************
- * PART 1: SidebarPanel Stub (Hello World)
+ * PART 1: SidebarPanel Logic
  * ----------------------------------------
- * This file defines the placeholder logic for the Sidebar panel
- * in the Golden Layout workspace. For "hello world" testing,
- * it simply renders a static message.
- *
- * When you are ready to implement the real shape table,
- * replace this with the actual UI logic.
+ * Implements the content and UI logic for the Sidebar panel (shape table/list).
+ * Current: Placeholder/hello world.
+ * Future: Will show the table of annotation shapes and handle selection, lock, delete, etc.
  *********************************************************/
 
 window.buildSidebarPanel = function(rootDiv, container, state) {
@@ -212,25 +209,13 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   rootDiv.appendChild(p);
 };
 /*********************************************************
- * PART 2A: CanvasPanel - Image Display & Shape Placement
+ * PART 2A: CanvasPanel – Image Display & Point Placement
  * ------------------------------------------------------
- * Implements the Canvas panel logic for Golden Layout:
- *   - Displays an image (from upload or server select) using Konva.
- *   - Shapes are added by clicking the "Add" button, not by clicking the canvas.
- *   - Supports:
- *       - Point: reticle (circle + crosshair), draggable, selection halo
- *       - Rectangle: Konva.Rect, draggable, square corners, transformer on select
- *       - Circle: Konva.Circle, draggable, transformer on select (radius only updated on transformend)
- *         - Circle always remains a true circle after resizing (no ellipse)
- *         - Only 4 corner anchors, proportional scaling, no rotation
- *         - No clamping (match prelayout behavior)
- *   - Shapes are placed at the visible center of the canvas panel.
- *   - Stroke width for rect/circle always remains 1, even after resizing.
- *
- * Integration:
- * - Requires Konva.js loaded globally.
- * - Called by Golden Layout during CanvasPanel init.
- * - Depends on #canvas-area div being present in the panel.
+ * Fully implements the Canvas panel using Konva.
+ * - Loads and displays the selected/uploaded image.
+ * - Allows "Point" annotation placement via click.
+ * - Renders draggable points as colored circles.
+ * - Hooks for future rectangle/circle shapes.
  *********************************************************/
 
 (function () {
@@ -662,15 +647,13 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       }
     }, 0);
   };
+})();
 /*********************************************************
- * PART 3: SettingsPanel Stub (Hello World)
+ * PART 3: SettingsPanel Logic
  * ----------------------------------------
- * This file defines the placeholder logic for the Settings panel
- * in the Golden Layout workspace. For "hello world" testing,
- * it simply renders a static message.
- *
- * When you are ready to implement the real settings UI,
- * replace this with the actual logic/settings controls.
+ * Implements the content and UI for the Settings panel.
+ * Current: Placeholder/hello world.
+ * Future: Scene name, logic selector, color/tolerance, export, etc.
  *********************************************************/
 
 window.buildSettingsPanel = function(rootDiv, container, state) {

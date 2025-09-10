@@ -1,23 +1,11 @@
 /*********************************************************
- * PART 2A: CanvasPanel - Image Display & Shape Placement
+ * PART 2A: CanvasPanel – Image Display & Point Placement
  * ------------------------------------------------------
- * Implements the Canvas panel logic for Golden Layout:
- *   - Displays an image (from upload or server select) using Konva.
- *   - Shapes are added by clicking the "Add" button, not by clicking the canvas.
- *   - Supports:
- *       - Point: reticle (circle + crosshair), draggable, selection halo
- *       - Rectangle: Konva.Rect, draggable, square corners, transformer on select
- *       - Circle: Konva.Circle, draggable, transformer on select (radius only updated on transformend)
- *         - Circle always remains a true circle after resizing (no ellipse)
- *         - Only 4 corner anchors, proportional scaling, no rotation
- *         - No clamping (match prelayout behavior)
- *   - Shapes are placed at the visible center of the canvas panel.
- *   - Stroke width for rect/circle always remains 1, even after resizing.
- *
- * Integration:
- * - Requires Konva.js loaded globally.
- * - Called by Golden Layout during CanvasPanel init.
- * - Depends on #canvas-area div being present in the panel.
+ * Fully implements the Canvas panel using Konva.
+ * - Loads and displays the selected/uploaded image.
+ * - Allows "Point" annotation placement via click.
+ * - Renders draggable points as colored circles.
+ * - Hooks for future rectangle/circle shapes.
  *********************************************************/
 
 (function () {
@@ -449,3 +437,4 @@
       }
     }, 0);
   };
+})();

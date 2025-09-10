@@ -1,12 +1,9 @@
 /*********************************************************
- * PART 3: SettingsPanel Stub (Hello World)
+ * PART 3: SettingsPanel Logic
  * ----------------------------------------
- * This file defines the placeholder logic for the Settings panel
- * in the Golden Layout workspace. For "hello world" testing,
- * it simply renders a static message.
- *
- * When you are ready to implement the real settings UI,
- * replace this with the actual logic/settings controls.
+ * Implements the content and UI for the Settings panel.
+ * Current: Placeholder/hello world.
+ * Future: Scene name, logic selector, color/tolerance, export, etc.
  *********************************************************/
 
 window.buildSettingsPanel = function(rootDiv, container, state) {
