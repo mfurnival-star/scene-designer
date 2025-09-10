@@ -15,6 +15,7 @@ body {
 
 /* Header */
 #app-header {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -38,6 +39,7 @@ body {
 
 /* Toolbar */
 #toolbar {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -75,11 +77,11 @@ body {
 
 /* Golden Layout container fills all space */
 #main-layout {
+  flex: 1 1 auto;
   width: 100%;
-  height: 100%;
-  position: relative;
   min-width: 0;
   min-height: 0;
+  position: relative;
   overflow: hidden;
   margin: 0;
   padding: 0;
@@ -97,14 +99,14 @@ body {
 #canvas-area,
 #settingsPanel {
   height: 100%;
+  width: 100%;
   box-sizing: border-box;
-  /* Remove width: 100%; so GL controls width! */
-  /* Remove min-width/max-width that would restrict panel width. */
   min-width: 0;
   max-width: none;
   min-height: 0;
 }
 
+/* --- Sidebar --- */
 #sidebar {
   background: #fff;
   border-right: 1.5px solid #e1e4ea;
@@ -115,6 +117,7 @@ body {
   box-sizing: border-box;
 }
 
+/* --- Canvas Area --- */
 #canvas-area {
   background: #f2f5fa;
   display: flex;
@@ -127,6 +130,7 @@ body {
   box-sizing: border-box;
 }
 
+/* The trick: let #container size to its content (canvas/image) */
 #container {
   display: inline-block;
   position: relative;
@@ -138,7 +142,7 @@ body {
   overflow: visible;
 }
 
-/* Settings Panel - Collapsible */
+/* --- Settings Panel --- */
 #settingsPanel {
   background: #fff;
   border-left: 1.5px solid #e1e4ea;
@@ -211,7 +215,7 @@ body {
   cursor: pointer;
 }
 
-/* Misc + settings panel toggle, loupe, etc as previous... (unchanged) */
+/* Settings panel toggle, loupe, etc as previous... (unchanged) */
 
 #settingsPanelToggle {
   position: absolute !important;
@@ -317,4 +321,3 @@ body {
     font-size: 1.5em !important;
   }
 }
-
