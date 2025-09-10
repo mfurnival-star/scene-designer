@@ -151,7 +151,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  * Implements the Canvas panel logic for Golden Layout:
  *   - Displays an image (from upload or server select) using Konva.
  *   - Shapes are added by clicking the "Add" button, not by clicking the canvas.
- *   - Supports "Point" shape: reticle (circle + crosshair), draggable.
+ *   - Supports "Point" shape: reticle (circle + crosshair), draggable (now with improved hit area for touch/mobile).
  *   - Points are placed at the visible center of the canvas panel.
  *   - Future: Rectangle and Circle support.
  *
@@ -182,9 +182,20 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     while (node.firstChild) node.removeChild(node.firstChild);
   }
 
-  // Helper: Draw a point as a reticle (circle + crosshair)
+  // Helper: Draw a point as a reticle (circle + crosshair + improved hit area)
   function makeReticlePointShape(x, y, color = "#2176ff") {
     const group = new Konva.Group({ x, y, draggable: true, name: "reticle-point" });
+
+    // --- Invisible hit area for easier touch (MUST BE FIRST CHILD) ---
+    const hitCircle = new Konva.Circle({
+      x: 0,
+      y: 0,
+      radius: 22, // Larger for mobile touch
+      fill: "#fff",
+      opacity: 0,
+      listening: true
+    });
+    group.add(hitCircle);
 
     // Main circle (halo)
     const halo = new Konva.Circle({
@@ -355,7 +366,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
             AppState.selectedShape.showSelection(false);
             AppState.selectedShape = null;
           }
-        } else if (evt.target.getParent()?.name() === "reticle-point") {
+        } else if (evt.target.getParent()?.name() === "reticle-point" || evt.target.name() === "reticle-point") {
           // select parent group if child is clicked
           const group = evt.target.getParent();
           if (AppState.selectedShape && AppState.selectedShape !== group && AppState.selectedShape.showSelection)
