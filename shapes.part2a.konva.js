@@ -1,13 +1,15 @@
 /*********************************************************
- * PART 2A: CanvasPanel - Image Display & Point & Rectangle Placement
+ * PART 2A: CanvasPanel - Image Display & Shape Placement
  * ------------------------------------------------------
  * Implements the Canvas panel logic for Golden Layout:
  *   - Displays an image (from upload or server select) using Konva.
  *   - Shapes are added by clicking the "Add" button, not by clicking the canvas.
- *   - Supports "Point" shape: reticle (circle + crosshair), draggable (with hit area).
- *   - Supports "Rectangle" shape: plain Konva.Rect, square corners, draggable, transformer on select.
+ *   - Supports:
+ *       - Point: reticle (circle + crosshair), draggable, selection halo
+ *       - Rectangle: plain Konva.Rect, draggable, square corners, transformer on select
+ *       - Circle: Konva.Circle, draggable, transformer on select
  *   - Shapes are placed at the visible center of the canvas panel.
- *   - Future: Circle support.
+ *   - Stroke width for rect/circle always remains 1, even after resizing.
  *
  * Integration:
  * - Requires Konva.js loaded globally.
@@ -124,7 +126,7 @@
     return group;
   }
 
-  // Helper: Make a classic Konva.Rect (draggable, square corners, transformer on select)
+  // Helper: Make a Konva.Rect (draggable, square corners, transformer on select, strokeWidth always 1)
   function makeRectShape(x, y, width = 80, height = 48, stroke = "#2176ff", fill = "#ffffff00") {
     const rect = new Konva.Rect({
       x: x,
@@ -132,15 +134,13 @@
       width: width,
       height: height,
       stroke: stroke,
-      strokeWidth: 2,
+      strokeWidth: 1,
       fill: fill,
       opacity: 0.92,
       draggable: true,
       name: "rect-shape"
-      // NO cornerRadius!
     });
 
-    // For selection (for compatibility with old logic)
     rect.showSelection = function(isSelected) {
       // No-op; selection is shown by Konva.Transformer
     };
@@ -149,15 +149,9 @@
     rect._label = "Rectangle";
     rect.locked = false;
 
-    // Dragging: update state
-    rect.on("dragstart", () => {
-      // No custom visual needed; transformer handles show selection
-    });
-    rect.on("dragend", () => {
-      // No custom visual needed
-    });
+    rect.on("dragstart", () => {});
+    rect.on("dragend", () => {});
 
-    // UI cursor feedback
     rect.on("mouseenter", () => {
       document.body.style.cursor = 'move';
     });
@@ -166,6 +160,41 @@
     });
 
     return rect;
+  }
+
+  // Helper: Make a Konva.Circle (draggable, transformer on select, strokeWidth always 1)
+  function makeCircleShape(x, y, radius = 24, stroke = "#2176ff", fill = "#ffffff00") {
+    const circle = new Konva.Circle({
+      x: x,
+      y: y,
+      radius: radius,
+      stroke: stroke,
+      strokeWidth: 1,
+      fill: fill,
+      opacity: 0.92,
+      draggable: true,
+      name: "circle-shape"
+    });
+
+    circle.showSelection = function(isSelected) {
+      // No-op; selection is shown by Konva.Transformer
+    };
+
+    circle._type = "circle";
+    circle._label = "Circle";
+    circle.locked = false;
+
+    circle.on("dragstart", () => {});
+    circle.on("dragend", () => {});
+
+    circle.on("mouseenter", () => {
+      document.body.style.cursor = 'move';
+    });
+    circle.on("mouseleave", () => {
+      document.body.style.cursor = '';
+    });
+
+    return circle;
   }
 
   // Main builder for the Canvas panel
@@ -177,10 +206,10 @@
     const outer = document.createElement("div");
     outer.style.width = "100%";
     outer.style.height = "100%";
-    outer.style.display = "block"; // anchor at top-left
+    outer.style.display = "block";
     outer.style.alignItems = "";
     outer.style.justifyContent = "";
-    outer.style.overflow = "auto"; // allow scrollbars if needed
+    outer.style.overflow = "auto";
 
     // Konva container
     const konvaDiv = document.createElement("div");
@@ -258,16 +287,19 @@
       layer.batchDraw();
 
       // --- 4. Selection logic (click shape to select) ---
-      // Only one transformer (handles) at a time
       function selectShape(shape) {
+        // Remove previous transformer
         if (AppState.transformer) {
           AppState.transformer.destroy();
           AppState.transformer = null;
         }
+        if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection) {
+          AppState.selectedShape.showSelection(false);
+        }
         AppState.selectedShape = shape;
         if (!shape) return;
 
-        if (shape._type === "rect") {
+        if (shape._type === "rect" || shape._type === "circle") {
           const transformer = new Konva.Transformer({
             nodes: [shape],
             enabledAnchors: [
@@ -279,16 +311,33 @@
           });
           layer.add(transformer);
           AppState.transformer = transformer;
+
+          // Keep strokeWidth at 1 after transform
+          transformer.on("transformend", () => {
+            if (shape._type === "rect") {
+              // Reset strokeWidth
+              shape.strokeWidth(1);
+              // Update size and reset scaling
+              shape.width(shape.width() * shape.scaleX());
+              shape.height(shape.height() * shape.scaleY());
+              shape.scaleX(1);
+              shape.scaleY(1);
+            } else if (shape._type === "circle") {
+              shape.strokeWidth(1);
+              shape.radius(shape.radius() * shape.scaleX()); // assuming uniform scale for circles
+              shape.scaleX(1);
+              shape.scaleY(1);
+            }
+            layer.draw();
+          });
           layer.draw();
         } else if (shape._type === "point") {
-          // No transformer for point, use custom selection
           shape.showSelection(true);
         }
       }
 
-      // Deselect shape, remove transformer
       function deselectShape() {
-        if (AppState.selectedShape && AppState.selectedShape._type === "point") {
+        if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection) {
           AppState.selectedShape.showSelection(false);
         }
         if (AppState.transformer) {
@@ -299,7 +348,6 @@
         layer.draw();
       }
 
-      // Click-to-select logic
       stage.on("mousedown tap", function(evt) {
         if (evt.target === stage || evt.target === konvaImage) {
           deselectShape();
@@ -307,7 +355,7 @@
           if (AppState.selectedShape && AppState.selectedShape !== evt.target.getParent() && AppState.selectedShape.showSelection)
             AppState.selectedShape.showSelection(false);
           selectShape(evt.target.getParent());
-        } else if (evt.target.name() === "rect-shape") {
+        } else if (evt.target.name() === "rect-shape" || evt.target.name() === "circle-shape") {
           selectShape(evt.target);
         }
       });
@@ -360,10 +408,8 @@
     function addPointShape() {
       const img = AppState.imageObj;
       if (!img || !AppState.konvaLayer) return;
-
-      // Find visible panel center within image
       const canvasArea = document.getElementById("canvas-area");
-      let x = Math.round(img.width / 2), y = Math.round(img.height / 2); // fallback
+      let x = Math.round(img.width / 2), y = Math.round(img.height / 2);
 
       if (canvasArea && AppState.konvaDiv) {
         const scrollLeft = AppState.konvaDiv.parentElement.scrollLeft || 0;
@@ -376,14 +422,11 @@
         x = Math.max(0, Math.min(img.width, x));
         y = Math.max(0, Math.min(img.height, y));
       }
-
       const color = "#2176ff";
       const point = makeReticlePointShape(x, y, color);
       AppState.shapes.push(point);
       AppState.konvaLayer.add(point);
       AppState.konvaLayer.batchDraw();
-
-      // select and show halo
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
       AppState.selectedShape = point;
@@ -393,9 +436,7 @@
     function addRectShape() {
       const img = AppState.imageObj;
       if (!img || !AppState.konvaLayer) return;
-      // Default size
       const defaultW = 80, defaultH = 48;
-      // Center in visible panel
       const canvasArea = document.getElementById("canvas-area");
       let x = Math.round(img.width / 2 - defaultW / 2), y = Math.round(img.height / 2 - defaultH / 2);
       if (canvasArea && AppState.konvaDiv) {
@@ -415,12 +456,9 @@
       AppState.shapes.push(rect);
       AppState.konvaLayer.add(rect);
       AppState.konvaLayer.batchDraw();
-
-      // select and show transformer
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
       AppState.selectedShape = rect;
-
       // Use transformer for selection/resize handles
       if (AppState.transformer) {
         AppState.transformer.destroy();
@@ -438,6 +476,70 @@
       AppState.konvaLayer.add(transformer);
       AppState.transformer = transformer;
       AppState.konvaLayer.draw();
+
+      // Keep strokeWidth at 1 after transform
+      transformer.on("transformend", () => {
+        rect.strokeWidth(1);
+        rect.width(rect.width() * rect.scaleX());
+        rect.height(rect.height() * rect.scaleY());
+        rect.scaleX(1);
+        rect.scaleY(1);
+        AppState.konvaLayer.draw();
+      });
+    }
+
+    function addCircleShape() {
+      const img = AppState.imageObj;
+      if (!img || !AppState.konvaLayer) return;
+      const defaultRadius = 24;
+      const canvasArea = document.getElementById("canvas-area");
+      let x = Math.round(img.width / 2), y = Math.round(img.height / 2);
+      if (canvasArea && AppState.konvaDiv) {
+        const scrollLeft = AppState.konvaDiv.parentElement.scrollLeft || 0;
+        const scrollTop = AppState.konvaDiv.parentElement.scrollTop || 0;
+        const panelRect = canvasArea.getBoundingClientRect();
+        const visibleWidth = Math.min(panelRect.width, img.width);
+        const visibleHeight = Math.min(panelRect.height, img.height);
+        x = Math.round(scrollLeft + visibleWidth / 2);
+        y = Math.round(scrollTop + visibleHeight / 2);
+        x = Math.max(defaultRadius, Math.min(img.width - defaultRadius, x));
+        y = Math.max(defaultRadius, Math.min(img.height - defaultRadius, y));
+      }
+      const stroke = "#2176ff";
+      const fill = "#ffffff00";
+      const circle = makeCircleShape(x, y, defaultRadius, stroke, fill);
+      AppState.shapes.push(circle);
+      AppState.konvaLayer.add(circle);
+      AppState.konvaLayer.batchDraw();
+      if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
+        AppState.selectedShape.showSelection(false);
+      AppState.selectedShape = circle;
+      // Use transformer for selection/resize handles
+      if (AppState.transformer) {
+        AppState.transformer.destroy();
+        AppState.transformer = null;
+      }
+      const transformer = new Konva.Transformer({
+        nodes: [circle],
+        enabledAnchors: [
+          "top-left", "top-center", "top-right",
+          "middle-left", "middle-right",
+          "bottom-left", "bottom-center", "bottom-right"
+        ],
+        rotateEnabled: true
+      });
+      AppState.konvaLayer.add(transformer);
+      AppState.transformer = transformer;
+      AppState.konvaLayer.draw();
+
+      // Keep strokeWidth at 1 after transform
+      transformer.on("transformend", () => {
+        circle.strokeWidth(1);
+        circle.radius(circle.radius() * circle.scaleX()); // uniform scale
+        circle.scaleX(1);
+        circle.scaleY(1);
+        AppState.konvaLayer.draw();
+      });
     }
 
     function addShapeFromToolbar() {
@@ -446,8 +548,10 @@
         addPointShape();
       } else if (type === "rect") {
         addRectShape();
+      } else if (type === "circle") {
+        addCircleShape();
       } else {
-        alert("Only point and rectangle shapes are implemented in this build.");
+        alert("Only point, rectangle, and circle shapes are implemented in this build.");
       }
     }
 
