@@ -697,7 +697,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   function updateSelectionHighlights() {
     const AppState = safeGetAppState();
     if (multiSelectHighlightShapes.length && AppState.konvaLayer) {
-      multiSelectHighlightShapes.forEach(g => g.destroy && g.destroy());
+      multiSelectHighlightShapes.forEach(g => g.destroy());
       multiSelectHighlightShapes = [];
       AppState.konvaLayer.draw();
     }
@@ -924,52 +924,16 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     }
   }
 
-  // --- Select All logic ---
-  function selectAllShapes() {
-    const AppState = safeGetAppState();
-    if (AppState.shapes && AppState.shapes.length > 0) {
-      AppState.selectedShapes = AppState.shapes.slice();
-      AppState.selectedShape = null;
-      // Remove transformer if present
-      if (AppState.transformer) {
-        AppState.transformer.destroy();
-        AppState.transformer = null;
-      }
-      updateLockCheckboxUI();
-      updateSelectionHighlights();
-      if (AppState.konvaLayer) AppState.konvaLayer.draw();
-    }
-  }
-
   function attachSelectAllHook() {
+    // Delay until DOM is ready
     document.addEventListener("DOMContentLoaded", function () {
       const selectAllBtn = document.getElementById("selectAllBtn");
       if (selectAllBtn) {
-        selectAllBtn.onclick = function (e) {
-          e.preventDefault();
-          selectAllShapes();
-        };
-      }
-    });
-  }
-
-  // --- Lock checkbox logic ---
-  function attachLockCheckboxHook() {
-    document.addEventListener("DOMContentLoaded", function () {
-      const lockCheckbox = document.getElementById("lockCheckbox");
-      if (lockCheckbox) {
-        lockCheckbox.addEventListener('change', function () {
-          const AppState = safeGetAppState();
-          if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
-          const newLocked = lockCheckbox.checked;
-          AppState.selectedShapes.forEach(s => {
-            if (AppState.setShapeLocked) AppState.setShapeLocked(s, newLocked);
-            else s.locked = !!newLocked;
-          });
+        const origHandler = selectAllBtn.onclick;
+        selectAllBtn.onclick = function () {
+          if (typeof origHandler === "function") origHandler();
           updateLockCheckboxUI();
-          updateSelectionHighlights();
-          if (AppState.konvaLayer) AppState.konvaLayer.draw();
-        });
+        };
       }
     });
   }
@@ -992,10 +956,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   function initPart2B() {
     attachSelectionOverrides();
     attachSelectAllHook();
-    attachLockCheckboxHook();
     exportMultiSelectAPI();
   }
 
+  // Always run after DOMContentLoaded and after PART 2A is loaded
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initPart2B);
   } else {
