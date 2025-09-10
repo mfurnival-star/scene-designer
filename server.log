@@ -340,3 +340,11 @@
 2025-09-10 17:11:01,194 INFO: Serving allowed file: /shapes.js from 86.181.240.200
 2025-09-10 17:11:01,266 INFO: Serving allowed file: /favicon.ico from 86.181.240.200
 2025-09-10 17:13:07,805 INFO: Server stopped by user.
+2025-09-10 17:17:11,898 INFO: Server will auto-shutdown after 5 minutes.
+2025-09-10 17:17:11,898 INFO: Serving HTTP on port 80 with restricted files only.
+2025-09-10 17:17:28,456 INFO: Serving allowed file: /index.html from 86.181.240.200
+2025-09-10 17:17:28,461 INFO: Serving allowed file: /index.html from 86.181.240.200
+2025-09-10 17:17:28,483 INFO: Serving allowed file: /styles.css from 86.181.240.200
+2025-09-10 17:17:28,500 INFO: Serving allowed file: /shapes.js from 86.181.240.200
+2025-09-10 17:17:28,568 INFO: Serving allowed file: /favicon.ico from 86.181.240.200
+2025-09-10 17:19:14,502 INFO: Server stopped by user.

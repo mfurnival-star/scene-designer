@@ -428,4 +428,3 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   rootDiv.appendChild(h2);
   rootDiv.appendChild(p);
 };
-
