@@ -25,14 +25,6 @@ Descriptions are updated as new logic is added or stubs are replaced.
 
 ---
 
-### **PART 2: CanvasPanel Logic**  
-*(Stub/hello world only; see 2A for real logic. Should be removed when 2A is active.)*
-- **Filename:** `shapes.part2.canvas.js`
-- **Responsibility:**  
-  - Placeholder/hello world logic for the Canvas panel.
-
----
-
 ### **PART 2A: CanvasPanel – Image Display & Point Placement**  
 - **Filename:** `shapes.part2a.konva.js`
 - **Responsibility:**  
@@ -57,18 +49,20 @@ Descriptions are updated as new logic is added or stubs are replaced.
 
 1. `shapes.part0.layout.js`
 2. `shapes.part1.sidebar.js`
-3. `shapes.part2.canvas.js` *(stub; remove once 2A is active)*
-4. `shapes.part2a.konva.js`
-5. `shapes.part3.settings.js`
+3. `shapes.part2a.konva.js`
+4. `shapes.part3.settings.js`
 
 ---
 
 ## Change Log
 
+- **2025-09-10**:  
+  - Confirmed only four modular parts needed: layout, sidebar, canvas (Konva), and settings.
+  - Verified all stub/duplicate CanvasPanel code removed.
+  - Updated descriptions for accuracy.
 - **2024-09-10**:  
   - Standardized on `shapes.part0.layout.js` for Golden Layout bootstrap.
   - Added description for each part, clarified stub vs. real logic.
-  - Ready for migration: Remove `shapes.part2.canvas.js` when fully switching to Konva logic in 2A.
 
 ---
 
