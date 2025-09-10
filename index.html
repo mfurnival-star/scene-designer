@@ -7,10 +7,17 @@
   <!-- Pickr color picker theme -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css">
   <link rel="stylesheet" href="styles.css">
+
+  <!-- Golden Layout CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.7.0/dist/css/goldenlayout-base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.7.0/dist/css/themes/goldenlayout-light-theme.css">
+
   <!-- Konva.js for canvas manipulation -->
   <script src="https://cdn.jsdelivr.net/npm/konva@9.2.0/konva.min.js"></script>
   <!-- Pickr color picker -->
   <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
+  <!-- Golden Layout JS -->
+  <script src="https://cdn.jsdelivr.net/npm/golden-layout@2.7.0/dist/goldenlayout.min.js"></script>
   <!-- Your main JS app -->
   <script src="shapes.js"></script>
 </head>
@@ -67,26 +74,93 @@
         </select>
       </div>
     </nav>
-    <div id="main-content">
-      <aside id="sidebar">
-        <div id="labelEditBox">
-          <label for="labelInput">Label:</label>
-          <input type="text" id="labelInput" maxlength="40">
-          <button type="button" id="saveLabelBtn">Save</button>
-        </div>
-        <div id="labels-list"></div>
-      </aside>
-      <main id="canvas-area">
-        <div id="container"></div>
-        <div id="errorBox"></div>
-      </main>
-      <aside id="settingsPanel" class="settings-panel open">
-        <button id="settingsPanelToggle" aria-label="Toggle settings panel">
-          <span id="settingsPanelChevron">&#x25B6;</span>
-        </button>
-        <!-- Settings form content will be dynamically injected here -->
-      </aside>
-    </div>
+    <!-- Golden Layout Mount Point -->
+    <div id="gl-root" style="width:100vw;height:calc(100vh - 116px);"></div>
   </div>
+
+  <!-- Hidden actual panel HTML to be injected into Golden Layout panels -->
+  <div id="sidebar-container" style="display:none;">
+    <aside id="sidebar">
+      <div id="labelEditBox">
+        <label for="labelInput">Label:</label>
+        <input type="text" id="labelInput" maxlength="40">
+        <button type="button" id="saveLabelBtn">Save</button>
+      </div>
+      <div id="labels-list"></div>
+    </aside>
+  </div>
+  <div id="canvas-area-container" style="display:none;">
+    <main id="canvas-area">
+      <div id="container"></div>
+      <div id="errorBox"></div>
+    </main>
+  </div>
+  <div id="settingsPanel-container" style="display:none;">
+    <aside id="settingsPanel" class="settings-panel open">
+      <button id="settingsPanelToggle" aria-label="Toggle settings panel">
+        <span id="settingsPanelChevron">&#x25B6;</span>
+      </button>
+      <!-- Settings form content will be dynamically injected here -->
+    </aside>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // Define initial Golden Layout configuration
+      const config = {
+        root: {
+          type: 'row',
+          content: [
+            {
+              type: 'component',
+              componentType: 'Sidebar',
+              title: 'Sidebar',
+              width: 20
+            },
+            {
+              type: 'component',
+              componentType: 'Canvas',
+              title: 'Canvas',
+              width: 60
+            },
+            {
+              type: 'component',
+              componentType: 'Settings',
+              title: 'Settings',
+              width: 20
+            }
+          ]
+        }
+      };
+
+      // Create Golden Layout instance
+      const myLayout = new GoldenLayout.GoldenLayout(config, document.getElementById('gl-root'));
+
+      // Register panel components
+      myLayout.registerComponentConstructor('Sidebar', function (container, state) {
+        const el = document.getElementById('sidebar-container');
+        el.style.display = 'block';
+        el.classList.add('gl-panel-content');
+        container.element.append(el);
+      });
+
+      myLayout.registerComponentConstructor('Canvas', function (container, state) {
+        const el = document.getElementById('canvas-area-container');
+        el.style.display = 'block';
+        el.classList.add('gl-panel-content');
+        container.element.append(el);
+      });
+
+      myLayout.registerComponentConstructor('Settings', function (container, state) {
+        const el = document.getElementById('settingsPanel-container');
+        el.style.display = 'block';
+        el.classList.add('gl-panel-content');
+        container.element.append(el);
+      });
+
+      // Initialize layout
+      myLayout.init();
+    });
+  </script>
 </body>
 </html>
