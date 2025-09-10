@@ -216,12 +216,74 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  * - Allows "Point" annotation placement via click.
  * - Renders draggable points as colored circles.
  * - Hooks for future rectangle/circle shapes.
+ * - Multiselect: "Select All" button shows dashed highlight for all shapes.
  *********************************************************/
 
 (function () {
   // App-wide state for the canvas panel
   window._sceneDesigner = window._sceneDesigner || {};
   const AppState = window._sceneDesigner;
+
+  // Multiselect highlight overlay group(s)
+  let multiSelectHighlightShapes = [];
+
+  /** Draw dashed highlight outlines for all selected shapes (multi only) */
+  function updateSelectionHighlights() {
+    // Remove previous
+    if (multiSelectHighlightShapes.length && AppState.konvaLayer) {
+      multiSelectHighlightShapes.forEach(g => g.destroy());
+      multiSelectHighlightShapes = [];
+      AppState.konvaLayer.draw();
+    }
+    // Only show highlight if >1 shape is selected
+    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
+    const pad = 6;
+    const color = "#2176ff";
+    AppState.selectedShapes.forEach(shape => {
+      let highlight;
+      if (shape._type === 'rect') {
+        highlight = new Konva.Rect({
+          x: shape.x() - pad / 2,
+          y: shape.y() - pad / 2,
+          width: shape.width() + pad,
+          height: shape.height() + pad,
+          stroke: color,
+          strokeWidth: 2.5,
+          dash: [7, 4],
+          listening: false,
+          cornerRadius: 6,
+          offsetX: shape.offsetX ? shape.offsetX() : 0,
+          offsetY: shape.offsetY ? shape.offsetY() : 0,
+          rotation: shape.rotation ? shape.rotation() : 0
+        });
+      } else if (shape._type === 'circle') {
+        highlight = new Konva.Circle({
+          x: shape.x(),
+          y: shape.y(),
+          radius: shape.radius() + pad,
+          stroke: color,
+          strokeWidth: 2.5,
+          dash: [7, 4],
+          listening: false
+        });
+      } else if (shape._type === 'point') {
+        highlight = new Konva.Circle({
+          x: shape.x(),
+          y: shape.y(),
+          radius: 15,
+          stroke: color,
+          strokeWidth: 2.5,
+          dash: [7, 4],
+          listening: false
+        });
+      }
+      if (highlight) {
+        AppState.konvaLayer.add(highlight);
+        multiSelectHighlightShapes.push(highlight);
+      }
+    });
+    AppState.konvaLayer.batchDraw();
+  }
 
   function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -371,6 +433,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
           AppState.selectedShape.showSelection(false);
         AppState.selectedShape = shape;
         AppState.selectedShapes = [shape];
+        updateSelectionHighlights();
         if (!shape) return;
 
         if (shape._type === "rect") {
@@ -429,6 +492,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         }
         AppState.selectedShape = null;
         AppState.selectedShapes = [];
+        updateSelectionHighlights();
         layer.draw();
       }
 
@@ -510,6 +574,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       AppState.selectedShape = point;
       AppState.selectedShapes = [point];
       point.showSelection(true);
+      updateSelectionHighlights();
     }
 
     function addRectShape() {
@@ -563,6 +628,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         rect.scaleY(1);
         AppState.konvaLayer.draw();
       });
+      updateSelectionHighlights();
     }
 
     function addCircleShape() {
@@ -615,6 +681,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         circle.strokeWidth(1);
         AppState.konvaLayer.draw();
       });
+      updateSelectionHighlights();
     }
 
     function addShapeFromToolbar() {
@@ -641,13 +708,14 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
             AppState.transformer.destroy();
             AppState.transformer = null;
           }
-          // Redraw layer to show multiselect highlight (if implemented)
+          updateSelectionHighlights();
           if (AppState.konvaLayer) AppState.konvaLayer.draw();
         };
       }
     }, 0);
   };
 })();
+
 /*********************************************************
  * PART 3: SettingsPanel Logic
  * ----------------------------------------
