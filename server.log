@@ -565,3 +565,6 @@
 2025-09-10 21:27:11,364 INFO: Serving allowed file: / from 91.224.92.17
 2025-09-10 21:29:11,419 INFO: Timeout reached, shutting down server...
 2025-09-10 21:32:02,779 INFO: Server stopped by user.
+2025-09-10 21:35:34,909 INFO: Server will auto-shutdown after 5 minutes.
+2025-09-10 21:35:34,909 INFO: Serving HTTP on port 80 with restricted files only.
+2025-09-10 21:35:57,692 INFO: Server stopped by user.
