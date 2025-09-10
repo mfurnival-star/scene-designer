@@ -154,11 +154,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  *   - Supports:
  *       - Point: reticle (circle + crosshair), draggable, selection halo
  *       - Rectangle: Konva.Rect, draggable, square corners, transformer on select
- *       - Circle: Konva.Circle, draggable, transformer on select
+ *       - Circle: Konva.Circle, draggable, transformer on select (radius only updated on transformend)
  *         - Circle always remains a true circle after resizing (no ellipse)
  *         - Only 4 corner anchors, proportional scaling, no rotation
- *         - Resizing is clamped to a reasonable min/max radius to prevent vanishing or exploding
- *         - Circle radius is only updated on transformend, not live
+ *         - No clamping (match prelayout behavior)
  *   - Shapes are placed at the visible center of the canvas panel.
  *   - Stroke width for rect/circle always remains 1, even after resizing.
  *
@@ -343,46 +342,24 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
           });
           layer.draw();
         } else if (shape._type === "circle") {
-          // Only 4 anchors, proportional scaling, no rotation, radius only updated on transformend
-          const minRadius = 4;
-          const maxRadius = Math.min(layer.width(), layer.height()) / 2 - 2;
+          // Only 4 corner anchors, proportional scaling, no rotation
           const transformer = new Konva.Transformer({
             nodes: [shape],
             enabledAnchors: [
               "top-left", "top-right", "bottom-left", "bottom-right"
             ],
-            rotateEnabled: false,
-            boundBoxFunc: function(oldBox, newBox) {
-              // Force proportional scaling
-              const size = Math.max(newBox.width, newBox.height);
-              return {
-                x: newBox.x,
-                y: newBox.y,
-                width: size,
-                height: size
-              };
-            }
+            rotateEnabled: false
           });
           layer.add(transformer);
           AppState.transformer = transformer;
-          // Do NOT update radius live, only on transformend
-          transformer.on("transform", () => {
-            // Preview: force proportional and keep stroke width, but don't update radius
-            shape.scaleY(shape.scaleX());
-            shape.strokeWidth(1);
-            layer.batchDraw();
-          });
+          // Only update radius on transformend (not during drag)
           transformer.on("transformend", () => {
-            // On end, update radius and clamp
-            let scale = shape.scaleX();
-            let newRadius = shape.radius() * scale;
-            if (newRadius < minRadius) newRadius = minRadius;
-            if (newRadius > maxRadius) newRadius = maxRadius;
-            shape.radius(newRadius);
+            let scaleX = shape.scaleX();
+            shape.radius(shape.radius() * scaleX);
             shape.scaleX(1);
             shape.scaleY(1);
             shape.strokeWidth(1);
-            layer.batchDraw();
+            layer.draw();
           });
           layer.draw();
         } else if (shape._type === "point") {
@@ -562,41 +539,20 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         AppState.transformer.destroy();
         AppState.transformer = null;
       }
-      // Only 4 corner anchors, proportional scaling, no rotation
-      const minRadius = 4;
-      const maxRadius =
-        Math.min(AppState.konvaLayer.width(), AppState.konvaLayer.height()) / 2 - 2;
       const transformer = new Konva.Transformer({
         nodes: [circle],
         enabledAnchors: [
           "top-left", "top-right", "bottom-left", "bottom-right"
         ],
-        rotateEnabled: false,
-        boundBoxFunc: function(oldBox, newBox) {
-          const size = Math.max(newBox.width, newBox.height);
-          return {
-            x: newBox.x,
-            y: newBox.y,
-            width: size,
-            height: size
-          };
-        }
+        rotateEnabled: false
       });
       AppState.konvaLayer.add(transformer);
       AppState.transformer = transformer;
       AppState.konvaLayer.draw();
-      transformer.on("transform", () => {
-        // Just preview proportional scaling, don't update radius live
-        circle.scaleY(circle.scaleX());
-        circle.strokeWidth(1);
-        AppState.konvaLayer.batchDraw();
-      });
+      // Only update radius on transformend, use scaleX, match prelayout method
       transformer.on("transformend", () => {
-        let scale = circle.scaleX();
-        let newRadius = circle.radius() * scale;
-        if (newRadius < minRadius) newRadius = minRadius;
-        if (newRadius > maxRadius) newRadius = maxRadius;
-        circle.radius(newRadius);
+        let scaleX = circle.scaleX();
+        circle.radius(circle.radius() * scaleX);
         circle.scaleX(1);
         circle.scaleY(1);
         circle.strokeWidth(1);
@@ -620,7 +576,6 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     }, 0);
   };
 })();
-
 /*********************************************************
  * PART 3: SettingsPanel Stub (Hello World)
  * ----------------------------------------
