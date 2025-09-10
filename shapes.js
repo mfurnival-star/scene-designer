@@ -1298,7 +1298,6 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   if (btnDownload) btnDownload.onclick = downloadCanvasAsPNG;
 });
-
 | Part | Filename                  | Description                                      | Key Features / Responsibilities              | Main Functions/Classes (or Exports)      | Keywords/Notes                | See Also                  |
 |------|---------------------------|--------------------------------------------------|----------------------------------------------|------------------------------------------|-------------------------------|---------------------------|
 | 1    | shapes.part1.settings.js  | App settings and config management               | Settings loading, user prefs                 | setupSettingsPanel                       | settings, config              |                           |

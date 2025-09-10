@@ -180,4 +180,3 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   if (btnDownload) btnDownload.onclick = downloadCanvasAsPNG;
 });
-
