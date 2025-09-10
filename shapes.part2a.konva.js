@@ -8,6 +8,7 @@
  *       - Point: reticle (circle + crosshair), draggable, selection halo
  *       - Rectangle: plain Konva.Rect, draggable, square corners, transformer on select
  *       - Circle: Konva.Circle, draggable, transformer on select
+ *         - Circle always remains a true circle after resizing (no ellipse)
  *   - Shapes are placed at the visible center of the canvas panel.
  *   - Stroke width for rect/circle always remains 1, even after resizing.
  *
@@ -162,7 +163,7 @@
     return rect;
   }
 
-  // Helper: Make a Konva.Circle (draggable, transformer on select, strokeWidth always 1)
+  // Helper: Make a Konva.Circle (draggable, transformer on select, strokeWidth always 1, always a true circle)
   function makeCircleShape(x, y, radius = 24, stroke = "#2176ff", fill = "#ffffff00") {
     const circle = new Konva.Circle({
       x: x,
@@ -323,8 +324,11 @@
               shape.scaleX(1);
               shape.scaleY(1);
             } else if (shape._type === "circle") {
+              // Force to remain a true circle (no ellipse)
+              // Use average scale in case user dragged non-uniformly
+              const avgScale = (shape.scaleX() + shape.scaleY()) / 2;
               shape.strokeWidth(1);
-              shape.radius(shape.radius() * shape.scaleX()); // assuming uniform scale for circles
+              shape.radius(shape.radius() * avgScale);
               shape.scaleX(1);
               shape.scaleY(1);
             }
@@ -532,10 +536,12 @@
       AppState.transformer = transformer;
       AppState.konvaLayer.draw();
 
-      // Keep strokeWidth at 1 after transform
+      // Keep strokeWidth at 1 after transform, and always force shape to be a true circle (no ellipse)
       transformer.on("transformend", () => {
+        // Compute average scale so both axes are the same
+        const avgScale = (circle.scaleX() + circle.scaleY()) / 2;
         circle.strokeWidth(1);
-        circle.radius(circle.radius() * circle.scaleX()); // uniform scale
+        circle.radius(circle.radius() * avgScale);
         circle.scaleX(1);
         circle.scaleY(1);
         AppState.konvaLayer.draw();
@@ -564,3 +570,4 @@
     }, 0);
   };
 })();
+
