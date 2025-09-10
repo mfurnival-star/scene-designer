@@ -12,7 +12,9 @@
 
 (function () {
   // Use shared AppState from PART 2A
-  const AppState = window._sceneDesigner;
+  function safeGetAppState() {
+    return window._sceneDesigner || {};
+  }
 
   let multiSelectHighlightShapes = [];
   let debugMultiDragBox = null;
@@ -21,6 +23,7 @@
 
   // --- Selection Highlight Logic ---
   function updateSelectionHighlights() {
+    const AppState = safeGetAppState();
     if (multiSelectHighlightShapes.length && AppState.konvaLayer) {
       multiSelectHighlightShapes.forEach(g => g.destroy());
       multiSelectHighlightShapes = [];
@@ -74,6 +77,7 @@
     });
     AppState.konvaLayer.batchDraw();
   }
+  window._sceneDesigner = window._sceneDesigner || {};
   window._sceneDesigner.updateSelectionHighlights = updateSelectionHighlights;
 
   // --- Locked Drag Red Feedback ---
@@ -89,6 +93,7 @@
 
   // --- Group Drag Bounding Box ---
   function getMultiSelectionBounds(origPositions, dx = 0, dy = 0) {
+    const AppState = safeGetAppState();
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     origPositions.forEach(obj => {
       const origShape = obj.shape;
@@ -124,6 +129,7 @@
     return { minX, minY, maxX, maxY };
   }
   function clampMultiDragDelta(dx, dy, origPositions) {
+    const AppState = safeGetAppState();
     const stageW = AppState.konvaStage ? AppState.konvaStage.width() : 1;
     const stageH = AppState.konvaStage ? AppState.konvaStage.height() : 1;
     let groupBounds = getMultiSelectionBounds(origPositions, dx, dy);
@@ -143,7 +149,7 @@
     return [adjDx, adjDy];
   }
   function updateDebugMultiDragBox() {
-    // Always show for now
+    const AppState = safeGetAppState();
     if (debugMultiDragBox) debugMultiDragBox.destroy();
     if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
 
@@ -171,6 +177,7 @@
     AppState.konvaLayer.batchDraw();
   }
   function clearDebugMultiDragBox() {
+    const AppState = safeGetAppState();
     if (debugMultiDragBox) {
       debugMultiDragBox.destroy();
       debugMultiDragBox = null;
@@ -180,6 +187,7 @@
 
   // --- Multi-Drag Handlers ---
   function onMultiDragMove(evt) {
+    const AppState = safeGetAppState();
     if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) return;
     const pos = AppState.konvaStage.getPointerPosition();
     let dx = pos.x - multiDrag.dragOrigin.x;
@@ -194,6 +202,7 @@
     updateSelectionHighlights();
   }
   function onMultiDragEnd(evt) {
+    const AppState = safeGetAppState();
     multiDrag.moving = false;
     multiDrag.dragOrigin = null;
     multiDrag.origPositions = null;
@@ -208,6 +217,7 @@
 
   // --- Lock Checkbox UI Sync ---
   function updateLockCheckboxUI() {
+    const AppState = safeGetAppState();
     const lockCheckbox = document.getElementById("lockCheckbox");
     if (!lockCheckbox) return;
     const shapes = AppState.selectedShapes || [];
@@ -224,36 +234,63 @@
   window._sceneDesigner.updateLockCheckboxUI = updateLockCheckboxUI;
 
   // --- Attach/override selection logic to sync lock UI ---
-  const origSelectShape = AppState.selectShape;
-  AppState.selectShape = function(shape) {
-    if (typeof origSelectShape === "function") origSelectShape(shape);
-    updateLockCheckboxUI();
-  };
-  const origDeselectShape = AppState.deselectShape;
-  AppState.deselectShape = function() {
-    if (typeof origDeselectShape === "function") origDeselectShape();
-    updateLockCheckboxUI();
-  };
+  function attachSelectionOverrides() {
+    const AppState = safeGetAppState();
+    // Only override if not already wrapped
+    if (!AppState._multiSelectOverridesApplied) {
+      const origSelectShape = AppState.selectShape;
+      AppState.selectShape = function(shape) {
+        if (typeof origSelectShape === "function") origSelectShape(shape);
+        updateLockCheckboxUI();
+      };
+      const origDeselectShape = AppState.deselectShape;
+      AppState.deselectShape = function() {
+        if (typeof origDeselectShape === "function") origDeselectShape();
+        updateLockCheckboxUI();
+      };
+      AppState._multiSelectOverridesApplied = true;
+    }
+  }
 
-  // --- Select All button: sync UI ---
-  const selectAllBtn = document.getElementById("selectAllBtn");
-  if (selectAllBtn) {
-    const origHandler = selectAllBtn.onclick;
-    selectAllBtn.onclick = function () {
-      if (typeof origHandler === "function") origHandler();
-      updateLockCheckboxUI();
-    };
+  function attachSelectAllHook() {
+    // Delay until DOM is ready
+    document.addEventListener("DOMContentLoaded", function () {
+      const selectAllBtn = document.getElementById("selectAllBtn");
+      if (selectAllBtn) {
+        const origHandler = selectAllBtn.onclick;
+        selectAllBtn.onclick = function () {
+          if (typeof origHandler === "function") origHandler();
+          updateLockCheckboxUI();
+        };
+      }
+    });
   }
 
   // --- Export handlers for event attachment in PART 2A ---
-  AppState._multiSelect = {
-    updateSelectionHighlights,
-    showLockedHighlightForShapes,
-    updateLockCheckboxUI,
-    onMultiDragMove,
-    onMultiDragEnd,
-    updateDebugMultiDragBox,
-    clearDebugMultiDragBox
-  };
+  function exportMultiSelectAPI() {
+    const AppState = safeGetAppState();
+    AppState._multiSelect = {
+      updateSelectionHighlights,
+      showLockedHighlightForShapes,
+      updateLockCheckboxUI,
+      onMultiDragMove,
+      onMultiDragEnd,
+      updateDebugMultiDragBox,
+      clearDebugMultiDragBox
+    };
+  }
 
+  // --- Deferred Initialization ---
+  function initPart2B() {
+    attachSelectionOverrides();
+    attachSelectAllHook();
+    exportMultiSelectAPI();
+  }
+
+  // Always run after DOMContentLoaded and after PART 2A is loaded
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initPart2B);
+  } else {
+    setTimeout(initPart2B, 0);
+  }
 })();
