@@ -365,7 +365,7 @@ function buildSettingsPanel() {
  * shapes.part2a.konva.js
  * Part 2a of N for shapes.js modular build
  * 
- * Feature Area: Konva setup, stage/layer creation, global state, and basic stage utilities (A)
+ * Feature Area: Konva stage, layers, background image, and canvas resizing (A)
  * Line Limit: ~350 lines max per part for copy-paste reliability.
  * 
  * Naming/Build Scheme:
@@ -379,131 +379,81 @@ function buildSettingsPanel() {
  *******************************************************/
 
 /*************************************
- * Konva Scene Globals
+ * Konva Stage & Layers Setup
  *************************************/
-let stageWidth = 320, stageHeight = 260;
-let stage, layer, bgLayer, highlightLayer, debugLayer;
-let shapes = [], selectedShape = null, transformer = null;
-let selectedShapes = [];
-let marqueeRect = null, marqueeStart = null;
-let bgImageObj = null, bgKonvaImage = null;
+let stage = null;
+let layer = null;
+let highlightLayer = null;
+let bgLayer = null;
+let debugLayer = null;
+let bgKonvaImage = null;
+let bgImageObj = null;
+let stageWidth = 1400;
+let stageHeight = 1000;
 
-/*************************************
- * Golden Layout Integration: Panel Setup
- * (to be called by GL Canvas panel registration)
- *************************************/
-let elCanvasArea = null;
 function setupCanvasPanel(root) {
-  elCanvasArea = root.querySelector('#canvas-area');
-  const container = elCanvasArea.querySelector('#container');
-  // Stage and layers setup
-  if (stage) stage.destroy();
-  stage = new Konva.Stage({ container: container, width: stageWidth, height: stageHeight });
-  window.stage = stage;
+  // Find container element
+  const el = root && root.querySelector ? root.querySelector("#canvas-panel") : document.getElementById("canvas-panel");
+  if (!el) {
+    log("ERROR", "No #canvas-panel found");
+    return;
+  }
+  // Clear if exists
+  el.innerHTML = "";
+
+  // Stage and layers
+  stage = new Konva.Stage({
+    container: el,
+    width: stageWidth,
+    height: stageHeight
+  });
+
+  bgLayer = new Konva.Layer({ listening: false });
   layer = new Konva.Layer();
-  stage.add(layer);
-  bgLayer = new Konva.Layer();
+  highlightLayer = new Konva.Layer({ listening: false });
+  debugLayer = new Konva.Layer({ listening: false });
+
   stage.add(bgLayer);
-  bgLayer.moveToBottom();
-  highlightLayer = new Konva.Layer();
+  stage.add(layer);
   stage.add(highlightLayer);
-  debugLayer = new Konva.Layer();
   stage.add(debugLayer);
-  shapes = [];
-  selectedShape = null;
-  transformer = null;
-  selectedShapes = [];
-  marqueeRect = null;
-  marqueeStart = null;
-  bgImageObj = null;
-  bgKonvaImage = null;
-  // Call feature-specific initializations if needed...
-  if (typeof setupCanvasPanelExtras === "function") setupCanvasPanelExtras();
+
+  // For other modules
+  window.stage = stage;
+  window.layer = layer;
+  window.bgLayer = bgLayer;
+  window.highlightLayer = highlightLayer;
+  window.debugLayer = debugLayer;
+
+  // Callbacks for other systems (loupe, drag feedback)
+  if (window.setupLoupeEvents) window.setupLoupeEvents();
+  if (window.setupLockedDragFeedback) window.setupLockedDragFeedback();
 }
 
 /*************************************
- * Canvas Size & Responsive Utilities
+ * Canvas/Image Size Management
  *************************************/
-function updateCanvasToImage(imgNaturalW, imgNaturalH) {
-  logEnter("updateCanvasToImage", { imgNaturalW, imgNaturalH });
-  const container = elCanvasArea ? elCanvasArea.querySelector('#container') : document.getElementById('container');
-  if ((!bgImageObj && !imgNaturalW) || !container) {
-    stageWidth = getSetting("canvasMaxWidth");
-    stageHeight = Math.round(stageWidth * 0.81);
-    if (stage) {
-      stage.width(stageWidth);
-      stage.height(stageHeight);
-    }
-    if (container) {
-      container.style.width = stageWidth + "px";
-      container.style.height = stageHeight + "px";
-    }
-    logExit("updateCanvasToImage (no image)");
-    return;
-  }
-  const maxW = getSetting("canvasMaxWidth");
-  const maxH = getSetting("canvasMaxHeight");
-  const scaleMode = getSetting("canvasScaleMode");
-  let imgW = imgNaturalW || bgImageObj.naturalWidth || bgImageObj.width;
-  let imgH = imgNaturalH || bgImageObj.naturalHeight || bgImageObj.height;
-  let newW = imgW, newH = imgH;
-  if (scaleMode === "fit") {
-    const scale = Math.min(maxW / imgW, 1);
-    newW = Math.round(imgW * scale);
-    newH = Math.round(imgH * scale);
-  } else if (scaleMode === "fill") {
-    const scale = Math.max(maxW / imgW, maxH / imgH, 1);
-    newW = Math.round(imgW * scale);
-    newH = Math.round(imgH * scale);
-    if (newW > maxW) { newW = maxW; newH = Math.round(imgH * (maxW / imgW)); }
-    if (newH > maxH) { newH = maxH; newW = Math.round(imgW * (maxH / imgH)); }
-  } else if (scaleMode === "stretch") {
-    newW = maxW;
-    newH = maxH;
-  } else if (scaleMode === "actual") {
-    newW = imgW;
-    newH = imgH;
-  }
-  stageWidth = newW;
-  stageHeight = newH;
-  if (stage) {
-    stage.width(stageWidth);
-    stage.height(stageHeight);
-  }
-  if (container) {
-    container.style.width = stageWidth + "px";
-    container.style.height = stageHeight + "px";
-  }
-  if (bgKonvaImage) {
-    bgKonvaImage.width(stageWidth);
-    bgKonvaImage.height(stageHeight);
-    bgKonvaImage.x(0);
-    bgKonvaImage.y(0);
-    bgLayer.batchDraw();
-  }
-  logExit("updateCanvasToImage");
+function updateCanvasToImage(imgW, imgH) {
+  stageWidth = imgW;
+  stageHeight = imgH;
+  if (stage) stage.size({ width: stageWidth, height: stageHeight });
+  // Resize all layers
+  [bgLayer, layer, highlightLayer, debugLayer].forEach(l => {
+    if (l) l.size({ width: stageWidth, height: stageHeight });
+  });
 }
-
-function responsiveResize() {
-  logEnter("responsiveResize");
-  if (!getSetting("canvasResponsive")) {
-    logExit("responsiveResize (not responsive)");
-    return;
-  }
-  if (bgImageObj)
-    updateCanvasToImage(bgImageObj.naturalWidth, bgImageObj.naturalHeight);
-  else
-    updateCanvasToImage();
-  logExit("responsiveResize");
-}
-window.addEventListener("resize", responsiveResize);
 
 /*************************************
- * Image Loader UI (server select/upload)
- * Expects #imageUpload and #serverImageSelect in DOM (header)
+ * Background Image Logic
  *************************************/
 function setBackgroundImage(imgSrc) {
   logEnter("setBackgroundImage", { imgSrc });
+  if (!bgLayer) {
+    log("ERROR", "setBackgroundImage called before bgLayer is initialized");
+    window.alert("Canvas not ready: please reload the page.");
+    logExit("setBackgroundImage (no bgLayer)");
+    return;
+  }
   if (bgKonvaImage) {
     bgKonvaImage.destroy();
     bgKonvaImage = null;
@@ -528,6 +478,11 @@ function setBackgroundImage(imgSrc) {
       height: stageHeight,
       listening: false
     });
+    if (!bgLayer) {
+      log("ERROR", "bgLayer missing at imageObj.onload");
+      window.alert("Canvas not ready: please reload the page.");
+      return;
+    }
     bgLayer.add(bgKonvaImage);
     bgKonvaImage.moveToBottom();
     bgLayer.draw();
@@ -541,41 +496,30 @@ function setBackgroundImage(imgSrc) {
 }
 window.setBackgroundImage = setBackgroundImage;
 
-document.addEventListener("DOMContentLoaded", () => {
-  // Hook image loader UI
-  const imageUpload = document.getElementById('imageUpload');
-  const serverImageSelect = document.getElementById('serverImageSelect');
-  if (imageUpload) {
-    imageUpload.addEventListener('change', function (e) {
-      log("TRACE", "imageUpload changed", e);
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function (ev) {
-        setBackgroundImage(ev.target.result);
-        serverImageSelect.value = "";
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-  if (serverImageSelect) {
-    serverImageSelect.addEventListener('change', function (e) {
-      log("TRACE", "serverImageSelect changed", e);
-      const filename = e.target.value;
-      if (!filename) {
-        setBackgroundImage(null);
-        return;
-      }
-      setBackgroundImage('./images/' + filename);
-      imageUpload.value = "";
-    });
-  }
-});
+/*************************************
+ * Exported for global access
+ *************************************/
+window.setupCanvasPanel = setupCanvasPanel;
+window.updateCanvasToImage = updateCanvasToImage;
+
+/*************************************
+ * Logging Utility (minimal stub)
+ *************************************/
+function log(...args) {
+  if (window.DEBUG) console.log("[shapes.js]", ...args);
+}
+function logEnter(fn, obj) {
+  if (window.DEBUG) console.log("→", fn, obj || "");
+}
+function logExit(fn) {
+  if (window.DEBUG) console.log("←", fn);
+}
+
 /*******************************************************
- * shapes.part2b.konva.js
- * Part 2b of N for shapes.js modular build
+ * shapes.part6.utils.js
+ * Part 6 of N for shapes.js modular build
  * 
- * Feature Area: Konva selection logic, multi-drag, highlights, and shape bounds utilities (B)
+ * Feature Area: Utility functions, general helpers, debug tools, and export/import logic
  * Line Limit: ~350 lines max per part for copy-paste reliability.
  * 
  * Naming/Build Scheme:
@@ -589,222 +533,143 @@ document.addEventListener("DOMContentLoaded", () => {
  *******************************************************/
 
 /*************************************
- * Selection highlight and multi-drag support
+ * Utility: Export/Import Shapes as JSON
  *************************************/
-window._lockedDragAttempt = false;
-let selectionHighlightShapes = [];
-let _lockedDragAttemptedIDs = [];
-let debugMultiDragBox = null;
-let multiDrag = {
-  moving: false,
-  dragOrigin: null,
-  origPositions: null
-};
-
-/*************************************
- * Selection Highlight Drawing
- *************************************/
-function updateSelectionHighlights() {
-  logEnter("updateSelectionHighlights");
-  selectionHighlightShapes.forEach(h => h.destroy());
-  selectionHighlightShapes = [];
-
-  // Only show highlight if more than one shape is selected
-  if (selectedShapes.length === 0 || selectedShapes.length === 1) {
-    highlightLayer.draw();
-    logExit("updateSelectionHighlights (none or single selected)");
-    return;
-  }
-
-  selectedShapes.forEach(shape => {
-    let highlight, group = new Konva.Group(), pad = 6;
-    let color = "#2176ff";
-    if (_lockedDragAttemptedIDs.includes(shape._id)) color = "#e53935";
-    if (shape._type === 'rect') {
-      highlight = new Konva.Rect({
-        x: shape.x() - pad / 2,
-        y: shape.y() - pad / 2,
-        width: shape.width() + pad,
-        height: shape.height() + pad,
-        stroke: color,
-        strokeWidth: 2.5,
-        dash: [7, 4],
-        listening: false,
-        cornerRadius: 6,
-        offsetX: shape.offsetX(),
-        offsetY: shape.offsetY(),
-        rotation: shape.rotation()
-      });
-    } else if (shape._type === 'circle') {
-      highlight = new Konva.Circle({
-        x: shape.x(),
-        y: shape.y(),
-        radius: shape.radius() + pad,
-        stroke: color,
-        strokeWidth: 2.5,
-        dash: [7, 4],
-        listening: false
-      });
-    } else if (shape._type === 'point') {
-      highlight = new Konva.Circle({
-        x: shape.x(),
-        y: shape.y(),
-        radius: 15,
-        stroke: color,
-        strokeWidth: 2.5,
-        dash: [7, 4],
-        listening: false
-      });
-    }
-    if (highlight) {
-      group.add(highlight);
-      highlightLayer.add(group);
-      selectionHighlightShapes.push(group);
-    }
-  });
-  highlightLayer.batchDraw();
-  logExit("updateSelectionHighlights");
-}
-
-function showLockedHighlightForShapes(shapesArr) {
-  logEnter("showLockedHighlightForShapes", { shapesArr });
-  _lockedDragAttemptedIDs = shapesArr.map(s => s._id);
-  updateSelectionHighlights();
+function exportShapesToJSON() {
+  const data = shapes.map(s => ({
+    type: s._type,
+    label: s._label,
+    attrs: s.getAttrs(),
+    locked: !!s.locked
+  }));
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "shapes-export.json";
+  document.body.appendChild(a);
+  a.click();
   setTimeout(() => {
-    _lockedDragAttemptedIDs = [];
-    updateSelectionHighlights();
-  }, 1000);
-  logExit("showLockedHighlightForShapes");
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 100);
 }
 
-function setupLockedDragFeedback() {
-  logEnter("setupLockedDragFeedback");
-  stage.on('dragstart.locked', (evt) => {
-    const shape = evt.target;
-    if (!shape || !shape._type) return;
-    if (selectedShapes.length === 1 && shape.locked) {
-      showLockedHighlightForShapes([shape]);
-      shape.stopDrag();
-    }
-    else if (selectedShapes.length > 1 && selectedShapes.some(s => s.locked)) {
-      let lockedShapes = selectedShapes.filter(s => s.locked);
-      showLockedHighlightForShapes(lockedShapes);
-      shape.stopDrag();
-    }
-  });
-  logExit("setupLockedDragFeedback");
+function importShapesFromJSON(jsonStr) {
+  logEnter("importShapesFromJSON");
+  try {
+    const arr = JSON.parse(jsonStr);
+    layer.destroyChildren();
+    shapes.length = 0;
+    arr.forEach(obj => {
+      let s;
+      if (obj.type === "rect") {
+        s = new Konva.Rect(obj.attrs);
+      } else if (obj.type === "circle") {
+        s = new Konva.Circle(obj.attrs);
+      } else if (obj.type === "point") {
+        s = new Konva.Circle(obj.attrs);
+      }
+      if (s) {
+        s._type = obj.type;
+        s._label = obj.label;
+        s.locked = !!obj.locked;
+        setupShapeEvents(s);
+        shapes.push(s);
+        layer.add(s);
+      }
+    });
+    layer.draw();
+    updateList();
+  } catch (e) {
+    window.alert("Failed to import shapes: " + e);
+  }
+  logExit("importShapesFromJSON");
 }
-document.addEventListener("DOMContentLoaded", setupLockedDragFeedback);
 
 /*************************************
- * Multi-drag logic and debug drag box
+ * Utility: Download PNG of current canvas
  *************************************/
-function getMultiSelectionBounds(origPositions, dx = 0, dy = 0) {
-  // Use true transformed bounds (including rotation) for all shapes
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  origPositions.forEach(obj => {
-    const origShape = obj.shape;
-    let clone;
-    if (origShape._type === "rect") {
-      clone = new Konva.Rect({
-        x: obj.x + dx,
-        y: obj.y + dy,
-        width: origShape.width(),
-        height: origShape.height(),
-        rotation: origShape.rotation(),
-        scaleX: origShape.scaleX(),
-        scaleY: origShape.scaleY()
-      });
-    } else if (origShape._type === "circle") {
-      clone = new Konva.Circle({
-        x: obj.x + dx,
-        y: obj.y + dy,
-        radius: origShape.radius(),
-        rotation: origShape.rotation(),
-        scaleX: origShape.scaleX(),
-        scaleY: origShape.scaleY()
-      });
-    } else if (origShape._type === "point") {
-      clone = origShape.clone({ x: obj.x + dx, y: obj.y + dy });
+function downloadCanvasAsPNG() {
+  logEnter("downloadCanvasAsPNG");
+  if (!stage) return;
+  const dataURL = stage.toDataURL({ pixelRatio: 2 });
+  const a = document.createElement("a");
+  a.href = dataURL;
+  a.download = "scene.png";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+  }, 100);
+  logExit("downloadCanvasAsPNG");
+}
+
+/*************************************
+ * Debug: Dump all shapes to console
+ *************************************/
+function debugDumpShapes() {
+  logEnter("debugDumpShapes");
+  console.log("Current shapes:", shapes.map(s => ({
+    type: s._type,
+    label: s._label,
+    attrs: s.getAttrs(),
+    locked: !!s.locked
+  })));
+  logExit("debugDumpShapes");
+}
+
+/*************************************
+ * General Helper: Enable edit on shape from list
+ *************************************/
+function enableEdit(shape) {
+  if (!shape) return;
+  selectedShapes = [shape];
+  updateSelectionHighlights();
+  updateList();
+}
+
+/*************************************
+ * Redraw all points (used by settings changes)
+ *************************************/
+function redrawAllPoints() {
+  shapes.forEach(s => {
+    if (s._type === "point") {
+      s.radius(getSetting("pointHitRadius"));
+      s.strokeWidth(2);
+      s.fill(getSetting("defaultFillColor"));
+      s.stroke(getSetting("defaultStrokeColor"));
     }
-    const rect = clone.getClientRect();
-    minX = Math.min(minX, rect.x);
-    minY = Math.min(minY, rect.y);
-    maxX = Math.max(maxX, rect.x + rect.width);
-    maxY = Math.max(maxY, rect.y + rect.height);
   });
-  return { minX, minY, maxX, maxY };
+  layer.batchDraw();
 }
+window.redrawAllPoints = redrawAllPoints;
 
-function clampMultiDragDelta(dx, dy, origPositions) {
-  logEnter("clampMultiDragDelta", { dx, dy, origPositions });
-  let groupBounds = getMultiSelectionBounds(origPositions, dx, dy);
-  let adjDx = dx, adjDy = dy;
-
-  if (groupBounds.minX < 0) adjDx += -groupBounds.minX;
-  if (groupBounds.maxX > stageWidth) adjDx += stageWidth - groupBounds.maxX;
-  if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
-  if (groupBounds.maxY > stageHeight) adjDy += stageHeight - groupBounds.maxY;
-
-  groupBounds = getMultiSelectionBounds(origPositions, adjDx, adjDy);
-  if (groupBounds.minX < 0) adjDx += -groupBounds.minX;
-  if (groupBounds.maxX > stageWidth) adjDx += stageWidth - groupBounds.maxX;
-  if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
-  if (groupBounds.maxY > stageHeight) adjDy += stageHeight - groupBounds.maxY;
-
-  if (getSetting("multiDragBox")) {
-    log("DEBUG", "Clamp multi-drag", { dx, dy, adjDx, adjDy, groupBounds });
-  }
-  logExit("clampMultiDragDelta");
-  return [adjDx, adjDy];
-}
-
-function updateDebugMultiDragBox() {
-  logEnter("updateDebugMultiDragBox");
-  if (!getSetting("multiDragBox")) {
-    logExit("updateDebugMultiDragBox (not enabled)");
-    return;
-  }
-  if (debugMultiDragBox) debugMultiDragBox.destroy();
-  if (selectedShapes.length === 0) {
-    logExit("updateDebugMultiDragBox (no shapes)");
-    return;
-  }
-
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  selectedShapes.forEach(shape => {
-    const rect = shape.getClientRect({ relativeTo: stage });
-    minX = Math.min(minX, rect.x);
-    minY = Math.min(minY, rect.y);
-    maxX = Math.max(maxX, rect.x + rect.width);
-    maxY = Math.max(maxY, rect.y + rect.height);
-  });
-
-  debugMultiDragBox = new Konva.Rect({
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY,
-    stroke: '#fa0',
-    strokeWidth: 2,
-    dash: [6, 3],
-    listening: false,
-    fill: '#fa0a0a09'
-  });
-  debugLayer.add(debugMultiDragBox);
-  debugLayer.batchDraw();
-  logExit("updateDebugMultiDragBox");
-}
-
-function clearDebugMultiDragBox() {
-  logEnter("clearDebugMultiDragBox");
-  if (debugMultiDragBox) {
-    debugMultiDragBox.destroy();
-    debugMultiDragBox = null;
-    debugLayer.batchDraw();
-  }
-  logExit("clearDebugMultiDragBox");
-}
+/*************************************
+ * Export/Import Buttons Setup
+ *************************************/
+document.addEventListener("DOMContentLoaded", () => {
+  const btnExport = document.getElementById("btnExportShapes");
+  const btnImport = document.getElementById("btnImportShapes");
+  const btnDownload = document.getElementById("btnDownloadPNG");
+  if (btnExport) btnExport.onclick = exportShapesToJSON;
+  if (btnImport) btnImport.onclick = () => {
+    const fileInput = document.createElement('input');
+    fileInput.type = "file";
+    fileInput.accept = ".json,application/json";
+    fileInput.addEventListener('change', (e) => {
+      if (!e.target.files.length) return;
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        importShapesFromJSON(ev.target.result);
+      };
+      reader.readAsText(file);
+    });
+    fileInput.click();
+  };
+  if (btnDownload) btnDownload.onclick = downloadCanvasAsPNG;
+});
 /*******************************************************
  * shapes.part3.sidebar.js
  * Part 3 of N for shapes.js modular build
