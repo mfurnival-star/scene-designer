@@ -217,6 +217,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  * - Renders draggable points as colored circles.
  * - Hooks for future rectangle/circle shapes.
  * - Multiselect: "Select All" button shows dashed highlight for all shapes.
+ * - Multiselect drag (with clamped bounding box, including rotation/scale), and orange debug box (always on for now)
  *********************************************************/
 
 (function () {
@@ -226,16 +227,16 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
 
   // Multiselect highlight overlay group(s)
   let multiSelectHighlightShapes = [];
+  let multiDrag = { moving: false, dragOrigin: null, origPositions: null };
+  let debugMultiDragBox = null;
 
   /** Draw dashed highlight outlines for all selected shapes (multi only) */
   function updateSelectionHighlights() {
-    // Remove previous
     if (multiSelectHighlightShapes.length && AppState.konvaLayer) {
       multiSelectHighlightShapes.forEach(g => g.destroy());
       multiSelectHighlightShapes = [];
       AppState.konvaLayer.draw();
     }
-    // Only show highlight if >1 shape is selected
     if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
     const pad = 6;
     const color = "#2176ff";
@@ -285,6 +286,186 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     AppState.konvaLayer.batchDraw();
   }
 
+  // --- Multi-drag bounding box/logic ---
+  function getMultiSelectionBounds(origPositions, dx = 0, dy = 0) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    origPositions.forEach(obj => {
+      const origShape = obj.shape;
+      let clone;
+      if (origShape._type === "rect") {
+        clone = new Konva.Rect({
+          x: obj.x + dx,
+          y: obj.y + dy,
+          width: origShape.width(),
+          height: origShape.height(),
+          rotation: origShape.rotation ? origShape.rotation() : 0,
+          scaleX: origShape.scaleX ? origShape.scaleX() : 1,
+          scaleY: origShape.scaleY ? origShape.scaleY() : 1
+        });
+      } else if (origShape._type === "circle") {
+        clone = new Konva.Circle({
+          x: obj.x + dx,
+          y: obj.y + dy,
+          radius: origShape.radius(),
+          rotation: origShape.rotation ? origShape.rotation() : 0,
+          scaleX: origShape.scaleX ? origShape.scaleX() : 1,
+          scaleY: origShape.scaleY ? origShape.scaleY() : 1
+        });
+      } else if (origShape._type === "point") {
+        clone = origShape.clone({ x: obj.x + dx, y: obj.y + dy });
+      }
+      const rect = clone.getClientRect();
+      minX = Math.min(minX, rect.x);
+      minY = Math.min(minY, rect.y);
+      maxX = Math.max(maxX, rect.x + rect.width);
+      maxY = Math.max(maxY, rect.y + rect.height);
+    });
+    return { minX, minY, maxX, maxY };
+  }
+  function clampMultiDragDelta(dx, dy, origPositions) {
+    const stageW = AppState.konvaStage ? AppState.konvaStage.width() : 1;
+    const stageH = AppState.konvaStage ? AppState.konvaStage.height() : 1;
+    let groupBounds = getMultiSelectionBounds(origPositions, dx, dy);
+    let adjDx = dx, adjDy = dy;
+
+    if (groupBounds.minX < 0) adjDx += -groupBounds.minX;
+    if (groupBounds.maxX > stageW) adjDx += stageW - groupBounds.maxX;
+    if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
+    if (groupBounds.maxY > stageH) adjDy += stageH - groupBounds.maxY;
+
+    groupBounds = getMultiSelectionBounds(origPositions, adjDx, adjDy);
+    if (groupBounds.minX < 0) adjDx += -groupBounds.minX;
+    if (groupBounds.maxX > stageW) adjDx += stageW - groupBounds.maxX;
+    if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
+    if (groupBounds.maxY > stageH) adjDy += stageH - groupBounds.maxY;
+
+    return [adjDx, adjDy];
+  }
+  function updateDebugMultiDragBox() {
+    // Always show for now
+    if (debugMultiDragBox) debugMultiDragBox.destroy();
+    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    AppState.selectedShapes.forEach(shape => {
+      const rect = shape.getClientRect({ relativeTo: AppState.konvaStage });
+      minX = Math.min(minX, rect.x);
+      minY = Math.min(minY, rect.y);
+      maxX = Math.max(maxX, rect.x + rect.width);
+      maxY = Math.max(maxY, rect.y + rect.height);
+    });
+
+    debugMultiDragBox = new Konva.Rect({
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      stroke: '#fa0',
+      strokeWidth: 2,
+      dash: [6, 3],
+      listening: false,
+      fill: '#fa0a0a09'
+    });
+    AppState.konvaLayer.add(debugMultiDragBox);
+    AppState.konvaLayer.batchDraw();
+  }
+  function clearDebugMultiDragBox() {
+    if (debugMultiDragBox) {
+      debugMultiDragBox.destroy();
+      debugMultiDragBox = null;
+      if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
+    }
+  }
+
+  function attachShapeEvents(shape) {
+    // Remove previous listeners
+    shape.off('mousedown.shape touchstart.shape');
+    shape.off('dragstart.shape dragmove.shape dragend.shape');
+
+    // Selection logic
+    shape.on('mousedown.shape touchstart.shape', e => {
+      e.cancelBubble = true;
+      if (!AppState.selectedShapes.includes(shape)) {
+        selectShape(shape);
+      }
+    });
+
+    // --- Drag logic ---
+    shape.on('dragstart.shape', (e) => {
+      if (AppState.selectedShapes.length > 1 && AppState.selectedShapes.includes(shape)) {
+        // If any are locked, block drag
+        if (AppState.selectedShapes.some(s => s.locked)) {
+          shape.stopDrag();
+          return;
+        }
+        // Cancel native drag, start multi-drag logic
+        shape.stopDrag();
+        multiDrag.moving = true;
+        multiDrag.dragOrigin = AppState.konvaStage.getPointerPosition();
+        multiDrag.origPositions = AppState.selectedShapes.map(s => ({ shape: s, x: s.x(), y: s.y() }));
+        AppState.konvaStage.on('mousemove.multidrag touchmove.multidrag', onMultiDragMove);
+        AppState.konvaStage.on('mouseup.multidrag touchend.multidrag', onMultiDragEnd);
+      }
+    });
+
+    // Clamp for single drag only
+    shape.on('dragmove.shape', () => {
+      if (AppState.selectedShapes.length === 1 && AppState.selectedShapes[0] === shape) {
+        clampSingleShapePosition(shape);
+        updateSelectionHighlights();
+      }
+    });
+  }
+
+  function clampSingleShapePosition(shape) {
+    if (!AppState.konvaStage) return;
+    const stageW = AppState.konvaStage.width(), stageH = AppState.konvaStage.height();
+    let bounds;
+    if (shape._type === 'rect') {
+      bounds = { minX: shape.x(), minY: shape.y(), maxX: shape.x() + shape.width(), maxY: shape.y() + shape.height() };
+    } else if (shape._type === 'circle') {
+      bounds = { minX: shape.x() - shape.radius(), minY: shape.y() - shape.radius(), maxX: shape.x() + shape.radius(), maxY: shape.y() + shape.radius() };
+    } else if (shape._type === 'point') {
+      bounds = { minX: shape.x() - 15, minY: shape.y() - 15, maxX: shape.x() + 15, maxY: shape.y() + 15 };
+    }
+    let dx = 0, dy = 0;
+    if (bounds.minX < 0) dx = -bounds.minX;
+    if (bounds.maxX > stageW) dx = stageW - bounds.maxX;
+    if (bounds.minY < 0) dy = -bounds.minY;
+    if (bounds.maxY > stageH) dy = stageH - bounds.maxY;
+    if (dx !== 0 || dy !== 0) {
+      shape.x(shape.x() + dx);
+      shape.y(shape.y() + dy);
+    }
+  }
+
+  function onMultiDragMove(evt) {
+    if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) return;
+    const pos = AppState.konvaStage.getPointerPosition();
+    let dx = pos.x - multiDrag.dragOrigin.x;
+    let dy = pos.y - multiDrag.dragOrigin.y;
+    let [clampedDx, clampedDy] = clampMultiDragDelta(dx, dy, multiDrag.origPositions);
+    multiDrag.origPositions.forEach(obj => {
+      obj.shape.x(obj.x + clampedDx);
+      obj.shape.y(obj.y + clampedDy);
+    });
+    updateDebugMultiDragBox();
+    if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
+    updateSelectionHighlights();
+  }
+  function onMultiDragEnd(evt) {
+    multiDrag.moving = false;
+    multiDrag.dragOrigin = null;
+    multiDrag.origPositions = null;
+    clearDebugMultiDragBox();
+    if (AppState.konvaStage) {
+      AppState.konvaStage.off('mousemove.multidrag touchmove.multidrag');
+      AppState.konvaStage.off('mouseup.multidrag touchend.multidrag');
+    }
+    if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
+    updateSelectionHighlights();
+  }
+
   function loadImage(src) {
     return new Promise((resolve, reject) => {
       const img = new window.Image();
@@ -327,6 +508,8 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     group.add(selHalo); group.add(halo); group.add(crossH); group.add(crossV);
     group.showSelection = function(isSelected) { selHalo.visible(isSelected); };
     group._type = "point"; group._label = "Point"; group.locked = false;
+    // Attach drag/selection events
+    attachShapeEvents(group);
     group.on("dragstart", () => { group.showSelection(true); });
     group.on("dragend", () => { group.showSelection(false); });
     group.on("mouseenter", () => { document.body.style.cursor = 'pointer'; });
@@ -342,6 +525,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     });
     rect.showSelection = function() {};
     rect._type = "rect"; rect._label = "Rectangle"; rect.locked = false;
+    attachShapeEvents(rect);
     rect.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     rect.on("mouseleave", () => { document.body.style.cursor = ''; });
     return rect;
@@ -355,9 +539,80 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     });
     circle.showSelection = function() {};
     circle._type = "circle"; circle._label = "Circle"; circle.locked = false;
+    attachShapeEvents(circle);
     circle.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     circle.on("mouseleave", () => { document.body.style.cursor = ''; });
     return circle;
+  }
+
+  function selectShape(shape) {
+    if (AppState.transformer) {
+      AppState.transformer.destroy();
+      AppState.transformer = null;
+    }
+    if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection)
+      AppState.selectedShape.showSelection(false);
+    AppState.selectedShape = shape;
+    AppState.selectedShapes = [shape];
+    updateSelectionHighlights();
+    if (!shape) return;
+
+    if (shape._type === "rect") {
+      const transformer = new Konva.Transformer({
+        nodes: [shape],
+        enabledAnchors: [
+          "top-left", "top-center", "top-right",
+          "middle-left", "middle-right",
+          "bottom-left", "bottom-center", "bottom-right"
+        ],
+        rotateEnabled: true
+      });
+      AppState.konvaLayer.add(transformer);
+      AppState.transformer = transformer;
+      transformer.on("transformend", () => {
+        shape.strokeWidth(1);
+        shape.width(shape.width() * shape.scaleX());
+        shape.height(shape.height() * shape.scaleY());
+        shape.scaleX(1);
+        shape.scaleY(1);
+        AppState.konvaLayer.draw();
+      });
+      AppState.konvaLayer.draw();
+    } else if (shape._type === "circle") {
+      const transformer = new Konva.Transformer({
+        nodes: [shape],
+        enabledAnchors: [
+          "top-left", "top-right", "bottom-left", "bottom-right"
+        ],
+        rotateEnabled: false
+      });
+      AppState.konvaLayer.add(transformer);
+      AppState.transformer = transformer;
+      transformer.on("transformend", () => {
+        let scaleX = shape.scaleX();
+        shape.radius(shape.radius() * scaleX);
+        shape.scaleX(1);
+        shape.scaleY(1);
+        shape.strokeWidth(1);
+        AppState.konvaLayer.draw();
+      });
+      AppState.konvaLayer.draw();
+    } else if (shape._type === "point") {
+      shape.showSelection(true);
+    }
+  }
+
+  function deselectShape() {
+    if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection)
+      AppState.selectedShape.showSelection(false);
+    if (AppState.transformer) {
+      AppState.transformer.destroy();
+      AppState.transformer = null;
+    }
+    AppState.selectedShape = null;
+    AppState.selectedShapes = [];
+    updateSelectionHighlights();
+    if (AppState.konvaLayer) AppState.konvaLayer.draw();
   }
 
   window.buildCanvasPanel = async function (rootDiv, container, state) {
@@ -424,77 +679,8 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       }
       layer.batchDraw();
 
-      function selectShape(shape) {
-        if (AppState.transformer) {
-          AppState.transformer.destroy();
-          AppState.transformer = null;
-        }
-        if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection)
-          AppState.selectedShape.showSelection(false);
-        AppState.selectedShape = shape;
-        AppState.selectedShapes = [shape];
-        updateSelectionHighlights();
-        if (!shape) return;
-
-        if (shape._type === "rect") {
-          const transformer = new Konva.Transformer({
-            nodes: [shape],
-            enabledAnchors: [
-              "top-left", "top-center", "top-right",
-              "middle-left", "middle-right",
-              "bottom-left", "bottom-center", "bottom-right"
-            ],
-            rotateEnabled: true
-          });
-          layer.add(transformer);
-          AppState.transformer = transformer;
-          transformer.on("transformend", () => {
-            shape.strokeWidth(1);
-            shape.width(shape.width() * shape.scaleX());
-            shape.height(shape.height() * shape.scaleY());
-            shape.scaleX(1);
-            shape.scaleY(1);
-            layer.draw();
-          });
-          layer.draw();
-        } else if (shape._type === "circle") {
-          // Only 4 corner anchors, proportional scaling, no rotation
-          const transformer = new Konva.Transformer({
-            nodes: [shape],
-            enabledAnchors: [
-              "top-left", "top-right", "bottom-left", "bottom-right"
-            ],
-            rotateEnabled: false
-          });
-          layer.add(transformer);
-          AppState.transformer = transformer;
-          // Only update radius on transformend (not during drag)
-          transformer.on("transformend", () => {
-            let scaleX = shape.scaleX();
-            shape.radius(shape.radius() * scaleX);
-            shape.scaleX(1);
-            shape.scaleY(1);
-            shape.strokeWidth(1);
-            layer.draw();
-          });
-          layer.draw();
-        } else if (shape._type === "point") {
-          shape.showSelection(true);
-        }
-      }
-
-      function deselectShape() {
-        if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection)
-          AppState.selectedShape.showSelection(false);
-        if (AppState.transformer) {
-          AppState.transformer.destroy();
-          AppState.transformer = null;
-        }
-        AppState.selectedShape = null;
-        AppState.selectedShapes = [];
-        updateSelectionHighlights();
-        layer.draw();
-      }
+      // Attach shape events for all shapes (needed for multi-drag)
+      AppState.shapes.forEach(s => attachShapeEvents(s));
 
       stage.on("mousedown tap", function(evt) {
         if (evt.target === stage || evt.target === konvaImage) {
@@ -672,7 +858,6 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       AppState.konvaLayer.add(transformer);
       AppState.transformer = transformer;
       AppState.konvaLayer.draw();
-      // Only update radius on transformend, use scaleX, match prelayout method
       transformer.on("transformend", () => {
         let scaleX = circle.scaleX();
         circle.radius(circle.radius() * scaleX);
