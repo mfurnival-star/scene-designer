@@ -1,15 +1,11 @@
-
 /*********************************************************
- * PART 2A: CanvasPanel – Image Display & Point Placement
+ * PART 2A: CanvasPanel – Image Display & Shape Creation
  * ------------------------------------------------------
- * Fully implements the Canvas panel using Konva.
+ * Handles Canvas setup, image loading, and single-shape creation/selection.
  * - Loads and displays the selected/uploaded image.
- * - Allows "Point" annotation placement via click.
- * - Renders draggable points as colored circles.
- * - Hooks for future rectangle/circle shapes.
- * - Multiselect: "Select All" button shows dashed highlight for all shapes.
- * - Multiselect drag (with clamped bounding box, including rotation/scale), and orange debug box (always on for now)
- * - Locking: Locked shapes cannot be moved/dragged/transformed, and show red highlight if multi-drag is attempted.
+ * - Provides creation for "Point", "Rectangle", and "Circle" shapes.
+ * - Handles single-shape selection and transformer UI.
+ * - Exports key hooks for PART 2B (multi-select, drag, highlights).
  *********************************************************/
 
 (function () {
@@ -17,277 +13,7 @@
   window._sceneDesigner = window._sceneDesigner || {};
   const AppState = window._sceneDesigner;
 
-  // Multiselect highlight overlay group(s)
-  let multiSelectHighlightShapes = [];
-  let multiDrag = { moving: false, dragOrigin: null, origPositions: null };
-  let debugMultiDragBox = null;
-  let _lockedDragAttemptedIDs = [];
-
-  /** Draw dashed highlight outlines for all selected shapes (multi only) */
-  function updateSelectionHighlights() {
-    if (multiSelectHighlightShapes.length && AppState.konvaLayer) {
-      multiSelectHighlightShapes.forEach(g => g.destroy());
-      multiSelectHighlightShapes = [];
-      AppState.konvaLayer.draw();
-    }
-    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
-    const pad = 6;
-    AppState.selectedShapes.forEach(shape => {
-      let highlight;
-      // Red if drag attempt on locked, else blue
-      let color = _lockedDragAttemptedIDs.includes(shape._id) ? "#e53935" : "#2176ff";
-      if (shape._type === 'rect') {
-        highlight = new Konva.Rect({
-          x: shape.x() - pad / 2,
-          y: shape.y() - pad / 2,
-          width: shape.width() + pad,
-          height: shape.height() + pad,
-          stroke: color,
-          strokeWidth: 2.5,
-          dash: [7, 4],
-          listening: false,
-          cornerRadius: 6,
-          offsetX: shape.offsetX ? shape.offsetX() : 0,
-          offsetY: shape.offsetY ? shape.offsetY() : 0,
-          rotation: shape.rotation ? shape.rotation() : 0
-        });
-      } else if (shape._type === 'circle') {
-        highlight = new Konva.Circle({
-          x: shape.x(),
-          y: shape.y(),
-          radius: shape.radius() + pad,
-          stroke: color,
-          strokeWidth: 2.5,
-          dash: [7, 4],
-          listening: false
-        });
-      } else if (shape._type === 'point') {
-        highlight = new Konva.Circle({
-          x: shape.x(),
-          y: shape.y(),
-          radius: 15,
-          stroke: color,
-          strokeWidth: 2.5,
-          dash: [7, 4],
-          listening: false
-        });
-      }
-      if (highlight) {
-        AppState.konvaLayer.add(highlight);
-        multiSelectHighlightShapes.push(highlight);
-      }
-    });
-    AppState.konvaLayer.batchDraw();
-  }
-
-  function showLockedHighlightForShapes(shapesArr) {
-    _lockedDragAttemptedIDs = shapesArr.map(s => s._id);
-    updateSelectionHighlights();
-    setTimeout(() => {
-      _lockedDragAttemptedIDs = [];
-      updateSelectionHighlights();
-    }, 1000);
-  }
-
-  // --- Multi-drag bounding box/logic ---
-  function getMultiSelectionBounds(origPositions, dx = 0, dy = 0) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    origPositions.forEach(obj => {
-      const origShape = obj.shape;
-      let clone;
-      if (origShape._type === "rect") {
-        clone = new Konva.Rect({
-          x: obj.x + dx,
-          y: obj.y + dy,
-          width: origShape.width(),
-          height: origShape.height(),
-          rotation: origShape.rotation ? origShape.rotation() : 0,
-          scaleX: origShape.scaleX ? origShape.scaleX() : 1,
-          scaleY: origShape.scaleY ? origShape.scaleY() : 1
-        });
-      } else if (origShape._type === "circle") {
-        clone = new Konva.Circle({
-          x: obj.x + dx,
-          y: obj.y + dy,
-          radius: origShape.radius(),
-          rotation: origShape.rotation ? origShape.rotation() : 0,
-          scaleX: origShape.scaleX ? origShape.scaleX() : 1,
-          scaleY: origShape.scaleY ? origShape.scaleY() : 1
-        });
-      } else if (origShape._type === "point") {
-        clone = origShape.clone({ x: obj.x + dx, y: obj.y + dy });
-      }
-      const rect = clone.getClientRect();
-      minX = Math.min(minX, rect.x);
-      minY = Math.min(minY, rect.y);
-      maxX = Math.max(maxX, rect.x + rect.width);
-      maxY = Math.max(maxY, rect.y + rect.height);
-    });
-    return { minX, minY, maxX, maxY };
-  }
-  function clampMultiDragDelta(dx, dy, origPositions) {
-    const stageW = AppState.konvaStage ? AppState.konvaStage.width() : 1;
-    const stageH = AppState.konvaStage ? AppState.konvaStage.height() : 1;
-    let groupBounds = getMultiSelectionBounds(origPositions, dx, dy);
-    let adjDx = dx, adjDy = dy;
-
-    if (groupBounds.minX < 0) adjDx += -groupBounds.minX;
-    if (groupBounds.maxX > stageW) adjDx += stageW - groupBounds.maxX;
-    if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
-    if (groupBounds.maxY > stageH) adjDy += stageH - groupBounds.maxY;
-
-    groupBounds = getMultiSelectionBounds(origPositions, adjDx, adjDy);
-    if (groupBounds.minX < 0) adjDx += -groupBounds.minX;
-    if (groupBounds.maxX > stageW) adjDx += stageW - groupBounds.maxX;
-    if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
-    if (groupBounds.maxY > stageH) adjDy += stageH - groupBounds.maxY;
-
-    return [adjDx, adjDy];
-  }
-  function updateDebugMultiDragBox() {
-    // Always show for now
-    if (debugMultiDragBox) debugMultiDragBox.destroy();
-    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    AppState.selectedShapes.forEach(shape => {
-      const rect = shape.getClientRect({ relativeTo: AppState.konvaStage });
-      minX = Math.min(minX, rect.x);
-      minY = Math.min(minY, rect.y);
-      maxX = Math.max(maxX, rect.x + rect.width);
-      maxY = Math.max(maxY, rect.y + rect.height);
-    });
-
-    debugMultiDragBox = new Konva.Rect({
-      x: minX,
-      y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
-      stroke: '#fa0',
-      strokeWidth: 2,
-      dash: [6, 3],
-      listening: false,
-      fill: '#fa0a0a09'
-    });
-    AppState.konvaLayer.add(debugMultiDragBox);
-    AppState.konvaLayer.batchDraw();
-  }
-  function clearDebugMultiDragBox() {
-    if (debugMultiDragBox) {
-      debugMultiDragBox.destroy();
-      debugMultiDragBox = null;
-      if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
-    }
-  }
-
-  function attachShapeEvents(shape) {
-    // Remove previous listeners
-    shape.off('mousedown.shape touchstart.shape');
-    shape.off('dragstart.shape dragmove.shape dragend.shape');
-
-    // Selection logic
-    shape.on('mousedown.shape touchstart.shape', e => {
-      e.cancelBubble = true;
-      if (!AppState.selectedShapes.includes(shape)) {
-        selectShape(shape);
-      }
-    });
-
-    // --- Drag logic ---
-    shape.on('dragstart.shape', (e) => {
-      if (AppState.selectedShapes.length > 1 && AppState.selectedShapes.includes(shape)) {
-        if (AppState.selectedShapes.some(s => s.locked)) {
-          // Block drag, show red highlight on locked shapes
-          showLockedHighlightForShapes(AppState.selectedShapes.filter(s => s.locked));
-          shape.stopDrag();
-          return;
-        }
-        // Cancel native drag, start multi-drag logic
-        shape.stopDrag();
-        multiDrag.moving = true;
-        multiDrag.dragOrigin = AppState.konvaStage.getPointerPosition();
-        multiDrag.origPositions = AppState.selectedShapes.map(s => ({ shape: s, x: s.x(), y: s.y() }));
-        AppState.konvaStage.on('mousemove.multidrag touchmove.multidrag', onMultiDragMove);
-        AppState.konvaStage.on('mouseup.multidrag touchend.multidrag', onMultiDragEnd);
-      } else if (AppState.selectedShapes.length === 1 && AppState.selectedShapes[0].locked) {
-        // Single locked shape: block drag
-        showLockedHighlightForShapes([AppState.selectedShapes[0]]);
-        shape.stopDrag();
-        return;
-      }
-    });
-
-    // Clamp for single drag only
-    shape.on('dragmove.shape', () => {
-      if (AppState.selectedShapes.length === 1 && AppState.selectedShapes[0] === shape) {
-        clampSingleShapePosition(shape);
-        updateSelectionHighlights();
-      }
-    });
-  }
-
-  function clampSingleShapePosition(shape) {
-    if (!AppState.konvaStage) return;
-    const stageW = AppState.konvaStage.width(), stageH = AppState.konvaStage.height();
-    let bounds;
-    if (shape._type === 'rect') {
-      bounds = { minX: shape.x(), minY: shape.y(), maxX: shape.x() + shape.width(), maxY: shape.y() + shape.height() };
-    } else if (shape._type === 'circle') {
-      bounds = { minX: shape.x() - shape.radius(), minY: shape.y() - shape.radius(), maxX: shape.x() + shape.radius(), maxY: shape.y() + shape.radius() };
-    } else if (shape._type === 'point') {
-      bounds = { minX: shape.x() - 15, minY: shape.y() - 15, maxX: shape.x() + 15, maxY: shape.y() + 15 };
-    }
-    let dx = 0, dy = 0;
-    if (bounds.minX < 0) dx = -bounds.minX;
-    if (bounds.maxX > stageW) dx = stageW - bounds.maxX;
-    if (bounds.minY < 0) dy = -bounds.minY;
-    if (bounds.maxY > stageH) dy = stageH - bounds.maxY;
-    if (dx !== 0 || dy !== 0) {
-      shape.x(shape.x() + dx);
-      shape.y(shape.y() + dy);
-    }
-  }
-
-  function onMultiDragMove(evt) {
-    if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) return;
-    const pos = AppState.konvaStage.getPointerPosition();
-    let dx = pos.x - multiDrag.dragOrigin.x;
-    let dy = pos.y - multiDrag.dragOrigin.y;
-    let [clampedDx, clampedDy] = clampMultiDragDelta(dx, dy, multiDrag.origPositions);
-    multiDrag.origPositions.forEach(obj => {
-      obj.shape.x(obj.x + clampedDx);
-      obj.shape.y(obj.y + clampedDy);
-    });
-    updateDebugMultiDragBox();
-    if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
-    updateSelectionHighlights();
-  }
-  function onMultiDragEnd(evt) {
-    multiDrag.moving = false;
-    multiDrag.dragOrigin = null;
-    multiDrag.origPositions = null;
-    clearDebugMultiDragBox();
-    if (AppState.konvaStage) {
-      AppState.konvaStage.off('mousemove.multidrag touchmove.multidrag');
-      AppState.konvaStage.off('mouseup.multidrag touchend.multidrag');
-    }
-    if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
-    updateSelectionHighlights();
-  }
-
-  function loadImage(src) {
-    return new Promise((resolve, reject) => {
-      const img = new window.Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.crossOrigin = "Anonymous";
-      img.src = src;
-    });
-  }
-
-  function clearNode(node) {
-    while (node.firstChild) node.removeChild(node.firstChild);
-  }
+  // --- SHAPE CREATION HELPERS ---
 
   function makeReticlePointShape(x, y, color = "#2176ff") {
     const group = new Konva.Group({ x, y, draggable: true, name: "reticle-point" });
@@ -318,10 +44,7 @@
     group.showSelection = function(isSelected) { selHalo.visible(isSelected); };
     group._type = "point"; group._label = "Point";
     group.locked = false;
-    // Give each shape a unique _id for highlight logic
     group._id = "pt_" + Math.random().toString(36).slice(2, 10);
-    // Attach drag/selection events
-    attachShapeEvents(group);
     group.on("dragstart", () => { group.showSelection(true); });
     group.on("dragend", () => { group.showSelection(false); });
     group.on("mouseenter", () => { document.body.style.cursor = 'pointer'; });
@@ -339,7 +62,6 @@
     rect._type = "rect"; rect._label = "Rectangle";
     rect.locked = false;
     rect._id = "rect_" + Math.random().toString(36).slice(2, 10);
-    attachShapeEvents(rect);
     rect.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     rect.on("mouseleave", () => { document.body.style.cursor = ''; });
     return rect;
@@ -355,30 +77,12 @@
     circle._type = "circle"; circle._label = "Circle";
     circle.locked = false;
     circle._id = "circ_" + Math.random().toString(36).slice(2, 10);
-    attachShapeEvents(circle);
     circle.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     circle.on("mouseleave", () => { document.body.style.cursor = ''; });
     return circle;
   }
 
-  function setShapeLocked(shape, locked) {
-    shape.locked = !!locked;
-    if (shape.draggable) shape.draggable(!locked);
-    if (shape instanceof Konva.Group) shape.draggable(!locked);
-    // If there's a transformer and this shape is selected, lock disables transform
-    if (AppState.transformer && AppState.transformer.nodes().includes(shape)) {
-      if (locked) {
-        AppState.transformer.enabledAnchors([]);
-        AppState.transformer.rotateEnabled(false);
-      } else {
-        let anchors = ['top-left','top-center','top-right','middle-left','middle-right','bottom-left','bottom-center','bottom-right'];
-        if(shape._type==='circle') anchors = ['top-left','top-right','bottom-left','bottom-right'];
-        if(shape._type==='point') anchors = [];
-        AppState.transformer.enabledAnchors(anchors);
-        AppState.transformer.rotateEnabled(shape._type !== 'point');
-      }
-    }
-  }
+  // --- SINGLE-SHAPE SELECTION/TRANSFORMER ---
 
   function selectShape(shape) {
     if (AppState.transformer) {
@@ -389,7 +93,6 @@
       AppState.selectedShape.showSelection(false);
     AppState.selectedShape = shape;
     AppState.selectedShapes = [shape];
-    updateSelectionHighlights();
     if (!shape) return;
 
     if (shape._type === "rect") {
@@ -446,8 +149,43 @@
     }
     AppState.selectedShape = null;
     AppState.selectedShapes = [];
-    updateSelectionHighlights();
     if (AppState.konvaLayer) AppState.konvaLayer.draw();
+  }
+
+  // --- SHAPE LOCKING ---
+
+  function setShapeLocked(shape, locked) {
+    shape.locked = !!locked;
+    if (shape.draggable) shape.draggable(!locked);
+    if (shape instanceof Konva.Group) shape.draggable(!locked);
+    if (AppState.transformer && AppState.transformer.nodes().includes(shape)) {
+      if (locked) {
+        AppState.transformer.enabledAnchors([]);
+        AppState.transformer.rotateEnabled(false);
+      } else {
+        let anchors = ['top-left','top-center','top-right','middle-left','middle-right','bottom-left','bottom-center','bottom-right'];
+        if(shape._type==='circle') anchors = ['top-left','top-right','bottom-left','bottom-right'];
+        if(shape._type==='point') anchors = [];
+        AppState.transformer.enabledAnchors(anchors);
+        AppState.transformer.rotateEnabled(shape._type !== 'point');
+      }
+    }
+  }
+
+  // --- IMAGE LOADING AND CANVAS INIT ---
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.crossOrigin = "Anonymous";
+      img.src = src;
+    });
+  }
+
+  function clearNode(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
   }
 
   window.buildCanvasPanel = async function (rootDiv, container, state) {
@@ -513,9 +251,6 @@
         layer.add(shape);
       }
       layer.batchDraw();
-
-      // Attach shape events for all shapes (needed for multi-drag)
-      AppState.shapes.forEach(s => attachShapeEvents(s));
 
       stage.on("mousedown tap", function(evt) {
         if (evt.target === stage || evt.target === konvaImage) {
@@ -595,7 +330,6 @@
       AppState.selectedShape = point;
       AppState.selectedShapes = [point];
       point.showSelection(true);
-      updateSelectionHighlights();
     }
 
     function addRectShape() {
@@ -649,7 +383,6 @@
         rect.scaleY(1);
         AppState.konvaLayer.draw();
       });
-      updateSelectionHighlights();
     }
 
     function addCircleShape() {
@@ -701,7 +434,6 @@
         circle.strokeWidth(1);
         AppState.konvaLayer.draw();
       });
-      updateSelectionHighlights();
     }
 
     function addShapeFromToolbar() {
@@ -717,32 +449,14 @@
       if (addBtn) {
         addBtn.onclick = addShapeFromToolbar;
       }
-      // --- Select All button logic ---
-      const selectAllBtn = document.getElementById("selectAllBtn");
-      if (selectAllBtn) {
-        selectAllBtn.onclick = function () {
-          if (!AppState.shapes || AppState.shapes.length === 0) return;
-          AppState.selectedShapes = AppState.shapes.slice();
-          AppState.selectedShape = null;
-          if (AppState.transformer) {
-            AppState.transformer.destroy();
-            AppState.transformer = null;
-          }
-          updateSelectionHighlights();
-          if (AppState.konvaLayer) AppState.konvaLayer.draw();
-        };
-      }
-      // --- Lock checkbox logic ---
-      const lockCheckbox = document.getElementById("lockCheckbox");
-      if (lockCheckbox) {
-        lockCheckbox.addEventListener("change", () => {
-          if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
-          const newLocked = lockCheckbox.checked;
-          AppState.selectedShapes.forEach(s => setShapeLocked(s, newLocked));
-          updateSelectionHighlights();
-        });
-      }
     }, 0);
+
+    // Export hooks for PART 2B
+    AppState.makeReticlePointShape = makeReticlePointShape;
+    AppState.makeRectShape = makeRectShape;
+    AppState.makeCircleShape = makeCircleShape;
+    AppState.selectShape = selectShape;
+    AppState.deselectShape = deselectShape;
+    AppState.setShapeLocked = setShapeLocked;
   };
 })();
-

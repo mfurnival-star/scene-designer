@@ -25,20 +25,26 @@ Descriptions are updated as new logic is added or stubs are replaced.
 
 ---
 
-### **PART 2A: CanvasPanel – Image Display, Annotation, Multi-Select, Drag & Bounding Box**  
+### **PART 2A: CanvasPanel – Image Display & Shape Creation**  
 - **Filename:** `shapes.part2a.konva.js`
 - **Responsibility:**  
-  - Implements the full Canvas panel using Konva.
-  - Loads and displays the selected/uploaded image.
-  - Allows placement and manipulation of "Point", "Rectangle", and "Circle" shapes.
-  - Implements robust selection logic:
-    - Single and multi-selection (including "Select All" and marquee/box selection).
-    - Dashed highlight outlines for multi-selected shapes.
-    - Multi-select drag with custom bounding box logic (including rotation/scale).
-    - Movement clamped so that no shape can be dragged out of the image/stage bounds.
-    - **Debug:** Orange bounding box for multi-select group (always shown during drag; toggleable when settings are fully enabled).
-  - Attaches shape events for selection, drag, and interaction.
-  - Hooks for future color annotation and export logic.
+  - Handles Canvas setup, image loading, and single-shape creation/selection.
+  - Provides creation for "Point", "Rectangle", and "Circle" shapes.
+  - Handles single-shape selection and transformer UI.
+  - Exports key hooks for PART 2B (multi-select, drag, highlights).
+
+---
+
+### **PART 2B: Multi-Select, Group Drag, Highlights, Lock UI**
+- **Filename:** `shapes.part2b.multiselect.js`
+- **Responsibility:**  
+  - Handles all multi-selection, group drag, bounding box, and lock UI logic.
+  - Multi-select: Select All, marquee/box selection, multi-selection highlights.
+  - Multi-select drag, clamped group bounding box (with rotation/scale).
+  - Orange debug bounding box during group drag.
+  - Locking: Locked shapes block group drag and show red highlight feedback.
+  - Lock checkbox UI always reflects current selection.
+  - Depends on PART 2A for shape creation and single selection.
 
 ---
 
@@ -56,18 +62,20 @@ Descriptions are updated as new logic is added or stubs are replaced.
 1. `shapes.part0.layout.js`
 2. `shapes.part1.sidebar.js`
 3. `shapes.part2a.konva.js`
-4. `shapes.part3.settings.js`
+4. `shapes.part2b.multiselect.js`
+5. `shapes.part3.settings.js`
 
 ---
 
 ## Change Log
 
 - **2025-09-10**:  
-  - Updated PART 2A to reflect restoration of full multi-select, bounding box, drag, and highlight logic.
+  - Split multi-select, bounding box, group drag, lock UI, and related logic into new PART 2B (`shapes.part2b.multiselect.js`).
+  - Updated PART 2A description: now only canvas/image/single-shape creation/selection logic.
+  - Updated integration/load order.
   - Clarified current/planned responsibilities for Sidebar and Settings panels.
   - Confirmed modular structure matches delivered code and legacy feature parity.
 
 ---
 
 *Update this index whenever a part file is added, removed, renamed, or its description/role changes.*
-
