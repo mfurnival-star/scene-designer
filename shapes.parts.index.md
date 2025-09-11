@@ -6,8 +6,17 @@ Descriptions are updated as new logic is added or stubs are replaced.
 
 ---
 
-### **PART 0: Golden Layout Bootstrapping & Panel Registration**
-- **Filename:** `shapes.part0.layout.js`
+## ⛔️ **Naming Convention Update (2025-09-11):**
+
+- **All modular part files must now use an explicit "lettered" suffix (`a`, `b`, etc.) after the numeric part.**
+  - Example: `shapes.part0a.layout.js`, `shapes.part0b.handlers.js`, ..., `shapes.part2a.konva.js`
+- **There must never be a part with just a number (e.g., `part3.js`)—use `part3a`, `part3b`, etc.**
+- **This avoids ordering bugs and allows unlimited insertion of new subparts.**
+
+---
+
+### **PART 0A: Golden Layout Bootstrapping & Panel Registration**
+- **Filename:** `shapes.part0a.layout.js`
 - **Responsibility:**  
   - Initializes Golden Layout with three panels (Sidebar, Canvas, Settings).
   - Registers panel components and placeholder logic.
@@ -22,12 +31,12 @@ Descriptions are updated as new logic is added or stubs are replaced.
   - Attaches all toolbar and global event handlers after Golden Layout and panels are ready.
   - Centralizes event handler logic for maintainability.
   - Ensures handlers are attached only after the DOM is fully constructed (including dynamically generated panels).
-  - Should be loaded/concatenated immediately after `shapes.part0.layout.js`.
+  - Should be loaded/concatenated immediately after `shapes.part0a.layout.js`.
 
 ---
 
-### **PART 1: SidebarPanel Logic**
-- **Filename:** `shapes.part1.sidebar.js`
+### **PART 1A: SidebarPanel Logic**
+- **Filename:** `shapes.part1a.sidebar.js`
 - **Responsibility:**  
   - Implements the content and UI logic for the Sidebar panel (shape table/list).
   - Current: Placeholder/hello world.
@@ -58,31 +67,34 @@ Descriptions are updated as new logic is added or stubs are replaced.
 
 ---
 
-### **PART 3: SettingsPanel Logic**
-- **Filename:** `shapes.part3.settings.js`
+### **PART 3A: SettingsPanel Logic**
+- **Filename:** `shapes.part3a.settings.js`
 - **Responsibility:**  
   - Implements the content and UI for the Settings panel.
-  - Current: Placeholder/hello world.
+  - Current: Minimal log level setting.
   - **Planned:** Scene name, logic selector, color/tolerance, export, etc.
 
 ---
 
 ## Integration/Load Order
 
-1. `shapes.part0.layout.js`
+1. `shapes.part0a.layout.js`
 2. `shapes.part0b.handlers.js`
-3. `shapes.part1.sidebar.js`
+3. `shapes.part1a.sidebar.js`
 4. `shapes.part2a.konva.js`
 5. `shapes.part2b.multiselect.js`
-6. `shapes.part3.settings.js`
+6. `shapes.part3a.settings.js`
 
 ---
 
 ## Change Log
 
 - **2025-09-11**:  
-  - Added PART 0B (`shapes.part0b.handlers.js`) for centralized UI event handler attachment, to be loaded after layout and before logic parts.
-  - Updated integration/load order accordingly.
+  - **Naming Convention Update:**  
+    - All modular part files must now use explicit letter suffixes (`a`, `b`, etc.) after the part number.
+    - There is never a part with just the number.
+    - Example: `shapes.part0a.layout.js`, `shapes.part0b.handlers.js`, etc.
+  - Updated all filenames and index entries to enforce this convention.
 
 - **2025-09-10**:  
   - Split multi-select, bounding box, group drag, lock UI, and related logic into new PART 2B (`shapes.part2b.multiselect.js`).
@@ -94,4 +106,3 @@ Descriptions are updated as new logic is added or stubs are replaced.
 ---
 
 *Update this index whenever a part file is added, removed, renamed, or its description/role changes.*
-
