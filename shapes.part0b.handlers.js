@@ -1,105 +1,224 @@
-// COPILOT_PART_0B: 2025-09-11T14:15:00Z
+// COPILOT_PART_0: 2025-09-11T14:35:00Z
 /*********************************************************
- * PART 0B: UI Event Handler Attachment
- * ----------------------------------------
- * Attaches all toolbar and global event handlers after Golden Layout and panels are ready.
- * Ensures handlers are wired only after the DOM is fully constructed (including Golden Layout panels).
- * All event handler logic is centralized here for maintainability.
- * - Should be loaded/concatenated immediately after shapes.part0.layout.js.
+ * PART 0: Golden Layout Bootstrapping & Panel Registration
+ * - Always enables at least ERROR level logging (even if settings panel is missing)
+ * - Supports optional remote log streaming via window._externalLogStream
+ * - Initializes Golden Layout with three panels (Sidebar, Canvas, Settings).
+ * - Registers panel components and placeholder logic.
+ * - Handles show/hide logic for Settings panel and exposes `myLayout` for debugging.
+ * - Integration: Requires <div id="main-layout"></div> in index.html.
  *********************************************************/
 
-(function() {
-  // This function will be called after Golden Layout and all panel DOMs are ready.
-  function attachToolbarHandlers() {
-    // --- Add Shape ---
-    const addBtn = document.getElementById("newBtn");
-    if (addBtn) {
-      addBtn.onclick = function(e) {
-        e.preventDefault();
-        // Use the exported addShapeFromToolbar if available
-        if (window._sceneDesigner && typeof window._sceneDesigner.addShapeFromToolbar === "function") {
-          window._sceneDesigner.addShapeFromToolbar();
-        } else if (window._sceneDesigner && typeof window._sceneDesigner.makeReticlePointShape === "function") {
-          // fallback: always add a point if generic addShapeFromToolbar is not defined
-          window._sceneDesigner.makeReticlePointShape(100, 100);
-        } else {
-          alert("Shape creation function not found (modular code error)");
-        }
-      };
-    }
+/*************************************
+ * Logging helper with log levels (ALWAYS ENABLE ERROR)
+ * (Injected at top for easier debugging when settings panel is not available)
+ *************************************/
+window.LOG_LEVELS = window.LOG_LEVELS || { OFF: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5 };
 
-    // --- Duplicate ---
-    const duplicateBtn = document.getElementById("duplicateBtn");
-    if (duplicateBtn) {
-      duplicateBtn.onclick = function(e) {
-        e.preventDefault();
-        // Placeholder for future logic or custom handler.
-      };
-    }
+// Centralized settings registry (to be used by settings panel and log system)
+window._settingsRegistry = window._settingsRegistry || [
+  {
+    key: "DEBUG_LOG_LEVEL",
+    label: "Debug: Log Level",
+    type: "select",
+    options: [
+      {value: "OFF", label: "Off"},
+      {value: "ERROR", label: "Error"},
+      {value: "WARN", label: "Warning"},
+      {value: "INFO", label: "Info"},
+      {value: "DEBUG", label: "Debug"},
+      {value: "TRACE", label: "Trace (very verbose)"}
+    ],
+    default: "ERROR"
+  }
+];
 
-    // --- Delete ---
-    const deleteBtn = document.getElementById("deleteBtn");
-    if (deleteBtn) {
-      deleteBtn.onclick = function(e) {
-        e.preventDefault();
-        // Placeholder for future logic or custom handler.
-      };
-    }
+// Minimal settings backing store
+window._settings = window._settings || {};
+function getSetting(key) {
+  if (key in window._settings) return window._settings[key];
+  const reg = (window._settingsRegistry || []).find(s => s.key === key);
+  return reg && "default" in reg ? reg.default : undefined;
+}
+function setSetting(key, value) {
+  window._settings[key] = value;
+  // Update log level immediately for log()
+  if (key === "DEBUG_LOG_LEVEL") window._currentLogLevel = window.LOG_LEVELS[value] || window.LOG_LEVELS.ERROR;
+}
+window.getSetting = getSetting;
+window.setSetting = setSetting;
 
-    // --- Reset Rotation ---
-    const resetRotationBtn = document.getElementById("resetRotationBtn");
-    if (resetRotationBtn) {
-      resetRotationBtn.onclick = function(e) {
-        e.preventDefault();
-        // Placeholder for future logic or custom handler.
-      };
+// --- Robust log() system ---
+window._currentLogLevel = window.LOG_LEVELS[getSetting("DEBUG_LOG_LEVEL") || "ERROR"];
+function log(level, ...args) {
+  let curLevel = window._currentLogLevel;
+  // Allow runtime update via settings panel
+  try {
+    if (typeof window.getSetting === "function") {
+      const setLevel = window.getSetting("DEBUG_LOG_LEVEL");
+      curLevel = window.LOG_LEVELS[setLevel] !== undefined ? window.LOG_LEVELS[setLevel] : window._currentLogLevel;
+      window._currentLogLevel = curLevel;
     }
-
-    // --- Select All ---
-    const selectAllBtn = document.getElementById("selectAllBtn");
-    if (selectAllBtn) {
-      selectAllBtn.onclick = function(e) {
-        e.preventDefault();
-        if (
-          window._sceneDesigner &&
-          window._sceneDesigner._multiSelect &&
-          typeof window._sceneDesigner._multiSelect.selectAllShapes === "function"
-        ) {
-          window._sceneDesigner._multiSelect.selectAllShapes();
-        }
-      };
+  } catch (e) {}
+  const msgLevel = window.LOG_LEVELS[level];
+  if (msgLevel && curLevel >= msgLevel) {
+    console.log(`[${level}]`, ...args);
+    // Optionally stream logs for ERROR level
+    if (typeof window._externalLogStream === "function" && level === "ERROR") {
+      try {
+        window._externalLogStream(level, ...args);
+      } catch (e) {}
     }
+  }
+}
+function logEnter(fnName, ...args) {
+  log("TRACE", `>> Enter ${fnName}`, ...args);
+}
+function logExit(fnName, ...result) {
+  log("TRACE", `<< Exit ${fnName}`, ...result);
+}
 
-    // --- Lock Checkbox ---
-    const lockCheckbox = document.getElementById("lockCheckbox");
-    if (lockCheckbox) {
-      lockCheckbox.addEventListener("change", function(e) {
-        if (
-          window._sceneDesigner &&
-          window._sceneDesigner._multiSelect &&
-          typeof window._sceneDesigner._multiSelect.updateLockCheckboxUI === "function"
-        ) {
-          window._sceneDesigner._multiSelect.updateLockCheckboxUI();
+// Example: Set this function somewhere in your app to stream error logs to your server
+// window._externalLogStream = function(level, ...args) {
+//   try {
+//     fetch("https://your-server/log", {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       body: JSON.stringify({ level, args, time: Date.now() })
+//     });
+//   } catch (e) {}
+// };
+
+/*********************************************************
+ * Golden Layout Bootstrapping & Panel Registration
+ *********************************************************/
+
+(function initGoldenLayout() {
+  if (window._GL_HELLO_WORLD_INITIALIZED) return;
+  window._GL_HELLO_WORLD_INITIALIZED = true;
+
+  function doInit() {
+    try {
+      // ---- 1. Golden Layout default configuration ----
+      const layoutConfig = {
+        settings: {
+          showPopoutIcon: false,
+          showCloseIcon: false,
+          showMaximiseIcon: false,
+          hasHeaders: true
+        },
+        content: [{
+          type: "row",
+          content: [
+            {
+              type: "component",
+              componentName: "CanvasPanel",
+              title: "Canvas",
+              width: 80 // main panel on the left
+            },
+            {
+              type: "column",
+              width: 20, // right-hand side column
+              content: [
+                {
+                  type: "component",
+                  componentName: "SidebarPanel",
+                  title: "Shapes",
+                  height: 50 // top half
+                },
+                {
+                  type: "component",
+                  componentName: "SettingsPanel",
+                  title: "Settings",
+                  height: 50, // bottom half
+                  isClosable: true
+                }
+              ]
+            }
+          ]
+        }]
+      };
+
+      // ---- 2. Create and attach Golden Layout instance ----
+      const glRoot = document.getElementById("main-layout");
+      if (!glRoot) {
+        log("ERROR", "Golden Layout root #main-layout not found!");
+        return;
+      }
+      // Remove any previous children (if hot reload)
+      while (glRoot.firstChild) glRoot.removeChild(glRoot.firstChild);
+
+      const myLayout = new GoldenLayout(layoutConfig, glRoot);
+
+      // ---- 3. Register panels ----
+
+      myLayout.registerComponent("SidebarPanel", function(container, state) {
+        const div = document.createElement("div");
+        div.id = "sidebar";
+        div.style.height = "100%";
+        container.getElement().append(div);
+        if (window.buildSidebarPanel) {
+          window.buildSidebarPanel(div, container, state);
         }
       });
-    }
 
-    // --- Align Select ---
-    const alignSelect = document.getElementById("alignSelect");
-    if (alignSelect) {
-      alignSelect.onchange = function(e) {
-        // Placeholder for align logic; actual implementation may be in part2b or future part.
+      myLayout.registerComponent("CanvasPanel", function(container, state) {
+        const div = document.createElement("div");
+        div.id = "canvas-area";
+        div.style.height = "100%";
+        container.getElement().append(div);
+        if (window.buildCanvasPanel) {
+          window.buildCanvasPanel(div, container, state);
+        }
+      });
+
+      myLayout.registerComponent("SettingsPanel", function(container, state) {
+        const div = document.createElement("div");
+        div.id = "settingsPanel";
+        div.style.height = "100%";
+        container.getElement().append(div);
+        if (window.buildSettingsPanel) {
+          window.buildSettingsPanel(div, container, state);
+        }
+      });
+
+      // ---- 4. Initialize layout ----
+      myLayout.init();
+
+      // ---- 5. Settings panel show/hide ----
+      window.hideSettingsPanel = function() {
+        const settings = myLayout.root.getItemsByFilter(item => item.config && item.config.componentName === "SettingsPanel");
+        if (settings.length > 0) settings[0].remove();
       };
-    }
+      window.showSettingsPanel = function() {
+        const settings = myLayout.root.getItemsByFilter(item => item.config && item.config.componentName === "SettingsPanel");
+        if (settings.length > 0) return;
+        const row = myLayout.root.contentItems[0];
+        row.addChild({
+          type: "component",
+          componentName: "SettingsPanel",
+          title: "Settings",
+          width: 18,
+          isClosable: true
+        });
+      };
 
-    // --- Log: Handlers attached ---
-    if (window.console) {
-      console.log("[HANDLERS] Toolbar event handlers attached by shapes.part0b.handlers.js");
+      // ---- 6. Expose layout for debugging ----
+      window.myLayout = myLayout;
+
+      // ---- 7. Ready event ----
+      if (typeof window.onGoldenLayoutReady === "function") {
+        window.onGoldenLayoutReady(myLayout);
+      }
+    } catch (e) {
+      log("ERROR", "Exception in Golden Layout bootstrapping", e);
+      throw e;
     }
   }
 
-  // Register a global hook so layout can call this after DOM is ready
-  window.onGoldenLayoutReady = function() {
-    setTimeout(attachToolbarHandlers, 0);
-  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", doInit);
+  } else {
+    doInit();
+  }
 })();
