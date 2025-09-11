@@ -73,35 +73,43 @@ function logExit(fnName, ...result) {
       // ---- 1. Golden Layout default configuration ----
       const layoutConfig = {
         settings: {
-          showPopoutIcon: true,
-          showCloseIcon: true,
-          showMaximiseIcon: true,
-          hasHeaders: false
+          showPopoutIcon: false,
+          showCloseIcon: false,
+          showMaximiseIcon: false,
+          hasHeaders: true
         },
         content: [{
           type: "row",
-          content: [
-            {
-              type: "component",
-              componentName: "SidebarPanel",
-              title: "Shapes",
-              width: 28 // percent
-            },
-            {
-              type: "component",
-              componentName: "CanvasPanel",
-              title: "Canvas",
-              width: 54
-            },
-            {
-              type: "component",
-              componentName: "SettingsPanel",
-              title: "Settings",
-              width: 18,
-              isClosable: true
-            }
-          ]
-        }]
+		content: [{
+    type: "row",
+    content: [
+        {
+            type: "component",
+            componentName: "CanvasPanel",
+            title: "Canvas",
+            width: 60 // main panel on the left
+        },
+        {
+            type: "column",
+            width: 40, // right-hand side column
+            content: [
+                {
+                    type: "component",
+                    componentName: "SidebarPanel",
+                    title: "Shapes",
+                    height: 50 // top half
+                },
+                {
+                    type: "component",
+                    componentName: "SettingsPanel",
+                    title: "Settings",
+                    height: 50, // bottom half
+                    isClosable: true
+                }
+            ]
+        }
+    ]
+}]
       };
 
       // ---- 2. Create and attach Golden Layout instance ----
