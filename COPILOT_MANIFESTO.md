@@ -14,14 +14,25 @@ This file defines the working agreement between the user (`mfurnival-star`) and 
 
 ---
 
-## 2. **Modular Handling of `shapes.js` (and Related Application Logic)**
+## 2. **Explicit File List Index for Modular Parts**
 
-- The main application is split into modular part files (e.g., `shapes.part1.settings.js`, `shapes.part2a.konva.js`, etc.).
-- These files are indexed in `shapes.parts.index.md` (the index).
-- **When the user requests a code change or review for `shapes.js`:**
-  - Copilot will refer to the index and identify the relevant individual part(s).
-  - Copilot will deliver the full, complete code for the affected part file(s) only—not snippets or the concatenated `shapes.js`.
-  - This allows the user to copy and paste each part into their server and concatenate them into the full file as needed.
+- The main application (`shapes.js`) is split into modular part files (e.g., `shapes.logstream.js`, `shapes.layout.js`, etc.).
+- **The canonical order of these part files is defined by a `filelist` code block in `shapes.parts.index.md`.**
+- **All code requests, reviews, and concatenation must refer to the file order in the index’s `filelist` block.**
+- **Whenever a new part is added, removed, or reordered, the `filelist` in `shapes.parts.index.md` must be updated accordingly.**
+- **File naming is otherwise unconstrained (no numbers or letters needed). Order is determined solely by the index filelist.**
+- The `filelist` block in `shapes.parts.index.md` is always the authoritative list of files to be concatenated for `shapes.js`.
+
+**Example (the real list is always in the index):**
+```filelist
+shapes.logstream.js
+shapes.layout.js
+shapes.handlers.js
+shapes.sidebar.js
+shapes.konva.js
+shapes.multiselect.js
+shapes.settings.js
+```
 
 ---
 
@@ -31,6 +42,8 @@ This file defines the working agreement between the user (`mfurnival-star`) and 
   - New, removed, or renamed parts
   - Revised descriptions, key features, or responsibilities
   - Integration points and cross-part references, as appropriate
+- **The `filelist` block must always be kept up to date.**
+- **If the filelist is not updated, the modular build and code review process may break.**
 
 ---
 
@@ -39,14 +52,14 @@ This file defines the working agreement between the user (`mfurnival-star`) and 
 - Copilot will always provide complete files for modular parts upon request or when making changes.
 - Copilot will never provide partial snippets for modular files unless explicitly requested.
 - The index will serve as the canonical reference for modular structure and responsibilities.
-- When multiple files are being changed, Copiloy will send one per message waiting for the user to ask for the next by saying "ready" or similar
+- When multiple files are being changed, Copilot will send one per message, waiting for the user to ask for the next by saying "ready" or similar.
 
 ---
 
 ## 5. **Modular Part Identification & Versioning**
 
 - **Every modular part file delivered or updated by Copilot will include a unique marker comment at the top,**  
-  e.g. `// COPILOT_PART_2B: 2025-09-11T13:27:00Z`
+  e.g. `// COPILOT_PART_logstream: 2025-09-11T18:13:00Z`
 - This timestamp or marker is unique to each delivery so the user can confirm which version is being used after concatenation.
 
 ---

@@ -1,3 +1,35 @@
 #!/bin/bash
 
-cat $(ls -v shapes.part* | grep -v index) > shapes.js && git add . && git commit -m "Updates" && git push
+set -e
+
+# Extract file list from shapes.parts.index.md
+filelist=$(awk '/^```filelist$/{flag=1; next} /^```$/{flag=0} flag' shapes.parts.index.md)
+
+if [ -z "$filelist" ]; then
+  echo "Error: No filelist found in shapes.parts.index.md"
+  exit 1
+fi
+
+# Check that all files exist
+missing=0
+for f in $filelist; do
+  if [ ! -f "$f" ]; then
+    echo "Error: Missing file '$f'"
+    missing=1
+  fi
+done
+if [ "$missing" -eq 1 ]; then
+  exit 2
+fi
+
+# Concatenate all part files in the specified order
+cat $filelist > shapes.js
+
+# Only add/commit changed files
+git add .
+
+git diff --cached --quiet && echo "No changes to commit." && exit 0
+
+git commit -m "Build shapes.js and update parts"
+git push
+
