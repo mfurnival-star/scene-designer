@@ -85,11 +85,11 @@ function logExit(fnName, ...result) {
 			    type: "component",
 			    componentName: "CanvasPanel",
 			    title: "Canvas",
-			    width: 60 // main panel on the left
+			    width: 80 // main panel on the left
 			},
 			{
 			    type: "column",
-			    width: 40, // right-hand side column
+			    width: 20, // right-hand side column
 			    content: [
 				{
 				    type: "component",
