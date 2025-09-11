@@ -233,6 +233,96 @@
   }
   window._sceneDesigner.updateLockCheckboxUI = updateLockCheckboxUI;
 
+  // --- Centralized Selection Setter: SINGLE SOURCE OF TRUTH for all selection logic ---
+  function setSelectedShapes(shapesToSelect) {
+    const AppState = getAppState();
+    
+    // Normalize input: ensure it's an array
+    const shapesArray = Array.isArray(shapesToSelect) ? shapesToSelect : 
+                       (shapesToSelect ? [shapesToSelect] : []);
+    
+    // Clean up existing transformer
+    if (AppState.transformer) {
+      AppState.transformer.destroy();
+      AppState.transformer = null;
+    }
+    
+    // Hide selection display for current selectedShape if it's a point
+    if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection) {
+      AppState.selectedShape.showSelection(false);
+    }
+    
+    // Update selection state in AppState (SSOT)
+    AppState.selectedShapes = shapesArray;
+    AppState.selectedShape = shapesArray.length === 1 ? shapesArray[0] : null;
+    
+    // Handle single-shape selection with transformer (for rectangles and circles)
+    if (shapesArray.length === 1) {
+      const shape = shapesArray[0];
+      
+      if (shape._type === "rect") {
+        const transformer = new Konva.Transformer({
+          nodes: [shape],
+          enabledAnchors: shape.locked ? [] : [
+            "top-left", "top-center", "top-right",
+            "middle-left", "middle-right",
+            "bottom-left", "bottom-center", "bottom-right"
+          ],
+          rotateEnabled: !shape.locked
+        });
+        AppState.konvaLayer.add(transformer);
+        AppState.transformer = transformer;
+        transformer.on("transformend", () => {
+          shape.strokeWidth(1);
+          shape.width(shape.width() * shape.scaleX());
+          shape.height(shape.height() * shape.scaleY());
+          shape.scaleX(1);
+          shape.scaleY(1);
+          if (AppState.konvaLayer) AppState.konvaLayer.draw();
+        });
+      } else if (shape._type === "circle") {
+        const transformer = new Konva.Transformer({
+          nodes: [shape],
+          enabledAnchors: shape.locked ? [] : [
+            "top-left", "top-right", "bottom-left", "bottom-right"
+          ],
+          rotateEnabled: !shape.locked
+        });
+        AppState.konvaLayer.add(transformer);
+        AppState.transformer = transformer;
+        transformer.on("transformend", () => {
+          let scaleX = shape.scaleX();
+          shape.radius(shape.radius() * scaleX);
+          shape.scaleX(1);
+          shape.scaleY(1);
+          shape.strokeWidth(1);
+          if (AppState.konvaLayer) AppState.konvaLayer.draw();
+        });
+      } else if (shape._type === "point") {
+        shape.showSelection(true);
+      }
+    }
+    
+    // Trigger all UI updates consistently
+    updateLockCheckboxUI();
+    updateSelectionHighlights();
+    
+    // Update sidebar/list if available
+    if (typeof window.updateList === "function") {
+      window.updateList();
+    }
+    
+    // Update label UI if available
+    if (typeof window.updateLabelUI === "function") {
+      window.updateLabelUI();
+    }
+    
+    // Redraw the canvas
+    if (AppState.konvaLayer) {
+      AppState.konvaLayer.draw();
+    }
+  }
+
   // --- Attach/override selection logic to sync lock UI ---
   function attachSelectionOverrides() {
     const AppState = getAppState();
@@ -242,33 +332,27 @@
       AppState.selectShape = function(shape) {
         if (typeof origSelectShape === "function") origSelectShape(shape);
         updateLockCheckboxUI();
+        updateSelectionHighlights();
       };
       const origDeselectShape = AppState.deselectShape;
       AppState.deselectShape = function() {
         if (typeof origDeselectShape === "function") origDeselectShape();
         updateLockCheckboxUI();
+        updateSelectionHighlights();
       };
       AppState._multiSelectOverridesApplied = true;
     }
   }
 
-  // --- Select All logic: **ONLY the modular app state is used as the single source of truth!**
+  // --- Select All logic: Uses centralized setSelectedShapes for consistent UI updates ---
   function selectAllShapes() {
     const AppState = getAppState();
     if (AppState.shapes && AppState.shapes.length > 0) {
-      AppState.selectedShapes = AppState.shapes.slice();
-      AppState.selectedShape = null;
-      // Remove transformer if present
-      if (AppState.transformer) {
-        AppState.transformer.destroy();
-        AppState.transformer = null;
-      }
-      // UI updates (add more as your UI grows)
-      updateLockCheckboxUI();
-      updateSelectionHighlights();
-      // If you add a sidebar table, trigger its update here:
-      if (typeof window.updateList === "function") window.updateList();
-      if (AppState.konvaLayer) AppState.konvaLayer.draw();
+      // Use the centralized setter to ensure all UI updates correctly
+      setSelectedShapes(AppState.shapes.slice());
+    } else {
+      // Handle empty case by deselecting all
+      setSelectedShapes([]);
     }
   }
 
@@ -297,6 +381,7 @@
             if (AppState.setShapeLocked) AppState.setShapeLocked(s, newLocked);
             else s.locked = !!newLocked;
           });
+          // Use centralized UI update calls
           updateLockCheckboxUI();
           updateSelectionHighlights();
           if (typeof window.updateList === "function") window.updateList();
@@ -317,7 +402,8 @@
       onMultiDragEnd,
       updateDebugMultiDragBox,
       clearDebugMultiDragBox,
-      selectAllShapes // Export for external use if needed
+      selectAllShapes, // Export for external use if needed
+      setSelectedShapes // Export the centralized selection setter
     };
   }
 
