@@ -7,6 +7,7 @@
  * - Handles single-shape selection and transformer UI.
  * - Exports key hooks for PART 2B (multi-select, drag, highlights).
  * - All state is kept in window._sceneDesigner (SSOT).
+ * - UPDATED: Multi-select group drag triggers PART 2B handlers.
  *********************************************************/
 
 (function () {
@@ -189,6 +190,40 @@
     while (node.firstChild) node.removeChild(node.firstChild);
   }
 
+  // --- MULTI-DRAG HOOKUP (NEW) ---
+  function attachMultiDragHandler(shape) {
+    shape.on("dragstart.multiselect", function(evt) {
+      const AppState = window._sceneDesigner;
+      // Only intercept if multiple shapes are selected, and this shape is among them
+      if (
+        AppState.selectedShapes &&
+        AppState.selectedShapes.length > 1 &&
+        AppState.selectedShapes.includes(shape) &&
+        AppState._multiSelect &&
+        typeof AppState._multiSelect.onMultiDragMove === "function"
+      ) {
+        // If any selected shape is locked, abort drag attempt and give feedback
+        if (AppState.selectedShapes.some(s => s.locked)) {
+          if (AppState._multiSelect.showLockedHighlightForShapes) {
+            AppState._multiSelect.showLockedHighlightForShapes(AppState.selectedShapes.filter(s => s.locked));
+          }
+          evt.target.stopDrag();
+          return;
+        }
+        // Cancel native drag and start group drag
+        evt.target.stopDrag();
+        AppState.multiDrag = {
+          moving: true,
+          dragOrigin: AppState.konvaStage.getPointerPosition(),
+          origPositions: AppState.selectedShapes.map(s => ({ shape: s, x: s.x(), y: s.y() }))
+        };
+        AppState.konvaStage.on('mousemove.multidrag touchmove.multidrag', AppState._multiSelect.onMultiDragMove);
+        AppState.konvaStage.on('mouseup.multidrag touchend.multidrag', AppState._multiSelect.onMultiDragEnd);
+        if (AppState._multiSelect.updateDebugMultiDragBox) AppState._multiSelect.updateDebugMultiDragBox();
+      }
+    });
+  }
+
   window.buildCanvasPanel = async function (rootDiv, container, state) {
     clearNode(rootDiv);
     const outer = document.createElement("div");
@@ -251,6 +286,8 @@
       // Re-add all shapes from AppState.shapes
       for (const shape of AppState.shapes) {
         layer.add(shape);
+        // --- Attach multi-drag handler to each shape ---
+        attachMultiDragHandler(shape);
       }
       layer.batchDraw();
 
@@ -327,6 +364,7 @@
       const point = makeReticlePointShape(x, y, color);
       AppState.shapes.push(point);
       AppState.konvaLayer.add(point);
+      attachMultiDragHandler(point);
       AppState.konvaLayer.batchDraw();
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
@@ -357,6 +395,7 @@
       const rect = makeRectShape(x, y, defaultW, defaultH, stroke, fill);
       AppState.shapes.push(rect);
       AppState.konvaLayer.add(rect);
+      attachMultiDragHandler(rect);
       AppState.konvaLayer.batchDraw();
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
@@ -410,6 +449,7 @@
       const circle = makeCircleShape(x, y, defaultRadius, stroke, fill);
       AppState.shapes.push(circle);
       AppState.konvaLayer.add(circle);
+      attachMultiDragHandler(circle);
       AppState.konvaLayer.batchDraw();
       if (AppState.selectedShape && typeof AppState.selectedShape.showSelection === "function")
         AppState.selectedShape.showSelection(false);
@@ -447,12 +487,7 @@
       else alert("Only point, rectangle, and circle shapes are implemented in this build.");
     }
 
-    setTimeout(() => {
-      const addBtn = document.getElementById("newBtn");
-      if (addBtn) {
-        addBtn.onclick = addShapeFromToolbar;
-      }
-    }, 0);
+    // REMOVE old handler wiring. Handlers now in part0b.handlers.js
 
     // Export hooks for PART 2B
     AppState.makeReticlePointShape = makeReticlePointShape;
