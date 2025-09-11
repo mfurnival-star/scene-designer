@@ -25,10 +25,9 @@ fi
 # Concatenate all part files in the specified order
 cat $filelist > shapes.js
 
-# Only add/commit changed files
 git add .
 
-git diff --cached --quiet && echo "No changes to commit." && exit 0
+#git diff --cached --quiet && echo "No changes to commit." && exit 0
 
 git commit -m "Build shapes.js and update parts"
 git push
