@@ -1,49 +1,103 @@
-// COPILOT_PART_logserver: 2025-09-11T18:24:32Z
+// COPILOT_PART_logserver: 2025-09-11T21:14:00Z
 /*********************************************************
  * Log Server / Streaming Integration Module
  * -----------------------------------------
  * Provides a hook for streaming log/error messages to an external server
  * or backend endpoint. Intended to be loaded FIRST in modular shapes.js.
  * - Exposes window._externalLogStream(level, ...args)
- * - By default, it logs to console. To enable real streaming, set
- *   window._externalLogServerURL = "https://your-server/endpoint"
+ * - Destination controlled by LOG_OUTPUT_DEST setting:
+ *     "console" (default): logs to console only
+ *     "server": logs to server only (if URL set)
+ *     "both": logs to both
+ * - To enable server logging, set window._externalLogServerURL, or
+ *   use Settings panel (future).
  * - Future: Supports batching, retries, queueing, and log level config.
  *********************************************************/
 
 // (Optionally set this before loading shapes.js)
-window._externalLogServerURL = window._externalLogServerURL || ""; // e.g. "https://your-backend.example.com/log"
+window._externalLogServerURL = window._externalLogServerURL || ""; // e.g. "http://143.47.247.184/log"
 
+// LOG_OUTPUT_DEST: "console" | "server" | "both"
+window._settingsRegistry = window._settingsRegistry || [];
+if (!window._settingsRegistry.some(s => s.key === "LOG_OUTPUT_DEST")) {
+  window._settingsRegistry.push({
+    key: "LOG_OUTPUT_DEST",
+    label: "Log Output Destination",
+    type: "select",
+    options: [
+      { value: "console", label: "Console Only" },
+      { value: "server", label: "Server Only" },
+      { value: "both", label: "Both" }
+    ],
+    default: "console"
+  });
+}
+
+// Default if not yet set
+window._settings = window._settings || {};
+if (!window._settings.LOG_OUTPUT_DEST) {
+  window._settings.LOG_OUTPUT_DEST = "console";
+}
+
+// Core streaming logic
 window._externalLogStream = async function(level, ...args) {
-  // If not configured, just echo to console
-  if (!window._externalLogServerURL) {
+  // Read current setting
+  let dest = (typeof window.getSetting === "function")
+    ? window.getSetting("LOG_OUTPUT_DEST")
+    : (window._settings && window._settings.LOG_OUTPUT_DEST) || "console";
+
+  // Fallback for unknown value
+  if (!["console", "server", "both"].includes(dest)) dest = "console";
+
+  // Helper: Send to server if allowed and configured
+  async function sendToServer() {
+    if (!window._externalLogServerURL) return;
+    try {
+      const payload = {
+        level,
+        message: args.map(a =>
+          (typeof a === "object" ? JSON.stringify(a) : String(a))
+        ).join(" "),
+        timestamp: (new Date()).toISOString(),
+        page: location.pathname,
+        userAgent: navigator.userAgent
+      };
+      await fetch(window._externalLogServerURL, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      // If streaming fails, log locally as fallback
+      if (dest === "server") {
+        // If server-only, show error in console
+        console.error("[LogStream][FAIL]", level, ...args, e);
+      }
+    }
+  }
+
+  // Helper: Send to console
+  function sendToConsole() {
     if (window.LOG_LEVELS) {
+      // Show warn/error to console.warn, others to console.log
       if (window.LOG_LEVELS[level] <= window.LOG_LEVELS.WARN) {
-        // Only warn/error by default if not configured
         console.warn("[LogStream]", level, ...args);
+      } else {
+        console.log("[LogStream]", level, ...args);
       }
     } else {
       console.log("[LogStream]", level, ...args);
     }
-    return;
   }
-  try {
-    const payload = {
-      level,
-      message: args.map(a =>
-        (typeof a === "object" ? JSON.stringify(a) : String(a))
-      ).join(" "),
-      timestamp: (new Date()).toISOString(),
-      page: location.pathname,
-      userAgent: navigator.userAgent
-    };
-    await fetch(window._externalLogServerURL, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(payload)
-    });
-  } catch (e) {
-    // If streaming fails, log locally as fallback
-    console.error("[LogStream][FAIL]", level, ...args, e);
+
+  // Route as per setting
+  if (dest === "console") {
+    sendToConsole();
+  } else if (dest === "server") {
+    await sendToServer();
+  } else if (dest === "both") {
+    sendToConsole();
+    await sendToServer();
   }
 };
 

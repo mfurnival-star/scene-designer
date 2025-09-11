@@ -1,9 +1,9 @@
-// COPILOT_PART_2B: 2025-09-11T15:08:00Z
+// COPILOT_PART_multiselect: 2025-09-11T21:25:00Z
 /*********************************************************
- * PART 2B: Multi-Select, Group Drag, Highlights, Lock UI
+ * Multi-Select, Group Drag, Highlights, Lock UI
  * ------------------------------------------------------
  * Handles all multi-selection, group drag, bounding box, and lock UI logic.
- * Depends on PART 2A (CanvasPanel) for shape creation and single selection.
+ * Depends on shapes.konva.js for shape creation and single selection.
  * - Multi-select: Select All, marquee/box selection, multi-selection highlights.
  * - Multi-select drag, clamped group bounding box (with rotation/scale).
  * - Orange debug bounding box during group drag.
@@ -13,7 +13,6 @@
  *********************************************************/
 
 (function () {
-  // Use shared AppState from PART 2A as the SINGLE SOURCE OF TRUTH!
   function getAppState() {
     return window._sceneDesigner || {};
   }
@@ -64,9 +63,7 @@
     updateLockCheckboxUI();
     updateSelectionHighlights();
     if (AppState.konvaLayer) AppState.konvaLayer.draw();
-    // If you have a sidebar table/list, update it here:
     if (typeof window.updateList === "function") window.updateList();
-    // If you have label UI, update it here:
     if (typeof window.updateLabelUI === "function") window.updateLabelUI();
   }
 
@@ -285,7 +282,6 @@
   // --- Attach/override selection logic to sync lock UI ---
   function attachSelectionOverrides() {
     const AppState = getAppState();
-    // Only override if not already wrapped
     if (!AppState._multiSelectOverridesApplied) {
       const origSelectShape = AppState.selectShape;
       AppState.selectShape = function(shape) {
@@ -301,7 +297,7 @@
     }
   }
 
-  // --- Select All logic: NOW uses setSelectedShapes() SSOT setter ---
+  // --- Select All logic: uses setSelectedShapes() SSOT setter ---
   function selectAllShapes() {
     const AppState = getAppState();
     if (AppState.shapes && AppState.shapes.length > 0) {
@@ -343,7 +339,7 @@
     });
   }
 
-  // --- Export handlers for event attachment in PART 2A ---
+  // --- Export handlers for event attachment in shapes.konva.js ---
   function exportMultiSelectAPI() {
     const AppState = getAppState();
     AppState._multiSelect = {
@@ -355,12 +351,12 @@
       onMultiDragEnd,
       updateDebugMultiDragBox,
       clearDebugMultiDragBox,
-      selectAllShapes // Export for external use if needed
+      selectAllShapes
     };
   }
 
   // --- Deferred Initialization ---
-  function initPart2B() {
+  function initMultiselect() {
     attachSelectionOverrides();
     attachSelectAllHook();
     attachLockCheckboxHook();
@@ -368,8 +364,8 @@
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initPart2B);
+    document.addEventListener("DOMContentLoaded", initMultiselect);
   } else {
-    setTimeout(initPart2B, 0);
+    setTimeout(initMultiselect, 0);
   }
 })();

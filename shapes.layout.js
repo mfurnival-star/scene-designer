@@ -1,6 +1,6 @@
-// COPILOT_PART_0A: 2025-09-11T15:01:30Z
+// COPILOT_PART_layout: 2025-09-11T21:17:00Z
 /*********************************************************
- * PART 0A: Golden Layout Bootstrapping & Panel Registration
+ * Golden Layout Bootstrapping & Panel Registration
  * - Defines logging system and settings registry
  * - Initializes Golden Layout with Sidebar, Canvas, Settings panels
  * - Registers panel builder hooks
@@ -28,6 +28,17 @@ window._settingsRegistry = window._settingsRegistry || [
       { value: "TRACE", label: "Trace (very verbose)" }
     ],
     default: "ERROR"
+  },
+  {
+    key: "LOG_OUTPUT_DEST",
+    label: "Log Output Destination",
+    type: "select",
+    options: [
+      { value: "console", label: "Console Only" },
+      { value: "server", label: "Server Only" },
+      { value: "both", label: "Both" }
+    ],
+    default: "console"
   }
 ];
 
@@ -62,7 +73,7 @@ function log(level, ...args) {
   if (msgLevel && curLevel >= msgLevel) {
     console.log(`[${level}]`, ...args);
     // Optionally stream logs for ERROR level
-    if (typeof window._externalLogStream === "function" && level === "ERROR") {
+    if (typeof window._externalLogStream === "function") {
       try {
         window._externalLogStream(level, ...args);
       } catch (e) {}

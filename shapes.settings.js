@@ -1,10 +1,11 @@
-// COPILOT_PART_3A: 2025-09-11T15:16:00Z
+// COPILOT_PART_settings: 2025-09-11T21:27:00Z
 /*********************************************************
- * PART 3A: SettingsPanel Logic
+ * SettingsPanel Logic (modular)
  * ----------------------------------------
  * Implements the content and UI for the Settings panel.
- * Now provides a working "Log Level" selector wired to window.setSetting/getSetting,
- * affecting runtime logging verbosity for the modular log() system.
+ * - Provides "Log Level" and "Log Output Destination" selectors.
+ * - Both are wired to window.setSetting/getSetting,
+ *   affecting runtime logging and streaming for the modular log() system.
  * - Will grow to support more settings as features expand.
  *********************************************************/
 
@@ -18,7 +19,6 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   rootDiv.appendChild(h2);
 
   // --- Log Level Setting ---
-  // Registry-driven, but minimal UI for now
   const logLevelDiv = document.createElement("div");
   logLevelDiv.className = "settings-field";
 
@@ -27,8 +27,8 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   logLabel.innerText = "Debug: Log Level";
   logLevelDiv.appendChild(logLabel);
 
-  const select = document.createElement("select");
-  select.id = "setting-DEBUG_LOG_LEVEL";
+  const logLevelSelect = document.createElement("select");
+  logLevelSelect.id = "setting-DEBUG_LOG_LEVEL";
   const levels = [
     {value: "OFF", label: "Off"},
     {value: "ERROR", label: "Error"},
@@ -41,37 +41,75 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
     const o = document.createElement("option");
     o.value = opt.value;
     o.innerText = opt.label;
-    select.appendChild(o);
+    logLevelSelect.appendChild(o);
   });
-  // Use window.getSetting if available, else default to ERROR
   let currentLevel = "ERROR";
   if (typeof window.getSetting === "function") {
     currentLevel = window.getSetting("DEBUG_LOG_LEVEL") || "ERROR";
   }
-  select.value = currentLevel;
+  logLevelSelect.value = currentLevel;
 
-  select.addEventListener("change", function() {
+  logLevelSelect.addEventListener("change", function() {
     if (typeof window.setSetting === "function") {
-      window.setSetting("DEBUG_LOG_LEVEL", select.value);
+      window.setSetting("DEBUG_LOG_LEVEL", logLevelSelect.value);
     } else {
-      // fallback for pre-settings systems
       window._settings = window._settings || {};
-      window._settings["DEBUG_LOG_LEVEL"] = select.value;
+      window._settings["DEBUG_LOG_LEVEL"] = logLevelSelect.value;
     }
-    // Optionally force log level update immediately
     if (window.LOG_LEVELS && window._currentLogLevel !== undefined) {
-      window._currentLogLevel = window.LOG_LEVELS[select.value] || window.LOG_LEVELS.ERROR;
+      window._currentLogLevel = window.LOG_LEVELS[logLevelSelect.value] || window.LOG_LEVELS.ERROR;
     }
     if (window.console && typeof window.console.log === "function") {
-      window.console.log(`[SETTINGS] Log level set to ${select.value}`);
+      window.console.log(`[SETTINGS] Log level set to ${logLevelSelect.value}`);
     }
   });
 
-  logLevelDiv.appendChild(select);
+  logLevelDiv.appendChild(logLevelSelect);
   rootDiv.appendChild(logLevelDiv);
 
+  // --- Log Output Destination Setting ---
+  const logDestDiv = document.createElement("div");
+  logDestDiv.className = "settings-field";
+  const destLabel = document.createElement("label");
+  destLabel.setAttribute("for", "setting-LOG_OUTPUT_DEST");
+  destLabel.innerText = "Log Output Destination";
+  logDestDiv.appendChild(destLabel);
+
+  const logDestSelect = document.createElement("select");
+  logDestSelect.id = "setting-LOG_OUTPUT_DEST";
+  const destOptions = [
+    { value: "console", label: "Console Only" },
+    { value: "server", label: "Server Only" },
+    { value: "both", label: "Both" }
+  ];
+  destOptions.forEach(opt => {
+    const o = document.createElement("option");
+    o.value = opt.value;
+    o.innerText = opt.label;
+    logDestSelect.appendChild(o);
+  });
+  let currentDest = "console";
+  if (typeof window.getSetting === "function") {
+    currentDest = window.getSetting("LOG_OUTPUT_DEST") || "console";
+  }
+  logDestSelect.value = currentDest;
+
+  logDestSelect.addEventListener("change", function() {
+    if (typeof window.setSetting === "function") {
+      window.setSetting("LOG_OUTPUT_DEST", logDestSelect.value);
+    } else {
+      window._settings = window._settings || {};
+      window._settings["LOG_OUTPUT_DEST"] = logDestSelect.value;
+    }
+    if (window.console && typeof window.console.log === "function") {
+      window.console.log(`[SETTINGS] Log output destination set to ${logDestSelect.value}`);
+    }
+  });
+
+  logDestDiv.appendChild(logDestSelect);
+  rootDiv.appendChild(logDestDiv);
+
   // ---- Future: Add more settings here from registry ----
-  // e.g. scene name, AND/OR logic, export options, etc.
 
   // Minimal styling for clarity
   rootDiv.style.fontFamily = "Segoe UI, Arial, sans-serif";

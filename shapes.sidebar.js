@@ -1,10 +1,10 @@
+// COPILOT_PART_sidebar: 2025-09-11T21:21:00Z
 /*********************************************************
- * PART 1A: SidebarPanel Logic
+ * Sidebar Panel Logic
  * ----------------------------------------
  * Implements the content and UI logic for the Sidebar panel (shape table/list).
  * Current: Placeholder/hello world.
  * Planned: Will show the table of annotation shapes and handle selection, lock, delete, etc.
- * COPILOT_PART_1A: 2025-09-11T15:06:00Z
  *********************************************************/
 
 window.buildSidebarPanel = function(rootDiv, container, state) {

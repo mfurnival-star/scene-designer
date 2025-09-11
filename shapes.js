@@ -1,49 +1,103 @@
-// COPILOT_PART_logserver: 2025-09-11T18:24:32Z
+// COPILOT_PART_logserver: 2025-09-11T21:14:00Z
 /*********************************************************
  * Log Server / Streaming Integration Module
  * -----------------------------------------
  * Provides a hook for streaming log/error messages to an external server
  * or backend endpoint. Intended to be loaded FIRST in modular shapes.js.
  * - Exposes window._externalLogStream(level, ...args)
- * - By default, it logs to console. To enable real streaming, set
- *   window._externalLogServerURL = "https://your-server/endpoint"
+ * - Destination controlled by LOG_OUTPUT_DEST setting:
+ *     "console" (default): logs to console only
+ *     "server": logs to server only (if URL set)
+ *     "both": logs to both
+ * - To enable server logging, set window._externalLogServerURL, or
+ *   use Settings panel (future).
  * - Future: Supports batching, retries, queueing, and log level config.
  *********************************************************/
 
 // (Optionally set this before loading shapes.js)
-window._externalLogServerURL = window._externalLogServerURL || ""; // e.g. "https://your-backend.example.com/log"
+window._externalLogServerURL = window._externalLogServerURL || ""; // e.g. "http://143.47.247.184/log"
 
+// LOG_OUTPUT_DEST: "console" | "server" | "both"
+window._settingsRegistry = window._settingsRegistry || [];
+if (!window._settingsRegistry.some(s => s.key === "LOG_OUTPUT_DEST")) {
+  window._settingsRegistry.push({
+    key: "LOG_OUTPUT_DEST",
+    label: "Log Output Destination",
+    type: "select",
+    options: [
+      { value: "console", label: "Console Only" },
+      { value: "server", label: "Server Only" },
+      { value: "both", label: "Both" }
+    ],
+    default: "console"
+  });
+}
+
+// Default if not yet set
+window._settings = window._settings || {};
+if (!window._settings.LOG_OUTPUT_DEST) {
+  window._settings.LOG_OUTPUT_DEST = "console";
+}
+
+// Core streaming logic
 window._externalLogStream = async function(level, ...args) {
-  // If not configured, just echo to console
-  if (!window._externalLogServerURL) {
+  // Read current setting
+  let dest = (typeof window.getSetting === "function")
+    ? window.getSetting("LOG_OUTPUT_DEST")
+    : (window._settings && window._settings.LOG_OUTPUT_DEST) || "console";
+
+  // Fallback for unknown value
+  if (!["console", "server", "both"].includes(dest)) dest = "console";
+
+  // Helper: Send to server if allowed and configured
+  async function sendToServer() {
+    if (!window._externalLogServerURL) return;
+    try {
+      const payload = {
+        level,
+        message: args.map(a =>
+          (typeof a === "object" ? JSON.stringify(a) : String(a))
+        ).join(" "),
+        timestamp: (new Date()).toISOString(),
+        page: location.pathname,
+        userAgent: navigator.userAgent
+      };
+      await fetch(window._externalLogServerURL, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      // If streaming fails, log locally as fallback
+      if (dest === "server") {
+        // If server-only, show error in console
+        console.error("[LogStream][FAIL]", level, ...args, e);
+      }
+    }
+  }
+
+  // Helper: Send to console
+  function sendToConsole() {
     if (window.LOG_LEVELS) {
+      // Show warn/error to console.warn, others to console.log
       if (window.LOG_LEVELS[level] <= window.LOG_LEVELS.WARN) {
-        // Only warn/error by default if not configured
         console.warn("[LogStream]", level, ...args);
+      } else {
+        console.log("[LogStream]", level, ...args);
       }
     } else {
       console.log("[LogStream]", level, ...args);
     }
-    return;
   }
-  try {
-    const payload = {
-      level,
-      message: args.map(a =>
-        (typeof a === "object" ? JSON.stringify(a) : String(a))
-      ).join(" "),
-      timestamp: (new Date()).toISOString(),
-      page: location.pathname,
-      userAgent: navigator.userAgent
-    };
-    await fetch(window._externalLogServerURL, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(payload)
-    });
-  } catch (e) {
-    // If streaming fails, log locally as fallback
-    console.error("[LogStream][FAIL]", level, ...args, e);
+
+  // Route as per setting
+  if (dest === "console") {
+    sendToConsole();
+  } else if (dest === "server") {
+    await sendToServer();
+  } else if (dest === "both") {
+    sendToConsole();
+    await sendToServer();
   }
 };
 
@@ -55,9 +109,9 @@ if (!window._logserverTested) {
   window._logserverTested = true;
   window._externalLogStream("INFO", "LogServer module loaded and ready.");
 }
-// COPILOT_PART_0A: 2025-09-11T15:01:30Z
+// COPILOT_PART_layout: 2025-09-11T21:17:00Z
 /*********************************************************
- * PART 0A: Golden Layout Bootstrapping & Panel Registration
+ * Golden Layout Bootstrapping & Panel Registration
  * - Defines logging system and settings registry
  * - Initializes Golden Layout with Sidebar, Canvas, Settings panels
  * - Registers panel builder hooks
@@ -85,6 +139,17 @@ window._settingsRegistry = window._settingsRegistry || [
       { value: "TRACE", label: "Trace (very verbose)" }
     ],
     default: "ERROR"
+  },
+  {
+    key: "LOG_OUTPUT_DEST",
+    label: "Log Output Destination",
+    type: "select",
+    options: [
+      { value: "console", label: "Console Only" },
+      { value: "server", label: "Server Only" },
+      { value: "both", label: "Both" }
+    ],
+    default: "console"
   }
 ];
 
@@ -119,7 +184,7 @@ function log(level, ...args) {
   if (msgLevel && curLevel >= msgLevel) {
     console.log(`[${level}]`, ...args);
     // Optionally stream logs for ERROR level
-    if (typeof window._externalLogStream === "function" && level === "ERROR") {
+    if (typeof window._externalLogStream === "function") {
       try {
         window._externalLogStream(level, ...args);
       } catch (e) {}
@@ -276,33 +341,33 @@ function logExit(fnName, ...result) {
   }
   logExit("initGoldenLayout");
 })();
-// COPILOT_PART_0B: 2025-09-11T15:05:00Z
+// COPILOT_PART_handlers: 2025-09-11T21:19:00Z
 /*********************************************************
- * PART 0B: UI Event Handler Attachment
+ * UI Event Handler Attachment
  * ------------------------------------------------------
  * Attaches all toolbar and global event handlers after Golden Layout and panels are ready.
  * Centralizes event handler logic for maintainability.
  * Ensures handlers are attached only after the DOM is fully constructed
  * (including dynamically generated panels).
- * Should be loaded/concatenated immediately after shapes.part0a.layout.js.
+ * Should be loaded/concatenated immediately after shapes.layout.js.
  *********************************************************/
 
-// Logging helpers from part0a (assumed loaded before this part)
-function part0b_log(level, ...args) { if (typeof log === "function") log(level, ...args); }
-function part0b_logEnter(fn, ...a) { part0b_log("TRACE", `>> Enter ${fn}`, ...a); }
-function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); }
+// Logging helpers from layout part (assumed loaded before this part)
+function handlers_log(level, ...args) { if (typeof log === "function") log(level, ...args); }
+function handlers_logEnter(fn, ...a) { handlers_log("TRACE", `>> Enter ${fn}`, ...a); }
+function handlers_logExit(fn, ...r) { handlers_log("TRACE", `<< Exit ${fn}`, ...r); }
 
 (function attachToolbarHandlers() {
-  part0b_logEnter("attachToolbarHandlers");
+  handlers_logEnter("attachToolbarHandlers");
   // Only attach after DOM and Golden Layout panels are ready
   function safeAttach() {
-    part0b_logEnter("safeAttach");
+    handlers_logEnter("safeAttach");
 
     // Wait for window._sceneDesigner (created by CanvasPanel)
     if (!window._sceneDesigner || typeof window._sceneDesigner.addShapeFromToolbar !== "function") {
-      part0b_log("DEBUG", "Waiting for _sceneDesigner.addShapeFromToolbar...");
+      handlers_log("DEBUG", "Waiting for _sceneDesigner.addShapeFromToolbar...");
       setTimeout(safeAttach, 120);
-      part0b_logExit("safeAttach (not ready)");
+      handlers_logExit("safeAttach (not ready)");
       return;
     }
 
@@ -319,27 +384,27 @@ function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); 
 
     // Defensive: Ensure all exist
     if (!newBtn || !shapeTypeSelect) {
-      part0b_log("ERROR", "Toolbar controls not found");
-      part0b_logExit("safeAttach (missing controls)");
+      handlers_log("ERROR", "Toolbar controls not found");
+      handlers_logExit("safeAttach (missing controls)");
       return;
     }
 
     // ADD button
     newBtn.onclick = function (e) {
-      part0b_logEnter("newBtn.onclick", e);
+      handlers_logEnter("newBtn.onclick", e);
       if (typeof AppState.addShapeFromToolbar === "function") {
-        part0b_log("TRACE", "Add button clicked. Shape type:", shapeTypeSelect.value);
+        handlers_log("TRACE", "Add button clicked. Shape type:", shapeTypeSelect.value);
         AppState.addShapeFromToolbar();
       } else {
-        part0b_log("ERROR", "AppState.addShapeFromToolbar not defined");
+        handlers_log("ERROR", "AppState.addShapeFromToolbar not defined");
       }
-      part0b_logExit("newBtn.onclick");
+      handlers_logExit("newBtn.onclick");
     };
 
     // DUPLICATE button (placeholder, to be implemented)
     if (duplicateBtn) {
       duplicateBtn.onclick = function (e) {
-        part0b_log("TRACE", "Duplicate button clicked. TODO: implement shape duplication.");
+        handlers_log("TRACE", "Duplicate button clicked. TODO: implement shape duplication.");
         // TODO: implement duplication as a function in AppState and call here
       };
     }
@@ -347,7 +412,7 @@ function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); 
     // DELETE button (placeholder, to be implemented)
     if (deleteBtn) {
       deleteBtn.onclick = function (e) {
-        part0b_log("TRACE", "Delete button clicked. TODO: implement shape deletion.");
+        handlers_log("TRACE", "Delete button clicked. TODO: implement shape deletion.");
         // TODO: implement deletion as a function in AppState and call here
       };
     }
@@ -355,28 +420,28 @@ function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); 
     // RESET ROTATION button (placeholder, to be implemented)
     if (resetRotationBtn) {
       resetRotationBtn.onclick = function (e) {
-        part0b_log("TRACE", "Reset Rotation button clicked. TODO: implement reset rotation.");
+        handlers_log("TRACE", "Reset Rotation button clicked. TODO: implement reset rotation.");
         // TODO: implement rotation reset as a function in AppState and call here
       };
     }
 
-    // SELECT ALL button (optional: implemented in part2b.multiselect.js)
+    // SELECT ALL button (optional: implemented in shapes.multiselect.js)
     if (selectAllBtn) {
       selectAllBtn.onclick = function (e) {
-        part0b_log("TRACE", "Select All button clicked.");
+        handlers_log("TRACE", "Select All button clicked.");
         if (AppState._multiSelect && typeof AppState._multiSelect.selectAllShapes === "function") {
           AppState._multiSelect.selectAllShapes();
         } else if (Array.isArray(AppState.shapes)) {
           AppState.selectedShapes = AppState.shapes.slice();
-          part0b_log("DEBUG", "Selected all shapes (fallback)");
+          handlers_log("DEBUG", "Selected all shapes (fallback)");
         }
       };
     }
 
     // For debugging: mark handlers as attached
     window._toolbarHandlersAttached = true;
-    part0b_log("INFO", "Toolbar event handlers attached.");
-    part0b_logExit("safeAttach");
+    handlers_log("INFO", "Toolbar event handlers attached.");
+    handlers_logExit("safeAttach");
   }
 
   if (document.readyState === "loading") {
@@ -384,15 +449,15 @@ function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); 
   } else {
     setTimeout(safeAttach, 0);
   }
-  part0b_logExit("attachToolbarHandlers");
+  handlers_logExit("attachToolbarHandlers");
 })();
+// COPILOT_PART_sidebar: 2025-09-11T21:21:00Z
 /*********************************************************
- * PART 1A: SidebarPanel Logic
+ * Sidebar Panel Logic
  * ----------------------------------------
  * Implements the content and UI logic for the Sidebar panel (shape table/list).
  * Current: Placeholder/hello world.
  * Planned: Will show the table of annotation shapes and handle selection, lock, delete, etc.
- * COPILOT_PART_1A: 2025-09-11T15:06:00Z
  *********************************************************/
 
 window.buildSidebarPanel = function(rootDiv, container, state) {
@@ -412,17 +477,16 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   if (typeof logEnter === "function") logEnter("buildSidebarPanel", {rootDiv, container, state});
   if (typeof logExit === "function") logExit("buildSidebarPanel");
 };
-// COPILOT_PART_2A: 2025-09-11T14:18:00Z
+// COPILOT_PART_konva: 2025-09-11T21:23:00Z
 /*********************************************************
- * PART 2A: CanvasPanel – Image Display & Shape Creation
+ * CanvasPanel – Image Display & Shape Creation
  * ------------------------------------------------------
  * Handles Canvas setup, image loading, and single-shape creation/selection.
  * - Loads and displays the selected/uploaded image.
  * - Provides creation for "Point", "Rectangle", and "Circle" shapes.
  * - Handles single-shape selection and transformer UI.
- * - Exports key hooks for PART 2B (multi-select, drag, highlights).
+ * - Exports key hooks for shapes.multiselect.js (multi-select, drag, highlights).
  * - All state is kept in window._sceneDesigner (SSOT).
- * - UPDATED: Multi-select group drag triggers PART 2B handlers.
  *********************************************************/
 
 (function () {
@@ -902,24 +966,22 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       else alert("Only point, rectangle, and circle shapes are implemented in this build.");
     }
 
-    // REMOVE old handler wiring. Handlers now in part0b.handlers.js
-
-    // Export hooks for PART 2B and PART 0B (handler file)
+    // Export hooks for shapes.multiselect.js and shapes.handlers.js
     AppState.makeReticlePointShape = makeReticlePointShape;
     AppState.makeRectShape = makeRectShape;
     AppState.makeCircleShape = makeCircleShape;
     AppState.selectShape = selectShape;
     AppState.deselectShape = deselectShape;
     AppState.setShapeLocked = setShapeLocked;
-    AppState.addShapeFromToolbar = addShapeFromToolbar; // <-- REQUIRED FOR PART 0B HANDLERS
+    AppState.addShapeFromToolbar = addShapeFromToolbar;
   };
 })();
-// COPILOT_PART_2B: 2025-09-11T15:08:00Z
+// COPILOT_PART_multiselect: 2025-09-11T21:25:00Z
 /*********************************************************
- * PART 2B: Multi-Select, Group Drag, Highlights, Lock UI
+ * Multi-Select, Group Drag, Highlights, Lock UI
  * ------------------------------------------------------
  * Handles all multi-selection, group drag, bounding box, and lock UI logic.
- * Depends on PART 2A (CanvasPanel) for shape creation and single selection.
+ * Depends on shapes.konva.js for shape creation and single selection.
  * - Multi-select: Select All, marquee/box selection, multi-selection highlights.
  * - Multi-select drag, clamped group bounding box (with rotation/scale).
  * - Orange debug bounding box during group drag.
@@ -929,7 +991,6 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  *********************************************************/
 
 (function () {
-  // Use shared AppState from PART 2A as the SINGLE SOURCE OF TRUTH!
   function getAppState() {
     return window._sceneDesigner || {};
   }
@@ -980,9 +1041,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     updateLockCheckboxUI();
     updateSelectionHighlights();
     if (AppState.konvaLayer) AppState.konvaLayer.draw();
-    // If you have a sidebar table/list, update it here:
     if (typeof window.updateList === "function") window.updateList();
-    // If you have label UI, update it here:
     if (typeof window.updateLabelUI === "function") window.updateLabelUI();
   }
 
@@ -1201,7 +1260,6 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   // --- Attach/override selection logic to sync lock UI ---
   function attachSelectionOverrides() {
     const AppState = getAppState();
-    // Only override if not already wrapped
     if (!AppState._multiSelectOverridesApplied) {
       const origSelectShape = AppState.selectShape;
       AppState.selectShape = function(shape) {
@@ -1217,7 +1275,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     }
   }
 
-  // --- Select All logic: NOW uses setSelectedShapes() SSOT setter ---
+  // --- Select All logic: uses setSelectedShapes() SSOT setter ---
   function selectAllShapes() {
     const AppState = getAppState();
     if (AppState.shapes && AppState.shapes.length > 0) {
@@ -1259,7 +1317,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     });
   }
 
-  // --- Export handlers for event attachment in PART 2A ---
+  // --- Export handlers for event attachment in shapes.konva.js ---
   function exportMultiSelectAPI() {
     const AppState = getAppState();
     AppState._multiSelect = {
@@ -1271,12 +1329,12 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       onMultiDragEnd,
       updateDebugMultiDragBox,
       clearDebugMultiDragBox,
-      selectAllShapes // Export for external use if needed
+      selectAllShapes
     };
   }
 
   // --- Deferred Initialization ---
-  function initPart2B() {
+  function initMultiselect() {
     attachSelectionOverrides();
     attachSelectAllHook();
     attachLockCheckboxHook();
@@ -1284,18 +1342,19 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initPart2B);
+    document.addEventListener("DOMContentLoaded", initMultiselect);
   } else {
-    setTimeout(initPart2B, 0);
+    setTimeout(initMultiselect, 0);
   }
 })();
-// COPILOT_PART_3A: 2025-09-11T15:16:00Z
+// COPILOT_PART_settings: 2025-09-11T21:27:00Z
 /*********************************************************
- * PART 3A: SettingsPanel Logic
+ * SettingsPanel Logic (modular)
  * ----------------------------------------
  * Implements the content and UI for the Settings panel.
- * Now provides a working "Log Level" selector wired to window.setSetting/getSetting,
- * affecting runtime logging verbosity for the modular log() system.
+ * - Provides "Log Level" and "Log Output Destination" selectors.
+ * - Both are wired to window.setSetting/getSetting,
+ *   affecting runtime logging and streaming for the modular log() system.
  * - Will grow to support more settings as features expand.
  *********************************************************/
 
@@ -1309,7 +1368,6 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   rootDiv.appendChild(h2);
 
   // --- Log Level Setting ---
-  // Registry-driven, but minimal UI for now
   const logLevelDiv = document.createElement("div");
   logLevelDiv.className = "settings-field";
 
@@ -1318,8 +1376,8 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   logLabel.innerText = "Debug: Log Level";
   logLevelDiv.appendChild(logLabel);
 
-  const select = document.createElement("select");
-  select.id = "setting-DEBUG_LOG_LEVEL";
+  const logLevelSelect = document.createElement("select");
+  logLevelSelect.id = "setting-DEBUG_LOG_LEVEL";
   const levels = [
     {value: "OFF", label: "Off"},
     {value: "ERROR", label: "Error"},
@@ -1332,37 +1390,75 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
     const o = document.createElement("option");
     o.value = opt.value;
     o.innerText = opt.label;
-    select.appendChild(o);
+    logLevelSelect.appendChild(o);
   });
-  // Use window.getSetting if available, else default to ERROR
   let currentLevel = "ERROR";
   if (typeof window.getSetting === "function") {
     currentLevel = window.getSetting("DEBUG_LOG_LEVEL") || "ERROR";
   }
-  select.value = currentLevel;
+  logLevelSelect.value = currentLevel;
 
-  select.addEventListener("change", function() {
+  logLevelSelect.addEventListener("change", function() {
     if (typeof window.setSetting === "function") {
-      window.setSetting("DEBUG_LOG_LEVEL", select.value);
+      window.setSetting("DEBUG_LOG_LEVEL", logLevelSelect.value);
     } else {
-      // fallback for pre-settings systems
       window._settings = window._settings || {};
-      window._settings["DEBUG_LOG_LEVEL"] = select.value;
+      window._settings["DEBUG_LOG_LEVEL"] = logLevelSelect.value;
     }
-    // Optionally force log level update immediately
     if (window.LOG_LEVELS && window._currentLogLevel !== undefined) {
-      window._currentLogLevel = window.LOG_LEVELS[select.value] || window.LOG_LEVELS.ERROR;
+      window._currentLogLevel = window.LOG_LEVELS[logLevelSelect.value] || window.LOG_LEVELS.ERROR;
     }
     if (window.console && typeof window.console.log === "function") {
-      window.console.log(`[SETTINGS] Log level set to ${select.value}`);
+      window.console.log(`[SETTINGS] Log level set to ${logLevelSelect.value}`);
     }
   });
 
-  logLevelDiv.appendChild(select);
+  logLevelDiv.appendChild(logLevelSelect);
   rootDiv.appendChild(logLevelDiv);
 
+  // --- Log Output Destination Setting ---
+  const logDestDiv = document.createElement("div");
+  logDestDiv.className = "settings-field";
+  const destLabel = document.createElement("label");
+  destLabel.setAttribute("for", "setting-LOG_OUTPUT_DEST");
+  destLabel.innerText = "Log Output Destination";
+  logDestDiv.appendChild(destLabel);
+
+  const logDestSelect = document.createElement("select");
+  logDestSelect.id = "setting-LOG_OUTPUT_DEST";
+  const destOptions = [
+    { value: "console", label: "Console Only" },
+    { value: "server", label: "Server Only" },
+    { value: "both", label: "Both" }
+  ];
+  destOptions.forEach(opt => {
+    const o = document.createElement("option");
+    o.value = opt.value;
+    o.innerText = opt.label;
+    logDestSelect.appendChild(o);
+  });
+  let currentDest = "console";
+  if (typeof window.getSetting === "function") {
+    currentDest = window.getSetting("LOG_OUTPUT_DEST") || "console";
+  }
+  logDestSelect.value = currentDest;
+
+  logDestSelect.addEventListener("change", function() {
+    if (typeof window.setSetting === "function") {
+      window.setSetting("LOG_OUTPUT_DEST", logDestSelect.value);
+    } else {
+      window._settings = window._settings || {};
+      window._settings["LOG_OUTPUT_DEST"] = logDestSelect.value;
+    }
+    if (window.console && typeof window.console.log === "function") {
+      window.console.log(`[SETTINGS] Log output destination set to ${logDestSelect.value}`);
+    }
+  });
+
+  logDestDiv.appendChild(logDestSelect);
+  rootDiv.appendChild(logDestDiv);
+
   // ---- Future: Add more settings here from registry ----
-  // e.g. scene name, AND/OR logic, export options, etc.
 
   // Minimal styling for clarity
   rootDiv.style.fontFamily = "Segoe UI, Arial, sans-serif";

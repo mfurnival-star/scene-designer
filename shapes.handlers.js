@@ -1,30 +1,30 @@
-// COPILOT_PART_0B: 2025-09-11T15:05:00Z
+// COPILOT_PART_handlers: 2025-09-11T21:19:00Z
 /*********************************************************
- * PART 0B: UI Event Handler Attachment
+ * UI Event Handler Attachment
  * ------------------------------------------------------
  * Attaches all toolbar and global event handlers after Golden Layout and panels are ready.
  * Centralizes event handler logic for maintainability.
  * Ensures handlers are attached only after the DOM is fully constructed
  * (including dynamically generated panels).
- * Should be loaded/concatenated immediately after shapes.part0a.layout.js.
+ * Should be loaded/concatenated immediately after shapes.layout.js.
  *********************************************************/
 
-// Logging helpers from part0a (assumed loaded before this part)
-function part0b_log(level, ...args) { if (typeof log === "function") log(level, ...args); }
-function part0b_logEnter(fn, ...a) { part0b_log("TRACE", `>> Enter ${fn}`, ...a); }
-function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); }
+// Logging helpers from layout part (assumed loaded before this part)
+function handlers_log(level, ...args) { if (typeof log === "function") log(level, ...args); }
+function handlers_logEnter(fn, ...a) { handlers_log("TRACE", `>> Enter ${fn}`, ...a); }
+function handlers_logExit(fn, ...r) { handlers_log("TRACE", `<< Exit ${fn}`, ...r); }
 
 (function attachToolbarHandlers() {
-  part0b_logEnter("attachToolbarHandlers");
+  handlers_logEnter("attachToolbarHandlers");
   // Only attach after DOM and Golden Layout panels are ready
   function safeAttach() {
-    part0b_logEnter("safeAttach");
+    handlers_logEnter("safeAttach");
 
     // Wait for window._sceneDesigner (created by CanvasPanel)
     if (!window._sceneDesigner || typeof window._sceneDesigner.addShapeFromToolbar !== "function") {
-      part0b_log("DEBUG", "Waiting for _sceneDesigner.addShapeFromToolbar...");
+      handlers_log("DEBUG", "Waiting for _sceneDesigner.addShapeFromToolbar...");
       setTimeout(safeAttach, 120);
-      part0b_logExit("safeAttach (not ready)");
+      handlers_logExit("safeAttach (not ready)");
       return;
     }
 
@@ -41,27 +41,27 @@ function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); 
 
     // Defensive: Ensure all exist
     if (!newBtn || !shapeTypeSelect) {
-      part0b_log("ERROR", "Toolbar controls not found");
-      part0b_logExit("safeAttach (missing controls)");
+      handlers_log("ERROR", "Toolbar controls not found");
+      handlers_logExit("safeAttach (missing controls)");
       return;
     }
 
     // ADD button
     newBtn.onclick = function (e) {
-      part0b_logEnter("newBtn.onclick", e);
+      handlers_logEnter("newBtn.onclick", e);
       if (typeof AppState.addShapeFromToolbar === "function") {
-        part0b_log("TRACE", "Add button clicked. Shape type:", shapeTypeSelect.value);
+        handlers_log("TRACE", "Add button clicked. Shape type:", shapeTypeSelect.value);
         AppState.addShapeFromToolbar();
       } else {
-        part0b_log("ERROR", "AppState.addShapeFromToolbar not defined");
+        handlers_log("ERROR", "AppState.addShapeFromToolbar not defined");
       }
-      part0b_logExit("newBtn.onclick");
+      handlers_logExit("newBtn.onclick");
     };
 
     // DUPLICATE button (placeholder, to be implemented)
     if (duplicateBtn) {
       duplicateBtn.onclick = function (e) {
-        part0b_log("TRACE", "Duplicate button clicked. TODO: implement shape duplication.");
+        handlers_log("TRACE", "Duplicate button clicked. TODO: implement shape duplication.");
         // TODO: implement duplication as a function in AppState and call here
       };
     }
@@ -69,7 +69,7 @@ function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); 
     // DELETE button (placeholder, to be implemented)
     if (deleteBtn) {
       deleteBtn.onclick = function (e) {
-        part0b_log("TRACE", "Delete button clicked. TODO: implement shape deletion.");
+        handlers_log("TRACE", "Delete button clicked. TODO: implement shape deletion.");
         // TODO: implement deletion as a function in AppState and call here
       };
     }
@@ -77,28 +77,28 @@ function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); 
     // RESET ROTATION button (placeholder, to be implemented)
     if (resetRotationBtn) {
       resetRotationBtn.onclick = function (e) {
-        part0b_log("TRACE", "Reset Rotation button clicked. TODO: implement reset rotation.");
+        handlers_log("TRACE", "Reset Rotation button clicked. TODO: implement reset rotation.");
         // TODO: implement rotation reset as a function in AppState and call here
       };
     }
 
-    // SELECT ALL button (optional: implemented in part2b.multiselect.js)
+    // SELECT ALL button (optional: implemented in shapes.multiselect.js)
     if (selectAllBtn) {
       selectAllBtn.onclick = function (e) {
-        part0b_log("TRACE", "Select All button clicked.");
+        handlers_log("TRACE", "Select All button clicked.");
         if (AppState._multiSelect && typeof AppState._multiSelect.selectAllShapes === "function") {
           AppState._multiSelect.selectAllShapes();
         } else if (Array.isArray(AppState.shapes)) {
           AppState.selectedShapes = AppState.shapes.slice();
-          part0b_log("DEBUG", "Selected all shapes (fallback)");
+          handlers_log("DEBUG", "Selected all shapes (fallback)");
         }
       };
     }
 
     // For debugging: mark handlers as attached
     window._toolbarHandlersAttached = true;
-    part0b_log("INFO", "Toolbar event handlers attached.");
-    part0b_logExit("safeAttach");
+    handlers_log("INFO", "Toolbar event handlers attached.");
+    handlers_logExit("safeAttach");
   }
 
   if (document.readyState === "loading") {
@@ -106,5 +106,5 @@ function part0b_logExit(fn, ...r) { part0b_log("TRACE", `<< Exit ${fn}`, ...r); 
   } else {
     setTimeout(safeAttach, 0);
   }
-  part0b_logExit("attachToolbarHandlers");
+  handlers_logExit("attachToolbarHandlers");
 })();

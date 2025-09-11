@@ -1,14 +1,13 @@
-// COPILOT_PART_2A: 2025-09-11T14:18:00Z
+// COPILOT_PART_konva: 2025-09-11T21:23:00Z
 /*********************************************************
- * PART 2A: CanvasPanel – Image Display & Shape Creation
+ * CanvasPanel – Image Display & Shape Creation
  * ------------------------------------------------------
  * Handles Canvas setup, image loading, and single-shape creation/selection.
  * - Loads and displays the selected/uploaded image.
  * - Provides creation for "Point", "Rectangle", and "Circle" shapes.
  * - Handles single-shape selection and transformer UI.
- * - Exports key hooks for PART 2B (multi-select, drag, highlights).
+ * - Exports key hooks for shapes.multiselect.js (multi-select, drag, highlights).
  * - All state is kept in window._sceneDesigner (SSOT).
- * - UPDATED: Multi-select group drag triggers PART 2B handlers.
  *********************************************************/
 
 (function () {
@@ -488,15 +487,13 @@
       else alert("Only point, rectangle, and circle shapes are implemented in this build.");
     }
 
-    // REMOVE old handler wiring. Handlers now in part0b.handlers.js
-
-    // Export hooks for PART 2B and PART 0B (handler file)
+    // Export hooks for shapes.multiselect.js and shapes.handlers.js
     AppState.makeReticlePointShape = makeReticlePointShape;
     AppState.makeRectShape = makeRectShape;
     AppState.makeCircleShape = makeCircleShape;
     AppState.selectShape = selectShape;
     AppState.deselectShape = deselectShape;
     AppState.setShapeLocked = setShapeLocked;
-    AppState.addShapeFromToolbar = addShapeFromToolbar; // <-- REQUIRED FOR PART 0B HANDLERS
+    AppState.addShapeFromToolbar = addShapeFromToolbar;
   };
 })();
