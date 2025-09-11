@@ -16,6 +16,16 @@ Descriptions are updated as new logic is added or stubs are replaced.
 
 ---
 
+### **PART 0B: UI Event Handler Attachment**
+- **Filename:** `shapes.part0b.handlers.js`
+- **Responsibility:**  
+  - Attaches all toolbar and global event handlers after Golden Layout and panels are ready.
+  - Centralizes event handler logic for maintainability.
+  - Ensures handlers are attached only after the DOM is fully constructed (including dynamically generated panels).
+  - Should be loaded/concatenated immediately after `shapes.part0.layout.js`.
+
+---
+
 ### **PART 1: SidebarPanel Logic**
 - **Filename:** `shapes.part1.sidebar.js`
 - **Responsibility:**  
@@ -60,14 +70,19 @@ Descriptions are updated as new logic is added or stubs are replaced.
 ## Integration/Load Order
 
 1. `shapes.part0.layout.js`
-2. `shapes.part1.sidebar.js`
-3. `shapes.part2a.konva.js`
-4. `shapes.part2b.multiselect.js`
-5. `shapes.part3.settings.js`
+2. `shapes.part0b.handlers.js`
+3. `shapes.part1.sidebar.js`
+4. `shapes.part2a.konva.js`
+5. `shapes.part2b.multiselect.js`
+6. `shapes.part3.settings.js`
 
 ---
 
 ## Change Log
+
+- **2025-09-11**:  
+  - Added PART 0B (`shapes.part0b.handlers.js`) for centralized UI event handler attachment, to be loaded after layout and before logic parts.
+  - Updated integration/load order accordingly.
 
 - **2025-09-10**:  
   - Split multi-select, bounding box, group drag, lock UI, and related logic into new PART 2B (`shapes.part2b.multiselect.js`).
@@ -79,3 +94,4 @@ Descriptions are updated as new logic is added or stubs are replaced.
 ---
 
 *Update this index whenever a part file is added, removed, renamed, or its description/role changes.*
+
