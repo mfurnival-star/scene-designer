@@ -6,10 +6,11 @@
  * - Provides creation for "Point", "Rectangle", and "Circle" shapes.
  * - Handles single-shape selection and transformer UI.
  * - Exports key hooks for PART 2B (multi-select, drag, highlights).
+ * - All state is kept in window._sceneDesigner (SSOT).
  *********************************************************/
 
 (function () {
-  // App-wide state for the canvas panel
+  // App-wide state for the canvas panel (Single Source of Truth)
   window._sceneDesigner = window._sceneDesigner || {};
   const AppState = window._sceneDesigner;
 
@@ -92,7 +93,7 @@
     if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection)
       AppState.selectedShape.showSelection(false);
     AppState.selectedShape = shape;
-    AppState.selectedShapes = [shape];
+    AppState.selectedShapes = shape ? [shape] : [];
     if (!shape) return;
 
     if (shape._type === "rect") {
@@ -247,11 +248,13 @@
       });
       layer.add(konvaImage);
 
+      // Re-add all shapes from AppState.shapes
       for (const shape of AppState.shapes) {
         layer.add(shape);
       }
       layer.batchDraw();
 
+      // Selection logic: click on stage or image to deselect
       stage.on("mousedown tap", function(evt) {
         if (evt.target === stage || evt.target === konvaImage) {
           deselectShape();
