@@ -1,3 +1,4 @@
+// COPILOT_PART_2A: 2025-09-11T14:18:00Z
 /*********************************************************
  * PART 2A: CanvasPanel – Image Display & Shape Creation
  * ------------------------------------------------------
@@ -489,12 +490,13 @@
 
     // REMOVE old handler wiring. Handlers now in part0b.handlers.js
 
-    // Export hooks for PART 2B
+    // Export hooks for PART 2B and PART 0B (handler file)
     AppState.makeReticlePointShape = makeReticlePointShape;
     AppState.makeRectShape = makeRectShape;
     AppState.makeCircleShape = makeCircleShape;
     AppState.selectShape = selectShape;
     AppState.deselectShape = deselectShape;
     AppState.setShapeLocked = setShapeLocked;
+    AppState.addShapeFromToolbar = addShapeFromToolbar; // <-- REQUIRED FOR PART 0B HANDLERS
   };
 })();

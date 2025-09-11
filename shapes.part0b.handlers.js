@@ -1,4 +1,4 @@
-// COPILOT_PART_0B: 2025-09-11T13:51:00Z
+// COPILOT_PART_0B: 2025-09-11T14:15:00Z
 /*********************************************************
  * PART 0B: UI Event Handler Attachment
  * ----------------------------------------
@@ -16,12 +16,15 @@
     if (addBtn) {
       addBtn.onclick = function(e) {
         e.preventDefault();
-        if (window._sceneDesigner && window._sceneDesigner.makeReticlePointShape) {
-          // The real logic is in part2a.konva.js, which wires this as well,
-          // but you can call AppState.make*Shape or export a wrapper here if desired.
-          // Placeholder: let part2a handle for now.
+        // Use the exported addShapeFromToolbar if available
+        if (window._sceneDesigner && typeof window._sceneDesigner.addShapeFromToolbar === "function") {
+          window._sceneDesigner.addShapeFromToolbar();
+        } else if (window._sceneDesigner && typeof window._sceneDesigner.makeReticlePointShape === "function") {
+          // fallback: always add a point if generic addShapeFromToolbar is not defined
+          window._sceneDesigner.makeReticlePointShape(100, 100);
+        } else {
+          alert("Shape creation function not found (modular code error)");
         }
-        // This placeholder is here for completeness.
       };
     }
 

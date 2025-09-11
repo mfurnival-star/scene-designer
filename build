@@ -1,0 +1,3 @@
+#!/bin/bash
+
+cat $(ls -v shapes.part* | grep -v index) > shapes.js && git add . && git commit -m "Updates" && git push
