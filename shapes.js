@@ -7,7 +7,7 @@
  * - Handles show/hide logic for Settings panel and exposes `myLayout` for debugging.
  * - Integration: Requires <div id="main-layout"></div> in index.html.
  *********************************************************/
-
+//commwnt to force commit
 /*************************************
  * Logging helper with log levels (ALWAYS ENABLE ERROR)
  * (Injected at top for easier debugging when settings panel is not available)
