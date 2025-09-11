@@ -703,7 +703,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   function updateSelectionHighlights() {
     const AppState = safeGetAppState();
     if (multiSelectHighlightShapes.length && AppState.konvaLayer) {
-      multiSelectHighlightShapes.forEach(g => g.destroy());
+      multiSelectHighlightShapes.forEach(g => g.destroy && g.destroy());
       multiSelectHighlightShapes = [];
       AppState.konvaLayer.draw();
     }
@@ -930,15 +930,30 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     }
   }
 
+  // --- Select All logic ---
+  function selectAllShapes() {
+    const AppState = safeGetAppState();
+    if (AppState.shapes && AppState.shapes.length > 0) {
+      AppState.selectedShapes = AppState.shapes.slice();
+      AppState.selectedShape = null;
+      // Remove transformer if present
+      if (AppState.transformer) {
+        AppState.transformer.destroy();
+        AppState.transformer = null;
+      }
+      updateLockCheckboxUI();
+      updateSelectionHighlights();
+      if (AppState.konvaLayer) AppState.konvaLayer.draw();
+    }
+  }
+
   function attachSelectAllHook() {
-    // Delay until DOM is ready
     document.addEventListener("DOMContentLoaded", function () {
       const selectAllBtn = document.getElementById("selectAllBtn");
       if (selectAllBtn) {
-        const origHandler = selectAllBtn.onclick;
-        selectAllBtn.onclick = function () {
-          if (typeof origHandler === "function") origHandler();
-          updateLockCheckboxUI();
+        selectAllBtn.onclick = function (e) {
+          e.preventDefault();
+          selectAllShapes();
         };
       }
     });
@@ -965,7 +980,6 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     exportMultiSelectAPI();
   }
 
-  // Always run after DOMContentLoaded and after PART 2A is loaded
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initPart2B);
   } else {
