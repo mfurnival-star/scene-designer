@@ -78,38 +78,36 @@ function logExit(fnName, ...result) {
           showMaximiseIcon: false,
           hasHeaders: true
         },
-        content: [{
-          type: "row",
 		content: [{
-    type: "row",
-    content: [
-        {
-            type: "component",
-            componentName: "CanvasPanel",
-            title: "Canvas",
-            width: 60 // main panel on the left
-        },
-        {
-            type: "column",
-            width: 40, // right-hand side column
-            content: [
-                {
-                    type: "component",
-                    componentName: "SidebarPanel",
-                    title: "Shapes",
-                    height: 50 // top half
-                },
-                {
-                    type: "component",
-                    componentName: "SettingsPanel",
-                    title: "Settings",
-                    height: 50, // bottom half
-                    isClosable: true
-                }
-            ]
-        }
-    ]
-}]
+		    type: "row",
+		    content: [
+			{
+			    type: "component",
+			    componentName: "CanvasPanel",
+			    title: "Canvas",
+			    width: 60 // main panel on the left
+			},
+			{
+			    type: "column",
+			    width: 40, // right-hand side column
+			    content: [
+				{
+				    type: "component",
+				    componentName: "SidebarPanel",
+				    title: "Shapes",
+				    height: 50 // top half
+				},
+				{
+				    type: "component",
+				    componentName: "SettingsPanel",
+				    title: "Settings",
+				    height: 50, // bottom half
+				    isClosable: true
+				}
+			    ]
+			}
+		    ]
+		}]
       };
 
       // ---- 2. Create and attach Golden Layout instance ----
