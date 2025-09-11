@@ -7,7 +7,7 @@
  * - Handles show/hide logic for Settings panel and exposes `myLayout` for debugging.
  * - Integration: Requires <div id="main-layout"></div> in index.html.
  *********************************************************/
-//commwnt to force commit
+
 /*************************************
  * Logging helper with log levels (ALWAYS ENABLE ERROR)
  * (Injected at top for easier debugging when settings panel is not available)
@@ -691,7 +691,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  * - Lock checkbox UI always reflects current selection.
  * - Uses setSelectedShapes() as the only way to change selection state.
  *********************************************************/
-
+// checking concat is working
 (function () {
   // Use shared AppState from PART 2A as the SINGLE SOURCE OF TRUTH!
   function getAppState() {

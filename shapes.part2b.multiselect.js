@@ -10,7 +10,7 @@
  * - Lock checkbox UI always reflects current selection.
  * - Uses setSelectedShapes() as the only way to change selection state.
  *********************************************************/
-
+// checking concat is working
 (function () {
   // Use shared AppState from PART 2A as the SINGLE SOURCE OF TRUTH!
   function getAppState() {
