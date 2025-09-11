@@ -76,7 +76,7 @@ function logExit(fnName, ...result) {
           showPopoutIcon: true,
           showCloseIcon: true,
           showMaximiseIcon: true,
-          hasHeaders: true
+          hasHeaders: false
         },
         content: [{
           type: "row",
