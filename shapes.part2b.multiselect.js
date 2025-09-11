@@ -8,6 +8,7 @@
  * - Orange debug bounding box during group drag.
  * - Locking: Locked shapes block group drag and show red highlight feedback.
  * - Lock checkbox UI always reflects current selection.
+ * - Uses setSelectedShapes() as the only way to change selection state.
  *********************************************************/
 
 (function () {
@@ -20,6 +21,53 @@
   let debugMultiDragBox = null;
   let multiDrag = { moving: false, dragOrigin: null, origPositions: null };
   let _lockedDragAttemptedIDs = [];
+
+  // --- Centralized Selection Setter ---
+  function setSelectedShapes(shapesArr) {
+    const AppState = getAppState();
+    AppState.selectedShapes = shapesArr || [];
+    AppState.selectedShape = (shapesArr && shapesArr.length === 1) ? shapesArr[0] : null;
+
+    // Remove transformer if multiselect or none
+    if (AppState.transformer) {
+      AppState.transformer.destroy();
+      AppState.transformer = null;
+    }
+
+    // If single selection and it's a rect or circle, add transformer
+    if (AppState.selectedShapes.length === 1) {
+      const shape = AppState.selectedShapes[0];
+      if (shape._type === "rect" || shape._type === "circle") {
+        const transformer = new Konva.Transformer({
+          nodes: [shape],
+          enabledAnchors: shape.locked ? [] :
+            (shape._type === "rect"
+              ? ["top-left", "top-center", "top-right", "middle-left", "middle-right", "bottom-left", "bottom-center", "bottom-right"]
+              : ["top-left", "top-right", "bottom-left", "bottom-right"]),
+          rotateEnabled: !shape.locked
+        });
+        AppState.konvaLayer.add(transformer);
+        AppState.transformer = transformer;
+        AppState.konvaLayer.draw();
+      }
+      if (shape._type === "point" && typeof shape.showSelection === "function") {
+        shape.showSelection(true);
+      }
+    } else {
+      // Hide selection for points if multi or none
+      if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection) {
+        AppState.selectedShape.showSelection(false);
+      }
+    }
+
+    updateLockCheckboxUI();
+    updateSelectionHighlights();
+    if (AppState.konvaLayer) AppState.konvaLayer.draw();
+    // If you have a sidebar table/list, update it here:
+    if (typeof window.updateList === "function") window.updateList();
+    // If you have label UI, update it here:
+    if (typeof window.updateLabelUI === "function") window.updateLabelUI();
+  }
 
   // --- Selection Highlight Logic ---
   function updateSelectionHighlights() {
@@ -240,35 +288,23 @@
     if (!AppState._multiSelectOverridesApplied) {
       const origSelectShape = AppState.selectShape;
       AppState.selectShape = function(shape) {
+        setSelectedShapes(shape ? [shape] : []);
         if (typeof origSelectShape === "function") origSelectShape(shape);
-        updateLockCheckboxUI();
       };
       const origDeselectShape = AppState.deselectShape;
       AppState.deselectShape = function() {
+        setSelectedShapes([]);
         if (typeof origDeselectShape === "function") origDeselectShape();
-        updateLockCheckboxUI();
       };
       AppState._multiSelectOverridesApplied = true;
     }
   }
 
-  // --- Select All logic: **ONLY the modular app state is used as the single source of truth!**
+  // --- Select All logic: NOW uses setSelectedShapes() SSOT setter ---
   function selectAllShapes() {
     const AppState = getAppState();
     if (AppState.shapes && AppState.shapes.length > 0) {
-      AppState.selectedShapes = AppState.shapes.slice();
-      AppState.selectedShape = null;
-      // Remove transformer if present
-      if (AppState.transformer) {
-        AppState.transformer.destroy();
-        AppState.transformer = null;
-      }
-      // UI updates (add more as your UI grows)
-      updateLockCheckboxUI();
-      updateSelectionHighlights();
-      // If you add a sidebar table, trigger its update here:
-      if (typeof window.updateList === "function") window.updateList();
-      if (AppState.konvaLayer) AppState.konvaLayer.draw();
+      setSelectedShapes(AppState.shapes.slice());
     }
   }
 
@@ -310,6 +346,7 @@
   function exportMultiSelectAPI() {
     const AppState = getAppState();
     AppState._multiSelect = {
+      setSelectedShapes,
       updateSelectionHighlights,
       showLockedHighlightForShapes,
       updateLockCheckboxUI,
