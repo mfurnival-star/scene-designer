@@ -73,9 +73,9 @@ function logExit(fnName, ...result) {
       // ---- 1. Golden Layout default configuration ----
       const layoutConfig = {
         settings: {
-          showPopoutIcon: false,
-          showCloseIcon: false,
-          showMaximiseIcon: false,
+          showPopoutIcon: true,
+          showCloseIcon: true,
+          showMaximiseIcon: true,
           hasHeaders: true
         },
         content: [{
