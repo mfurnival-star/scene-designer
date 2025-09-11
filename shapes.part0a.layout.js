@@ -1,11 +1,10 @@
+// COPILOT_PART_0A: 2025-09-11T15:01:30Z
 /*********************************************************
- * PART 0: Golden Layout Bootstrapping & Panel Registration
- * - Always enables at least ERROR level logging (even if settings panel is missing)
- * - Supports optional remote log streaming via window._externalLogStream
- * - Initializes Golden Layout with three panels (Sidebar, Canvas, Settings).
- * - Registers panel components and placeholder logic.
- * - Handles show/hide logic for Settings panel and exposes `myLayout` for debugging.
- * - Integration: Requires <div id="main-layout"></div> in index.html.
+ * PART 0A: Golden Layout Bootstrapping & Panel Registration
+ * - Defines logging system and settings registry
+ * - Initializes Golden Layout with Sidebar, Canvas, Settings panels
+ * - Registers panel builder hooks
+ * - Exposes show/hide logic for Settings panel, myLayout for debugging
  *********************************************************/
 
 /*************************************
@@ -14,31 +13,59 @@
  *************************************/
 window.LOG_LEVELS = window.LOG_LEVELS || { OFF: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5 };
 
-// Always enable at least ERROR level logging if settings are not yet available
-function getSetting(key) {
-  // fallback for DEBUG_LOG_LEVEL
-  if (key === "DEBUG_LOG_LEVEL") return "ERROR";
-  // fallback for all others
-  return undefined;
-}
+// Centralized settings registry (to be used by settings panel and log system)
+window._settingsRegistry = window._settingsRegistry || [
+  {
+    key: "DEBUG_LOG_LEVEL",
+    label: "Debug: Log Level",
+    type: "select",
+    options: [
+      { value: "OFF", label: "Off" },
+      { value: "ERROR", label: "Error" },
+      { value: "WARN", label: "Warning" },
+      { value: "INFO", label: "Info" },
+      { value: "DEBUG", label: "Debug" },
+      { value: "TRACE", label: "Trace (very verbose)" }
+    ],
+    default: "ERROR"
+  }
+];
 
+// Minimal settings backing store
+window._settings = window._settings || {};
+function getSetting(key) {
+  if (key in window._settings) return window._settings[key];
+  const reg = (window._settingsRegistry || []).find(s => s.key === key);
+  return reg && "default" in reg ? reg.default : undefined;
+}
+function setSetting(key, value) {
+  window._settings[key] = value;
+  // Update log level immediately for log()
+  if (key === "DEBUG_LOG_LEVEL") window._currentLogLevel = window.LOG_LEVELS[value] || window.LOG_LEVELS.ERROR;
+}
+window.getSetting = getSetting;
+window.setSetting = setSetting;
+
+// --- Robust log() system ---
+window._currentLogLevel = window.LOG_LEVELS[getSetting("DEBUG_LOG_LEVEL") || "ERROR"];
 function log(level, ...args) {
-  // Use ERROR level if settings not available
-  let curLevel = window.LOG_LEVELS["ERROR"];
+  let curLevel = window._currentLogLevel;
+  // Allow runtime update via settings panel
   try {
-    // If settings panel is available, use its setting
-    if (typeof window.getSetting === "function") curLevel = window.LOG_LEVELS[window.getSetting("DEBUG_LOG_LEVEL") || "ERROR"];
+    if (typeof window.getSetting === "function") {
+      const setLevel = window.getSetting("DEBUG_LOG_LEVEL");
+      curLevel = window.LOG_LEVELS[setLevel] !== undefined ? window.LOG_LEVELS[setLevel] : window._currentLogLevel;
+      window._currentLogLevel = curLevel;
+    }
   } catch (e) {}
   const msgLevel = window.LOG_LEVELS[level];
   if (msgLevel && curLevel >= msgLevel) {
     console.log(`[${level}]`, ...args);
-    // Stream logs to your server if stream function set
+    // Optionally stream logs for ERROR level
     if (typeof window._externalLogStream === "function" && level === "ERROR") {
       try {
         window._externalLogStream(level, ...args);
-      } catch (e) {
-        // avoid recursive logging
-      }
+      } catch (e) {}
     }
   }
 }
@@ -49,26 +76,21 @@ function logExit(fnName, ...result) {
   log("TRACE", `<< Exit ${fnName}`, ...result);
 }
 
-// Example: Set this function somewhere in your app to stream error logs to your server
-// window._externalLogStream = function(level, ...args) {
-//   try {
-//     fetch("https://your-server/log", {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({ level, args, time: Date.now() })
-//     });
-//   } catch (e) {}
-// };
-
 /*********************************************************
  * Golden Layout Bootstrapping & Panel Registration
  *********************************************************/
 
 (function initGoldenLayout() {
-  if (window._GL_HELLO_WORLD_INITIALIZED) return;
+  logEnter("initGoldenLayout");
+  if (window._GL_HELLO_WORLD_INITIALIZED) {
+    log("DEBUG", "Golden Layout already initialized");
+    logExit("initGoldenLayout");
+    return;
+  }
   window._GL_HELLO_WORLD_INITIALIZED = true;
 
   function doInit() {
+    logEnter("doInit");
     try {
       // ---- 1. Golden Layout default configuration ----
       const layoutConfig = {
@@ -78,57 +100,57 @@ function logExit(fnName, ...result) {
           showMaximiseIcon: false,
           hasHeaders: true
         },
-		content: [{
-		    type: "row",
-		    content: [
-			{
-			    type: "component",
-			    componentName: "CanvasPanel",
-			    title: "Canvas",
-			    width: 80 // main panel on the left
-			},
-			{
-			    type: "column",
-			    width: 20, // right-hand side column
-			    content: [
-				{
-				    type: "component",
-				    componentName: "SidebarPanel",
-				    title: "Shapes",
-				    height: 50 // top half
-				},
-				{
-				    type: "component",
-				    componentName: "SettingsPanel",
-				    title: "Settings",
-				    height: 50, // bottom half
-				    isClosable: true
-				}
-			    ]
-			}
-		    ]
-		}]
+        content: [{
+          type: "row",
+          content: [
+            {
+              type: "component",
+              componentName: "CanvasPanel",
+              title: "Canvas",
+              width: 80 // main panel on the left
+            },
+            {
+              type: "column",
+              width: 20, // right-hand side column
+              content: [
+                {
+                  type: "component",
+                  componentName: "SidebarPanel",
+                  title: "Shapes",
+                  height: 50 // top half
+                },
+                {
+                  type: "component",
+                  componentName: "SettingsPanel",
+                  title: "Settings",
+                  height: 50, // bottom half
+                  isClosable: true
+                }
+              ]
+            }
+          ]
+        }]
       };
 
       // ---- 2. Create and attach Golden Layout instance ----
       const glRoot = document.getElementById("main-layout");
       if (!glRoot) {
         log("ERROR", "Golden Layout root #main-layout not found!");
+        logExit("doInit");
         return;
       }
-      // Remove any previous children (if hot reload)
       while (glRoot.firstChild) glRoot.removeChild(glRoot.firstChild);
 
       const myLayout = new GoldenLayout(layoutConfig, glRoot);
 
       // ---- 3. Register panels ----
-
       myLayout.registerComponent("SidebarPanel", function(container, state) {
         const div = document.createElement("div");
         div.id = "sidebar";
         div.style.height = "100%";
         container.getElement().append(div);
         if (window.buildSidebarPanel) {
+          log("DEBUG", "buildSidebarPanel called");
           window.buildSidebarPanel(div, container, state);
         }
       });
@@ -139,6 +161,7 @@ function logExit(fnName, ...result) {
         div.style.height = "100%";
         container.getElement().append(div);
         if (window.buildCanvasPanel) {
+          log("DEBUG", "buildCanvasPanel called");
           window.buildCanvasPanel(div, container, state);
         }
       });
@@ -149,6 +172,7 @@ function logExit(fnName, ...result) {
         div.style.height = "100%";
         container.getElement().append(div);
         if (window.buildSettingsPanel) {
+          log("DEBUG", "buildSettingsPanel called");
           window.buildSettingsPanel(div, container, state);
         }
       });
@@ -185,6 +209,7 @@ function logExit(fnName, ...result) {
       log("ERROR", "Exception in Golden Layout bootstrapping", e);
       throw e;
     }
+    logExit("doInit");
   }
 
   if (document.readyState === "loading") {
@@ -192,4 +217,5 @@ function logExit(fnName, ...result) {
   } else {
     doInit();
   }
+  logExit("initGoldenLayout");
 })();

@@ -1,9 +1,10 @@
 /*********************************************************
- * PART 1: SidebarPanel Logic
+ * PART 1A: SidebarPanel Logic
  * ----------------------------------------
  * Implements the content and UI logic for the Sidebar panel (shape table/list).
  * Current: Placeholder/hello world.
- * Future: Will show the table of annotation shapes and handle selection, lock, delete, etc.
+ * Planned: Will show the table of annotation shapes and handle selection, lock, delete, etc.
+ * COPILOT_PART_1A: 2025-09-11T15:06:00Z
  *********************************************************/
 
 window.buildSidebarPanel = function(rootDiv, container, state) {
@@ -18,4 +19,8 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
 
   rootDiv.appendChild(h2);
   rootDiv.appendChild(p);
+
+  // Example debugging: log panel construction
+  if (typeof logEnter === "function") logEnter("buildSidebarPanel", {rootDiv, container, state});
+  if (typeof logExit === "function") logExit("buildSidebarPanel");
 };

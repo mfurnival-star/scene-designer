@@ -1,6 +1,6 @@
-// COPILOT_PART_3: 2025-09-11T14:39:00Z
+// COPILOT_PART_3A: 2025-09-11T15:16:00Z
 /*********************************************************
- * PART 3: SettingsPanel Logic
+ * PART 3A: SettingsPanel Logic
  * ----------------------------------------
  * Implements the content and UI for the Settings panel.
  * Now provides a working "Log Level" selector wired to window.setSetting/getSetting,
