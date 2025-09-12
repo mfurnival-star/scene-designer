@@ -1,4 +1,4 @@
-// COPILOT_PART_konva: 2025-09-12T10:37:41Z
+// COPILOT_PART_konva: 2025-09-12T14:20:00Z
 /*********************************************************
  * [konva] Canvas Panel – Image Display & Shape Creation
  * ------------------------------------------------------
@@ -230,9 +230,11 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
     while (node.firstChild) node.removeChild(node.firstChild);
   }
 
-  // --- MULTI-DRAG HOOKUP (ENHANCED LOGGING) ---
+  // --- MULTI-DRAG HOOKUP ---
   function attachMultiDragHandler(shape) {
     konva_log("TRACE", "attachMultiDragHandler called", {shape_id: shape._id, type: shape._type});
+    // Remove any existing dragstart handler (to avoid duplicates)
+    shape.off("dragstart.multiselect");
     shape.on("dragstart.multiselect", function(evt) {
       konva_log("TRACE", "dragstart.multiselect fired", {
         shape_id: shape._id,
@@ -275,7 +277,7 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
         });
         AppState.konvaStage.on('mousemove.multidrag touchmove.multidrag', AppState._multiSelect.onMultiDragMove);
         AppState.konvaStage.on('mouseup.multidrag touchend.multidrag', AppState._multiSelect.onMultiDragEnd);
-        if (AppState._multiSelect.updateDebugMultiDragBox) AppState._multiSelect.updateDebugMultiDragBox();
+        if (AppState._multiSelect.updateGroupBoundingBox) AppState._multiSelect.updateGroupBoundingBox();
       } else {
         konva_log("TRACE", "dragstart.multiselect: not a valid multi-drag scenario", {
           selectedShapes: AppState.selectedShapes ? AppState.selectedShapes.map(s => s._id) : [],

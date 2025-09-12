@@ -1,4 +1,4 @@
-// COPILOT_PART_multiselect: 2025-09-12T14:10:00Z
+// COPILOT_PART_multiselect: 2025-09-12T14:28:00Z
 /*********************************************************
  * [multiselect] Multi-Select, Group Drag, Highlights, Lock UI
  * ----------------------------------------------------------
@@ -24,7 +24,6 @@ function multiselect_log(level, ...args) {
 function multiselect_logEnter(fn, ...a) { multiselect_log("TRACE", `>> Enter ${fn}`, ...a); }
 function multiselect_logExit(fn, ...r) { multiselect_log("TRACE", `<< Exit ${fn}`, ...r); }
 
-// Exported API object
 (function() {
   // Canonical AppState reference
   const getAppState = () => window._sceneDesigner;
@@ -266,6 +265,7 @@ function multiselect_logExit(fn, ...r) { multiselect_log("TRACE", `<< Exit ${fn}
     if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     multiselect_logExit("onMultiDragMove");
   }
+
   function onMultiDragEnd(evt) {
     multiselect_logEnter("onMultiDragEnd", {evt});
     const AppState = getAppState();
