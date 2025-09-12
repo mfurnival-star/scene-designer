@@ -1,6 +1,6 @@
 # Copilot Collaboration Manifesto
 
-This file defines the working agreement between the user (`mfurnival-star`) and GitHub Copilot for code requests, modularization, and update practices in this repository.
+This file defines the working agreement between the user (`mfurnival-star`) and GitHub Copilot for code requests, modularization, logging, and update practices in this repository.
 
 ---
 
@@ -47,7 +47,63 @@ shapes.settings.js
 
 ---
 
-## 4. **General Principles**
+## 4. **Standardized Logging Scheme**
+
+To ensure effective debugging, traceability, and maintainability, this project adopts the following logging standards:
+
+### **Log Levels (in increasing verbosity):**
+- **OFF:** No logs.
+- **ERROR:** Only critical errors and exceptions.
+- **WARN:** Warnings and recoverable issues.
+- **INFO:** Major lifecycle events and user actions.
+- **DEBUG:** Detailed function entry/exit, state changes, significant variable values.
+- **TRACE:** Extremely verbose; every step, branch, and interaction, especially in complex flows.
+
+### **Logging Practices:**
+- **Function Entry/Exit:**  
+  Always log at `TRACE` when entering and exiting functions, with key arguments/results.
+- **Branching/Conditionals:**  
+  Log decisions in logic branches at `DEBUG` or `TRACE`, especially when outcomes are non-obvious.
+- **Key State Changes:**  
+  Log whenever important state changes, e.g., selection changes, drag starts/ends, delta calculations.
+- **User Interaction:**  
+  Log at `INFO` for UI events (clicks, drag, panel toggles, etc).
+- **Non-obvious Outcomes:**  
+  Log early returns or aborts at `DEBUG` or `TRACE` with reasons.
+- **Context Metadata:**  
+  Include relevant context (such as shape IDs, types, coordinates, modifier keys, etc.) in logs.
+- **Per-Module Tags:**  
+  Prefix logs with a module or feature tag in square brackets, e.g., `[multiselect]`, `[sidebar]`.
+
+### **Sample Log Calls:**
+```js
+log("TRACE", "[multiselect] drag move", {dx, dy, shapes: selectedShapes.map(s=>s._id)});
+log("DEBUG", "[sidebar] selection changed", {selected: newSelection});
+log("INFO", "[toolbar] Add button clicked", {shapeType});
+log("ERROR", "[konva] Failed to load image", err);
+```
+
+### **Log Level Control:**
+- Log levels are globally settable via the settings panel and can be overridden at runtime.
+- All logs at or above the selected level are routed to the configured destinations (`console`, `server`, or `both`).
+
+### **Retroactive Refactor Requirement:**
+- All existing code will be updated to use this scheme.
+- Logging statements will be reviewed and updated for clarity, consistency, and coverage as per above.
+
+### **Summary Table:**
+
+| Level   | Typical Use                                            |
+|---------|--------------------------------------------------------|
+| ERROR   | Crashes, failed ops                                    |
+| WARN    | Recoverable issues, deprecated APIs                    |
+| INFO    | User actions, major state changes                      |
+| DEBUG   | Function entry/exit, key variable/state, decision path |
+| TRACE   | Every step, branch, event—max verbosity                |
+
+---
+
+## 5. **General Principles**
 
 - Copilot will always provide complete files for modular parts upon request or when making changes.
 - Copilot will never provide partial snippets for modular files unless explicitly requested.
@@ -56,7 +112,7 @@ shapes.settings.js
 
 ---
 
-## 5. **Modular Part Identification & Versioning**
+## 6. **Modular Part Identification & Versioning**
 
 - **Every modular part file delivered or updated by Copilot will include a unique marker comment at the top,**  
   e.g. `// COPILOT_PART_logstream: 2025-09-11T18:13:00Z`

@@ -1,28 +1,29 @@
-// COPILOT_PART_logserver: 2025-09-12T07:41:00Z
+// COPILOT_PART_logserver: 2025-09-12T09:56:00Z
 /*********************************************************
- * Log Server / Streaming Integration Module
- * -----------------------------------------
- * Provides a hook for streaming log/error messages to an external server
- * or backend endpoint. Intended to be loaded FIRST in modular shapes.js.
- * - Exposes window._externalLogStream(level, ...args)
+ * [logserver] Log Streaming and External Log Server Integration
+ * ------------------------------------------------------------
+ * - Exposes window._externalLogStream(level, ...args) for log streaming.
  * - Destination controlled by LOG_OUTPUT_DEST setting:
  *     "console" (default): logs to console only
  *     "server": logs to server only (if URL set)
  *     "both": logs to both
  * - To enable server logging, set window._externalLogServerURL, or
- *   use Settings panel (future).
- * - Future: Supports batching, retries, queueing, and log level config.
+ *   use the Settings panel.
+ * - Adheres to project logging schema and manifesto (see COPILOT_MANIFESTO.md).
  *********************************************************/
 
-// --- SAFE LOGGING DEFAULTS (always log errors to console if unset) ---
+// --- LOG LEVEL DEFINITIONS (used across all modules) ---
+window.LOG_LEVELS = window.LOG_LEVELS || {
+  OFF: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
+};
+
+// --- LOGGING SETTINGS DEFAULTS (safe fallback) ---
 window._settings = window._settings || {};
 if (!window._settings.DEBUG_LOG_LEVEL) window._settings.DEBUG_LOG_LEVEL = "ERROR";
 if (!window._settings.LOG_OUTPUT_DEST) window._settings.LOG_OUTPUT_DEST = "console";
-
-// (Optionally set this before loading shapes.js)
 window._externalLogServerURL = window._externalLogServerURL || "";
 
-// LOG_OUTPUT_DEST: "console" | "server" | "both"
+// --- REGISTER LOGGING SETTINGS (if not already present) ---
 window._settingsRegistry = window._settingsRegistry || [];
 if (!window._settingsRegistry.some(s => s.key === "LOG_OUTPUT_DEST")) {
   window._settingsRegistry.push({
@@ -38,9 +39,10 @@ if (!window._settingsRegistry.some(s => s.key === "LOG_OUTPUT_DEST")) {
   });
 }
 
-// Core streaming logic
+// --- LOG STREAMING CORE ---
 window._externalLogStream = async function(level, ...args) {
-  // Read current setting
+  // Project-wide: always tag logs with [logserver]
+  const tag = "[logserver]";
   let dest = (typeof window.getSetting === "function")
     ? window.getSetting("LOG_OUTPUT_DEST")
     : (window._settings && window._settings.LOG_OUTPUT_DEST) || "console";
@@ -70,22 +72,22 @@ window._externalLogStream = async function(level, ...args) {
       // If streaming fails, log locally as fallback
       if (dest === "server") {
         // If server-only, show error in console
-        console.error("[LogStream][FAIL]", level, ...args, e);
+        console.error(`${tag} [FAIL]`, level, ...args, e);
       }
     }
   }
 
   // Helper: Send to console (always log errors to console if unset)
   function sendToConsole() {
+    // Level-specific console output
     if (window.LOG_LEVELS) {
-      // Show warn/error to console.warn, others to console.log
       if (window.LOG_LEVELS[level] <= window.LOG_LEVELS.WARN) {
-        console.warn("[LogStream]", level, ...args);
+        console.warn(`${tag}`, level, ...args);
       } else {
-        console.log("[LogStream]", level, ...args);
+        console.log(`${tag}`, level, ...args);
       }
     } else {
-      console.log("[LogStream]", level, ...args);
+      console.log(`${tag}`, level, ...args);
     }
   }
 
@@ -100,120 +102,50 @@ window._externalLogStream = async function(level, ...args) {
   }
 };
 
-// Optionally, provide a no-op flush (for future batching support)
+// No-op flush for future batching support
 window._externalLogStream.flush = function() {};
 
-// For debugging: test hook
+// --- DEBUG: Self-test ---
 if (!window._logserverTested) {
   window._logserverTested = true;
-  window._externalLogStream("INFO", "LogServer module loaded and ready.");
+  window._externalLogStream("INFO", "[logserver] LogServer module loaded and ready.");
 }
-// COPILOT_PART_layout: 2025-09-11T21:17:00Z
+
+// COPILOT_PART_layout: 2025-09-12T10:05:00Z
 /*********************************************************
- * Golden Layout Bootstrapping & Panel Registration
- * - Defines logging system and settings registry
- * - Initializes Golden Layout with Sidebar, Canvas, Settings panels
- * - Registers panel builder hooks
- * - Exposes show/hide logic for Settings panel, myLayout for debugging
+ * [layout] Golden Layout Bootstrapping & Panel Registration
+ * --------------------------------------------------------
+ * - Initializes Golden Layout with Sidebar, Canvas, and Settings panels.
+ * - Registers panel builder hooks.
+ * - Exposes show/hide logic for Settings panel, myLayout for debugging.
+ * - Applies project logging schema (see COPILOT_MANIFESTO.md).
  *********************************************************/
 
-/*************************************
- * Logging helper with log levels (ALWAYS ENABLE ERROR)
- * (Injected at top for easier debugging when settings panel is not available)
- *************************************/
-window.LOG_LEVELS = window.LOG_LEVELS || { OFF: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5 };
-
-// Centralized settings registry (to be used by settings panel and log system)
-window._settingsRegistry = window._settingsRegistry || [
-  {
-    key: "DEBUG_LOG_LEVEL",
-    label: "Debug: Log Level",
-    type: "select",
-    options: [
-      { value: "OFF", label: "Off" },
-      { value: "ERROR", label: "Error" },
-      { value: "WARN", label: "Warning" },
-      { value: "INFO", label: "Info" },
-      { value: "DEBUG", label: "Debug" },
-      { value: "TRACE", label: "Trace (very verbose)" }
-    ],
-    default: "ERROR"
-  },
-  {
-    key: "LOG_OUTPUT_DEST",
-    label: "Log Output Destination",
-    type: "select",
-    options: [
-      { value: "console", label: "Console Only" },
-      { value: "server", label: "Server Only" },
-      { value: "both", label: "Both" }
-    ],
-    default: "console"
-  }
-];
-
-// Minimal settings backing store
-window._settings = window._settings || {};
-function getSetting(key) {
-  if (key in window._settings) return window._settings[key];
-  const reg = (window._settingsRegistry || []).find(s => s.key === key);
-  return reg && "default" in reg ? reg.default : undefined;
-}
-function setSetting(key, value) {
-  window._settings[key] = value;
-  // Update log level immediately for log()
-  if (key === "DEBUG_LOG_LEVEL") window._currentLogLevel = window.LOG_LEVELS[value] || window.LOG_LEVELS.ERROR;
-}
-window.getSetting = getSetting;
-window.setSetting = setSetting;
-
-// --- Robust log() system ---
-window._currentLogLevel = window.LOG_LEVELS[getSetting("DEBUG_LOG_LEVEL") || "ERROR"];
-function log(level, ...args) {
-  let curLevel = window._currentLogLevel;
-  // Allow runtime update via settings panel
-  try {
-    if (typeof window.getSetting === "function") {
-      const setLevel = window.getSetting("DEBUG_LOG_LEVEL");
-      curLevel = window.LOG_LEVELS[setLevel] !== undefined ? window.LOG_LEVELS[setLevel] : window._currentLogLevel;
-      window._currentLogLevel = curLevel;
-    }
-  } catch (e) {}
-  const msgLevel = window.LOG_LEVELS[level];
-  if (msgLevel && curLevel >= msgLevel) {
-    console.log(`[${level}]`, ...args);
-    // Optionally stream logs for ERROR level
-    if (typeof window._externalLogStream === "function") {
-      try {
-        window._externalLogStream(level, ...args);
-      } catch (e) {}
-    }
+// --- LOGGING HELPERS (module tag: [layout]) ---
+function layout_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[layout]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[layout]", level, ...args);
   }
 }
-function logEnter(fnName, ...args) {
-  log("TRACE", `>> Enter ${fnName}`, ...args);
-}
-function logExit(fnName, ...result) {
-  log("TRACE", `<< Exit ${fnName}`, ...result);
-}
+function layout_logEnter(fnName, ...args) { layout_log("TRACE", `>> Enter ${fnName}`, ...args); }
+function layout_logExit(fnName, ...result) { layout_log("TRACE", `<< Exit ${fnName}`, ...result); }
 
-/*********************************************************
- * Golden Layout Bootstrapping & Panel Registration
- *********************************************************/
-
+// --- GOLDEN LAYOUT BOOTSTRAP ---
 (function initGoldenLayout() {
-  logEnter("initGoldenLayout");
-  if (window._GL_HELLO_WORLD_INITIALIZED) {
-    log("DEBUG", "Golden Layout already initialized");
-    logExit("initGoldenLayout");
+  layout_logEnter("initGoldenLayout");
+  if (window._GL_LAYOUT_INITIALIZED) {
+    layout_log("DEBUG", "Golden Layout already initialized");
+    layout_logExit("initGoldenLayout");
     return;
   }
-  window._GL_HELLO_WORLD_INITIALIZED = true;
+  window._GL_LAYOUT_INITIALIZED = true;
 
   function doInit() {
-    logEnter("doInit");
+    layout_logEnter("doInit");
     try {
-      // ---- 1. Golden Layout default configuration ----
+      // 1. Layout config
       const layoutConfig = {
         settings: {
           showPopoutIcon: false,
@@ -228,23 +160,23 @@ function logExit(fnName, ...result) {
               type: "component",
               componentName: "CanvasPanel",
               title: "Canvas",
-              width: 80 // main panel on the left
+              width: 80
             },
             {
               type: "column",
-              width: 20, // right-hand side column
+              width: 20,
               content: [
                 {
                   type: "component",
                   componentName: "SidebarPanel",
                   title: "Shapes",
-                  height: 50 // top half
+                  height: 50
                 },
                 {
                   type: "component",
                   componentName: "SettingsPanel",
                   title: "Settings",
-                  height: 50, // bottom half
+                  height: 50,
                   isClosable: true
                 }
               ]
@@ -253,25 +185,25 @@ function logExit(fnName, ...result) {
         }]
       };
 
-      // ---- 2. Create and attach Golden Layout instance ----
+      // 2. Find root
       const glRoot = document.getElementById("main-layout");
       if (!glRoot) {
-        log("ERROR", "Golden Layout root #main-layout not found!");
-        logExit("doInit");
+        layout_log("ERROR", "Golden Layout root #main-layout not found!");
+        layout_logExit("doInit");
         return;
       }
       while (glRoot.firstChild) glRoot.removeChild(glRoot.firstChild);
 
       const myLayout = new GoldenLayout(layoutConfig, glRoot);
 
-      // ---- 3. Register panels ----
+      // 3. Register panels
       myLayout.registerComponent("SidebarPanel", function(container, state) {
         const div = document.createElement("div");
         div.id = "sidebar";
         div.style.height = "100%";
         container.getElement().append(div);
         if (window.buildSidebarPanel) {
-          log("DEBUG", "buildSidebarPanel called");
+          layout_log("DEBUG", "buildSidebarPanel called");
           window.buildSidebarPanel(div, container, state);
         }
       });
@@ -282,7 +214,7 @@ function logExit(fnName, ...result) {
         div.style.height = "100%";
         container.getElement().append(div);
         if (window.buildCanvasPanel) {
-          log("DEBUG", "buildCanvasPanel called");
+          layout_log("DEBUG", "buildCanvasPanel called");
           window.buildCanvasPanel(div, container, state);
         }
       });
@@ -293,15 +225,15 @@ function logExit(fnName, ...result) {
         div.style.height = "100%";
         container.getElement().append(div);
         if (window.buildSettingsPanel) {
-          log("DEBUG", "buildSettingsPanel called");
+          layout_log("DEBUG", "buildSettingsPanel called");
           window.buildSettingsPanel(div, container, state);
         }
       });
 
-      // ---- 4. Initialize layout ----
+      // 4. Initialize layout
       myLayout.init();
 
-      // ---- 5. Settings panel show/hide ----
+      // 5. Settings panel show/hide
       window.hideSettingsPanel = function() {
         const settings = myLayout.root.getItemsByFilter(item => item.config && item.config.componentName === "SettingsPanel");
         if (settings.length > 0) settings[0].remove();
@@ -319,18 +251,18 @@ function logExit(fnName, ...result) {
         });
       };
 
-      // ---- 6. Expose layout for debugging ----
+      // 6. Expose layout for debugging
       window.myLayout = myLayout;
 
-      // ---- 7. Ready event ----
+      // 7. Ready event
       if (typeof window.onGoldenLayoutReady === "function") {
         window.onGoldenLayoutReady(myLayout);
       }
     } catch (e) {
-      log("ERROR", "Exception in Golden Layout bootstrapping", e);
+      layout_log("ERROR", "Exception in Golden Layout bootstrapping", e);
       throw e;
     }
-    logExit("doInit");
+    layout_logExit("doInit");
   }
 
   if (document.readyState === "loading") {
@@ -338,21 +270,28 @@ function logExit(fnName, ...result) {
   } else {
     doInit();
   }
-  logExit("initGoldenLayout");
+  layout_logExit("initGoldenLayout");
 })();
-// COPILOT_PART_handlers: 2025-09-11T21:19:00Z
+
+// COPILOT_PART_handlers: 2025-09-12T10:07:00Z
 /*********************************************************
- * UI Event Handler Attachment
+ * [handlers] UI Event Handler Attachment
  * ------------------------------------------------------
  * Attaches all toolbar and global event handlers after Golden Layout and panels are ready.
  * Centralizes event handler logic for maintainability.
  * Ensures handlers are attached only after the DOM is fully constructed
  * (including dynamically generated panels).
- * Should be loaded/concatenated immediately after shapes.layout.js.
+ * Adheres to project logging schema and manifesto (see COPILOT_MANIFESTO.md).
  *********************************************************/
 
-// Logging helpers from layout part (assumed loaded before this part)
-function handlers_log(level, ...args) { if (typeof log === "function") log(level, ...args); }
+// Logging helpers (module tag: [handlers])
+function handlers_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[handlers]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[handlers]", level, ...args);
+  }
+}
 function handlers_logEnter(fn, ...a) { handlers_log("TRACE", `>> Enter ${fn}`, ...a); }
 function handlers_logExit(fn, ...r) { handlers_log("TRACE", `<< Exit ${fn}`, ...r); }
 
@@ -450,20 +389,32 @@ function handlers_logExit(fn, ...r) { handlers_log("TRACE", `<< Exit ${fn}`, ...
   }
   handlers_logExit("attachToolbarHandlers");
 })();
-// COPILOT_PART_sidebar: 2025-09-11T21:21:00Z
+// COPILOT_PART_sidebar: 2025-09-12T10:09:00Z
 /*********************************************************
- * Sidebar Panel Logic
- * ----------------------------------------
+ * [sidebar] Sidebar Panel Logic
+ * ------------------------------------------------------
  * Implements the content and UI logic for the Sidebar panel (shape table/list).
- * Current: Placeholder/hello world.
- * Planned: Will show the table of annotation shapes and handle selection, lock, delete, etc.
+ * - Will display the table of annotation shapes and handle selection, lock, delete, etc.
+ * - Applies standardized logging as per COPILOT_MANIFESTO.md.
  *********************************************************/
 
+// Logging helpers (module tag: [sidebar])
+function sidebar_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[sidebar]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[sidebar]", level, ...args);
+  }
+}
+function sidebar_logEnter(fnName, ...args) { sidebar_log("TRACE", `>> Enter ${fnName}`, ...args); }
+function sidebar_logExit(fnName, ...result) { sidebar_log("TRACE", `<< Exit ${fnName}`, ...result); }
+
 window.buildSidebarPanel = function(rootDiv, container, state) {
+  sidebar_logEnter("buildSidebarPanel", {rootDiv, container, state});
   // Clear any existing content
   rootDiv.innerHTML = "";
 
-  // Add hello world content
+  // Placeholder "Hello, Sidebar!"
   const h2 = document.createElement("h2");
   h2.innerText = "Hello, Sidebar!";
   const p = document.createElement("p");
@@ -472,13 +423,13 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   rootDiv.appendChild(h2);
   rootDiv.appendChild(p);
 
-  // Example debugging: log panel construction
-  if (typeof logEnter === "function") logEnter("buildSidebarPanel", {rootDiv, container, state});
-  if (typeof logExit === "function") logExit("buildSidebarPanel");
+  // Log panel construction
+  sidebar_log("DEBUG", "Sidebar panel built (placeholder)");
+  sidebar_logExit("buildSidebarPanel");
 };
-// COPILOT_PART_konva: 2025-09-11T21:23:00Z
+// COPILOT_PART_konva: 2025-09-12T10:13:00Z
 /*********************************************************
- * CanvasPanel – Image Display & Shape Creation
+ * [konva] Canvas Panel – Image Display & Shape Creation
  * ------------------------------------------------------
  * Handles Canvas setup, image loading, and single-shape creation/selection.
  * - Loads and displays the selected/uploaded image.
@@ -486,7 +437,19 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
  * - Handles single-shape selection and transformer UI.
  * - Exports key hooks for shapes.multiselect.js (multi-select, drag, highlights).
  * - All state is kept in window._sceneDesigner (SSOT).
+ * - Applies project logging schema (see COPILOT_MANIFESTO.md).
  *********************************************************/
+
+// Logging helpers (module tag: [konva])
+function konva_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[konva]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[konva]", level, ...args);
+  }
+}
+function konva_logEnter(fnName, ...args) { konva_log("TRACE", `>> Enter ${fnName}`, ...args); }
+function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName}`, ...result); }
 
 (function () {
   // App-wide state for the canvas panel (Single Source of Truth)
@@ -496,6 +459,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   // --- SHAPE CREATION HELPERS ---
 
   function makeReticlePointShape(x, y, color = "#2176ff") {
+    konva_logEnter("makeReticlePointShape", {x, y, color});
     const group = new Konva.Group({ x, y, draggable: true, name: "reticle-point" });
     const hitCircle = new Konva.Circle({
       x: 0, y: 0, radius: 22,
@@ -529,10 +493,12 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     group.on("dragend", () => { group.showSelection(false); });
     group.on("mouseenter", () => { document.body.style.cursor = 'pointer'; });
     group.on("mouseleave", () => { document.body.style.cursor = ''; });
+    konva_logExit("makeReticlePointShape", group);
     return group;
   }
 
   function makeRectShape(x, y, width = 80, height = 48, stroke = "#2176ff", fill = "#ffffff00") {
+    konva_logEnter("makeRectShape", {x, y, width, height, stroke, fill});
     const rect = new Konva.Rect({
       x: x, y: y, width: width, height: height,
       stroke: stroke, strokeWidth: 1,
@@ -544,10 +510,12 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     rect._id = "rect_" + Math.random().toString(36).slice(2, 10);
     rect.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     rect.on("mouseleave", () => { document.body.style.cursor = ''; });
+    konva_logExit("makeRectShape", rect);
     return rect;
   }
 
   function makeCircleShape(x, y, radius = 24, stroke = "#2176ff", fill = "#ffffff00") {
+    konva_logEnter("makeCircleShape", {x, y, radius, stroke, fill});
     const circle = new Konva.Circle({
       x: x, y: y, radius: radius,
       stroke: stroke, strokeWidth: 1,
@@ -559,12 +527,14 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     circle._id = "circ_" + Math.random().toString(36).slice(2, 10);
     circle.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     circle.on("mouseleave", () => { document.body.style.cursor = ''; });
+    konva_logExit("makeCircleShape", circle);
     return circle;
   }
 
   // --- SINGLE-SHAPE SELECTION/TRANSFORMER ---
 
   function selectShape(shape) {
+    konva_logEnter("selectShape", {shape});
     if (AppState.transformer) {
       AppState.transformer.destroy();
       AppState.transformer = null;
@@ -573,7 +543,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       AppState.selectedShape.showSelection(false);
     AppState.selectedShape = shape;
     AppState.selectedShapes = shape ? [shape] : [];
-    if (!shape) return;
+    if (!shape) {
+      konva_logExit("selectShape");
+      return;
+    }
 
     if (shape._type === "rect") {
       const transformer = new Konva.Transformer({
@@ -618,9 +591,11 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     } else if (shape._type === "point") {
       shape.showSelection(true);
     }
+    konva_logExit("selectShape");
   }
 
   function deselectShape() {
+    konva_logEnter("deselectShape");
     if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection)
       AppState.selectedShape.showSelection(false);
     if (AppState.transformer) {
@@ -630,11 +605,13 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     AppState.selectedShape = null;
     AppState.selectedShapes = [];
     if (AppState.konvaLayer) AppState.konvaLayer.draw();
+    konva_logExit("deselectShape");
   }
 
   // --- SHAPE LOCKING ---
 
   function setShapeLocked(shape, locked) {
+    konva_logEnter("setShapeLocked", {shape, locked});
     shape.locked = !!locked;
     if (shape.draggable) shape.draggable(!locked);
     if (shape instanceof Konva.Group) shape.draggable(!locked);
@@ -650,15 +627,17 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         AppState.transformer.rotateEnabled(shape._type !== 'point');
       }
     }
+    konva_logExit("setShapeLocked");
   }
 
   // --- IMAGE LOADING AND CANVAS INIT ---
 
   function loadImage(src) {
+    konva_logEnter("loadImage", {src});
     return new Promise((resolve, reject) => {
       const img = new window.Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
+      img.onload = () => { konva_log("DEBUG", "Image loaded", {src}); resolve(img); };
+      img.onerror = (e) => { konva_log("ERROR", "Image failed to load", {src, e}); reject(e); };
       img.crossOrigin = "Anonymous";
       img.src = src;
     });
@@ -703,6 +682,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   }
 
   window.buildCanvasPanel = async function (rootDiv, container, state) {
+    konva_logEnter("buildCanvasPanel", {rootDiv, container, state});
     clearNode(rootDiv);
     const outer = document.createElement("div");
     outer.style.width = "100%";
@@ -726,6 +706,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     AppState.transformer = null;
 
     async function renderCanvas(imageSrc) {
+      konva_logEnter("renderCanvas", {imageSrc});
       if (AppState.konvaStage) {
         AppState.konvaStage.destroy();
         AppState.konvaStage = null;
@@ -736,6 +717,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         const msg = document.createElement("div");
         msg.innerHTML = "<p style='text-align:center;font-size:1.1em;color:#888;'>Select or upload an image to begin.</p>";
         konvaDiv.appendChild(msg);
+        konva_logExit("renderCanvas (no imageSrc)");
         return;
       }
 
@@ -743,6 +725,8 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       try { img = await loadImage(imageSrc); }
       catch (e) {
         konvaDiv.innerHTML = "<p style='color:crimson;text-align:center;'>Failed to load image.</p>";
+        konva_log("ERROR", "Failed to load image", {imageSrc, error: e});
+        konva_logExit("renderCanvas (load error)");
         return;
       }
       AppState.imageObj = img;
@@ -781,6 +765,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
           selectShape(evt.target);
         }
       });
+      konva_logExit("renderCanvas");
     }
 
     function getCurrentImageSrc() {
@@ -793,6 +778,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     }
 
     function setupImageLoaderListeners() {
+      konva_logEnter("setupImageLoaderListeners");
       const imageUpload = document.getElementById("imageUpload");
       if (imageUpload) {
         imageUpload.addEventListener("change", function (e) {
@@ -811,6 +797,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
           renderCanvas(src);
         });
       }
+      konva_logExit("setupImageLoaderListeners");
     }
 
     setupImageLoaderListeners();
@@ -823,8 +810,12 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     }
 
     function addPointShape() {
+      konva_logEnter("addPointShape");
       const img = AppState.imageObj;
-      if (!img || !AppState.konvaLayer) return;
+      if (!img || !AppState.konvaLayer) {
+        konva_logExit("addPointShape (no image/layer)");
+        return;
+      }
       const canvasArea = document.getElementById("canvas-area");
       let x = Math.round(img.width / 2), y = Math.round(img.height / 2);
       if (canvasArea && AppState.konvaDiv) {
@@ -849,11 +840,16 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       AppState.selectedShape = point;
       AppState.selectedShapes = [point];
       point.showSelection(true);
+      konva_logExit("addPointShape");
     }
 
     function addRectShape() {
+      konva_logEnter("addRectShape");
       const img = AppState.imageObj;
-      if (!img || !AppState.konvaLayer) return;
+      if (!img || !AppState.konvaLayer) {
+        konva_logExit("addRectShape (no image/layer)");
+        return;
+      }
       const defaultW = 80, defaultH = 48;
       const canvasArea = document.getElementById("canvas-area");
       let x = Math.round(img.width / 2 - defaultW / 2), y = Math.round(img.height / 2 - defaultH / 2);
@@ -903,11 +899,16 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         rect.scaleY(1);
         AppState.konvaLayer.draw();
       });
+      konva_logExit("addRectShape");
     }
 
     function addCircleShape() {
+      konva_logEnter("addCircleShape");
       const img = AppState.imageObj;
-      if (!img || !AppState.konvaLayer) return;
+      if (!img || !AppState.konvaLayer) {
+        konva_logExit("addCircleShape (no image/layer)");
+        return;
+      }
       const defaultRadius = 24;
       const canvasArea = document.getElementById("canvas-area");
       let x = Math.round(img.width / 2), y = Math.round(img.height / 2);
@@ -955,14 +956,17 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
         circle.strokeWidth(1);
         AppState.konvaLayer.draw();
       });
+      konva_logExit("addCircleShape");
     }
 
     function addShapeFromToolbar() {
+      konva_logEnter("addShapeFromToolbar");
       const type = getSelectedShapeType();
       if (type === "point") addPointShape();
       else if (type === "rect") addRectShape();
       else if (type === "circle") addCircleShape();
       else alert("Only point, rectangle, and circle shapes are implemented in this build.");
+      konva_logExit("addShapeFromToolbar");
     }
 
     // Export hooks for shapes.multiselect.js and shapes.handlers.js
@@ -973,21 +977,34 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     AppState.deselectShape = deselectShape;
     AppState.setShapeLocked = setShapeLocked;
     AppState.addShapeFromToolbar = addShapeFromToolbar;
+
+    konva_logExit("buildCanvasPanel");
   };
 })();
-// COPILOT_PART_multiselect: 2025-09-11T21:25:00Z
+// COPILOT_PART_multiselect: 2025-09-12T10:15:00Z
 /*********************************************************
- * Multi-Select, Group Drag, Highlights, Lock UI
+ * [multiselect] Multi-Select, Group Drag, Highlights, Lock UI
  * ------------------------------------------------------
  * Handles all multi-selection, group drag, bounding box, and lock UI logic.
- * Depends on shapes.konva.js for shape creation and single selection.
  * - Multi-select: Select All, marquee/box selection, multi-selection highlights.
  * - Multi-select drag, clamped group bounding box (with rotation/scale).
  * - Orange debug bounding box during group drag.
  * - Locking: Locked shapes block group drag and show red highlight feedback.
  * - Lock checkbox UI always reflects current selection.
  * - Uses setSelectedShapes() as the only way to change selection state.
+ * - Applies project logging schema (see COPILOT_MANIFESTO.md).
  *********************************************************/
+
+// Logging helpers (module tag: [multiselect])
+function multiselect_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[multiselect]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[multiselect]", level, ...args);
+  }
+}
+function multiselect_logEnter(fnName, ...args) { multiselect_log("TRACE", `>> Enter ${fnName}`, ...args); }
+function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< Exit ${fnName}`, ...result); }
 
 (function () {
   function getAppState() {
@@ -1001,6 +1018,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
 
   // --- Centralized Selection Setter ---
   function setSelectedShapes(shapesArr) {
+    multiselect_logEnter("setSelectedShapes", shapesArr);
     const AppState = getAppState();
     AppState.selectedShapes = shapesArr || [];
     AppState.selectedShape = (shapesArr && shapesArr.length === 1) ? shapesArr[0] : null;
@@ -1042,17 +1060,22 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     if (AppState.konvaLayer) AppState.konvaLayer.draw();
     if (typeof window.updateList === "function") window.updateList();
     if (typeof window.updateLabelUI === "function") window.updateLabelUI();
+    multiselect_logExit("setSelectedShapes");
   }
 
   // --- Selection Highlight Logic ---
   function updateSelectionHighlights() {
+    multiselect_logEnter("updateSelectionHighlights");
     const AppState = getAppState();
     if (multiSelectHighlightShapes.length && AppState.konvaLayer) {
       multiSelectHighlightShapes.forEach(g => g.destroy && g.destroy());
       multiSelectHighlightShapes = [];
       AppState.konvaLayer.draw();
     }
-    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
+    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) {
+      multiselect_logExit("updateSelectionHighlights (not multi)");
+      return;
+    }
     const pad = 6;
     AppState.selectedShapes.forEach(shape => {
       let highlight;
@@ -1099,18 +1122,21 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       }
     });
     AppState.konvaLayer.batchDraw();
+    multiselect_logExit("updateSelectionHighlights");
   }
   window._sceneDesigner = window._sceneDesigner || {};
   window._sceneDesigner.updateSelectionHighlights = updateSelectionHighlights;
 
   // --- Locked Drag Red Feedback ---
   function showLockedHighlightForShapes(shapesArr) {
+    multiselect_logEnter("showLockedHighlightForShapes", shapesArr);
     _lockedDragAttemptedIDs = shapesArr.map(s => s._id);
     updateSelectionHighlights();
     setTimeout(() => {
       _lockedDragAttemptedIDs = [];
       updateSelectionHighlights();
     }, 1000);
+    multiselect_logExit("showLockedHighlightForShapes");
   }
   window._sceneDesigner.showLockedHighlightForShapes = showLockedHighlightForShapes;
 
@@ -1152,6 +1178,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     return { minX, minY, maxX, maxY };
   }
   function clampMultiDragDelta(dx, dy, origPositions) {
+    multiselect_logEnter("clampMultiDragDelta", dx, dy, origPositions);
     const AppState = getAppState();
     const stageW = AppState.konvaStage ? AppState.konvaStage.width() : 1;
     const stageH = AppState.konvaStage ? AppState.konvaStage.height() : 1;
@@ -1169,12 +1196,17 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
     if (groupBounds.maxY > stageH) adjDy += stageH - groupBounds.maxY;
 
+    multiselect_logExit("clampMultiDragDelta", adjDx, adjDy);
     return [adjDx, adjDy];
   }
   function updateDebugMultiDragBox() {
+    multiselect_logEnter("updateDebugMultiDragBox");
     const AppState = getAppState();
     if (debugMultiDragBox) debugMultiDragBox.destroy();
-    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
+    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) {
+      multiselect_logExit("updateDebugMultiDragBox (not multi)");
+      return;
+    }
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     AppState.selectedShapes.forEach(shape => {
@@ -1198,20 +1230,27 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     });
     AppState.konvaLayer.add(debugMultiDragBox);
     AppState.konvaLayer.batchDraw();
+    multiselect_logExit("updateDebugMultiDragBox");
   }
   function clearDebugMultiDragBox() {
+    multiselect_logEnter("clearDebugMultiDragBox");
     const AppState = getAppState();
     if (debugMultiDragBox) {
       debugMultiDragBox.destroy();
       debugMultiDragBox = null;
       if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     }
+    multiselect_logExit("clearDebugMultiDragBox");
   }
 
   // --- Multi-Drag Handlers ---
   function onMultiDragMove(evt) {
+    multiselect_logEnter("onMultiDragMove", evt);
     const AppState = getAppState();
-    if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) return;
+    if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) {
+      multiselect_logExit("onMultiDragMove (not moving)");
+      return;
+    }
     const pos = AppState.konvaStage.getPointerPosition();
     let dx = pos.x - multiDrag.dragOrigin.x;
     let dy = pos.y - multiDrag.dragOrigin.y;
@@ -1223,8 +1262,10 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     updateDebugMultiDragBox();
     if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     updateSelectionHighlights();
+    multiselect_logExit("onMultiDragMove");
   }
   function onMultiDragEnd(evt) {
+    multiselect_logEnter("onMultiDragEnd", evt);
     const AppState = getAppState();
     multiDrag.moving = false;
     multiDrag.dragOrigin = null;
@@ -1236,28 +1277,36 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     }
     if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     updateSelectionHighlights();
+    multiselect_logExit("onMultiDragEnd");
   }
 
   // --- Lock Checkbox UI Sync ---
   function updateLockCheckboxUI() {
+    multiselect_logEnter("updateLockCheckboxUI");
     const AppState = getAppState();
     const lockCheckbox = document.getElementById("lockCheckbox");
-    if (!lockCheckbox) return;
+    if (!lockCheckbox) {
+      multiselect_logExit("updateLockCheckboxUI (no checkbox)");
+      return;
+    }
     const shapes = AppState.selectedShapes || [];
     if (shapes.length === 0) {
       lockCheckbox.indeterminate = false;
       lockCheckbox.checked = false;
+      multiselect_logExit("updateLockCheckboxUI (none selected)");
       return;
     }
     const allLocked = shapes.every(s => s.locked);
     const noneLocked = shapes.every(s => !s.locked);
     lockCheckbox.indeterminate = !(allLocked || noneLocked);
     lockCheckbox.checked = allLocked;
+    multiselect_logExit("updateLockCheckboxUI");
   }
   window._sceneDesigner.updateLockCheckboxUI = updateLockCheckboxUI;
 
   // --- Attach/override selection logic to sync lock UI ---
   function attachSelectionOverrides() {
+    multiselect_logEnter("attachSelectionOverrides");
     const AppState = getAppState();
     if (!AppState._multiSelectOverridesApplied) {
       const origSelectShape = AppState.selectShape;
@@ -1272,14 +1321,17 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       };
       AppState._multiSelectOverridesApplied = true;
     }
+    multiselect_logExit("attachSelectionOverrides");
   }
 
   // --- Select All logic: uses setSelectedShapes() SSOT setter ---
   function selectAllShapes() {
+    multiselect_logEnter("selectAllShapes");
     const AppState = getAppState();
     if (AppState.shapes && AppState.shapes.length > 0) {
       setSelectedShapes(AppState.shapes.slice());
     }
+    multiselect_logExit("selectAllShapes");
   }
 
   function attachSelectAllHook() {
@@ -1318,6 +1370,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
 
   // --- Export handlers for event attachment in shapes.konva.js ---
   function exportMultiSelectAPI() {
+    multiselect_logEnter("exportMultiSelectAPI");
     const AppState = getAppState();
     AppState._multiSelect = {
       setSelectedShapes,
@@ -1330,14 +1383,17 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
       clearDebugMultiDragBox,
       selectAllShapes
     };
+    multiselect_logExit("exportMultiSelectAPI");
   }
 
   // --- Deferred Initialization ---
   function initMultiselect() {
+    multiselect_logEnter("initMultiselect");
     attachSelectionOverrides();
     attachSelectAllHook();
     attachLockCheckboxHook();
     exportMultiSelectAPI();
+    multiselect_logExit("initMultiselect");
   }
 
   if (document.readyState === "loading") {
@@ -1346,18 +1402,30 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
     setTimeout(initMultiselect, 0);
   }
 })();
-// COPILOT_PART_settings: 2025-09-11T21:27:00Z
+// COPILOT_PART_settings: 2025-09-12T10:17:00Z
 /*********************************************************
- * SettingsPanel Logic (modular)
- * ----------------------------------------
+ * [settings] Settings Panel Logic (modular)
+ * ------------------------------------------------------
  * Implements the content and UI for the Settings panel.
  * - Provides "Log Level" and "Log Output Destination" selectors.
  * - Both are wired to window.setSetting/getSetting,
  *   affecting runtime logging and streaming for the modular log() system.
- * - Will grow to support more settings as features expand.
+ * - Adheres to project logging schema (see COPILOT_MANIFESTO.md).
  *********************************************************/
 
+// Logging helpers (module tag: [settings])
+function settings_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[settings]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[settings]", level, ...args);
+  }
+}
+function settings_logEnter(fnName, ...args) { settings_log("TRACE", `>> Enter ${fnName}`, ...args); }
+function settings_logExit(fnName, ...result) { settings_log("TRACE", `<< Exit ${fnName}`, ...result); }
+
 window.buildSettingsPanel = function(rootDiv, container, state) {
+  settings_logEnter("buildSettingsPanel", {rootDiv, container, state});
   // Clear any existing content
   rootDiv.innerHTML = "";
 
@@ -1398,6 +1466,7 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   logLevelSelect.value = currentLevel;
 
   logLevelSelect.addEventListener("change", function() {
+    settings_log("INFO", "Log level changed to", logLevelSelect.value);
     if (typeof window.setSetting === "function") {
       window.setSetting("DEBUG_LOG_LEVEL", logLevelSelect.value);
     } else {
@@ -1408,7 +1477,7 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
       window._currentLogLevel = window.LOG_LEVELS[logLevelSelect.value] || window.LOG_LEVELS.ERROR;
     }
     if (window.console && typeof window.console.log === "function") {
-      window.console.log(`[SETTINGS] Log level set to ${logLevelSelect.value}`);
+      window.console.log(`[settings] Log level set to ${logLevelSelect.value}`);
     }
   });
 
@@ -1443,6 +1512,7 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   logDestSelect.value = currentDest;
 
   logDestSelect.addEventListener("change", function() {
+    settings_log("INFO", "Log output destination changed to", logDestSelect.value);
     if (typeof window.setSetting === "function") {
       window.setSetting("LOG_OUTPUT_DEST", logDestSelect.value);
     } else {
@@ -1450,7 +1520,7 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
       window._settings["LOG_OUTPUT_DEST"] = logDestSelect.value;
     }
     if (window.console && typeof window.console.log === "function") {
-      window.console.log(`[SETTINGS] Log output destination set to ${logDestSelect.value}`);
+      window.console.log(`[settings] Log output destination set to ${logDestSelect.value}`);
     }
   });
 
@@ -1463,4 +1533,6 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   rootDiv.style.fontFamily = "Segoe UI, Arial, sans-serif";
   rootDiv.style.fontSize = "16px";
   rootDiv.style.padding = "12px 8px";
+
+  settings_logExit("buildSettingsPanel");
 };

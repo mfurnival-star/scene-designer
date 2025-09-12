@@ -1,16 +1,27 @@
-// COPILOT_PART_multiselect: 2025-09-11T21:25:00Z
+// COPILOT_PART_multiselect: 2025-09-12T10:15:00Z
 /*********************************************************
- * Multi-Select, Group Drag, Highlights, Lock UI
+ * [multiselect] Multi-Select, Group Drag, Highlights, Lock UI
  * ------------------------------------------------------
  * Handles all multi-selection, group drag, bounding box, and lock UI logic.
- * Depends on shapes.konva.js for shape creation and single selection.
  * - Multi-select: Select All, marquee/box selection, multi-selection highlights.
  * - Multi-select drag, clamped group bounding box (with rotation/scale).
  * - Orange debug bounding box during group drag.
  * - Locking: Locked shapes block group drag and show red highlight feedback.
  * - Lock checkbox UI always reflects current selection.
  * - Uses setSelectedShapes() as the only way to change selection state.
+ * - Applies project logging schema (see COPILOT_MANIFESTO.md).
  *********************************************************/
+
+// Logging helpers (module tag: [multiselect])
+function multiselect_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[multiselect]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[multiselect]", level, ...args);
+  }
+}
+function multiselect_logEnter(fnName, ...args) { multiselect_log("TRACE", `>> Enter ${fnName}`, ...args); }
+function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< Exit ${fnName}`, ...result); }
 
 (function () {
   function getAppState() {
@@ -24,6 +35,7 @@
 
   // --- Centralized Selection Setter ---
   function setSelectedShapes(shapesArr) {
+    multiselect_logEnter("setSelectedShapes", shapesArr);
     const AppState = getAppState();
     AppState.selectedShapes = shapesArr || [];
     AppState.selectedShape = (shapesArr && shapesArr.length === 1) ? shapesArr[0] : null;
@@ -65,17 +77,22 @@
     if (AppState.konvaLayer) AppState.konvaLayer.draw();
     if (typeof window.updateList === "function") window.updateList();
     if (typeof window.updateLabelUI === "function") window.updateLabelUI();
+    multiselect_logExit("setSelectedShapes");
   }
 
   // --- Selection Highlight Logic ---
   function updateSelectionHighlights() {
+    multiselect_logEnter("updateSelectionHighlights");
     const AppState = getAppState();
     if (multiSelectHighlightShapes.length && AppState.konvaLayer) {
       multiSelectHighlightShapes.forEach(g => g.destroy && g.destroy());
       multiSelectHighlightShapes = [];
       AppState.konvaLayer.draw();
     }
-    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
+    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) {
+      multiselect_logExit("updateSelectionHighlights (not multi)");
+      return;
+    }
     const pad = 6;
     AppState.selectedShapes.forEach(shape => {
       let highlight;
@@ -122,18 +139,21 @@
       }
     });
     AppState.konvaLayer.batchDraw();
+    multiselect_logExit("updateSelectionHighlights");
   }
   window._sceneDesigner = window._sceneDesigner || {};
   window._sceneDesigner.updateSelectionHighlights = updateSelectionHighlights;
 
   // --- Locked Drag Red Feedback ---
   function showLockedHighlightForShapes(shapesArr) {
+    multiselect_logEnter("showLockedHighlightForShapes", shapesArr);
     _lockedDragAttemptedIDs = shapesArr.map(s => s._id);
     updateSelectionHighlights();
     setTimeout(() => {
       _lockedDragAttemptedIDs = [];
       updateSelectionHighlights();
     }, 1000);
+    multiselect_logExit("showLockedHighlightForShapes");
   }
   window._sceneDesigner.showLockedHighlightForShapes = showLockedHighlightForShapes;
 
@@ -175,6 +195,7 @@
     return { minX, minY, maxX, maxY };
   }
   function clampMultiDragDelta(dx, dy, origPositions) {
+    multiselect_logEnter("clampMultiDragDelta", dx, dy, origPositions);
     const AppState = getAppState();
     const stageW = AppState.konvaStage ? AppState.konvaStage.width() : 1;
     const stageH = AppState.konvaStage ? AppState.konvaStage.height() : 1;
@@ -192,12 +213,17 @@
     if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
     if (groupBounds.maxY > stageH) adjDy += stageH - groupBounds.maxY;
 
+    multiselect_logExit("clampMultiDragDelta", adjDx, adjDy);
     return [adjDx, adjDy];
   }
   function updateDebugMultiDragBox() {
+    multiselect_logEnter("updateDebugMultiDragBox");
     const AppState = getAppState();
     if (debugMultiDragBox) debugMultiDragBox.destroy();
-    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) return;
+    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) {
+      multiselect_logExit("updateDebugMultiDragBox (not multi)");
+      return;
+    }
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     AppState.selectedShapes.forEach(shape => {
@@ -221,20 +247,27 @@
     });
     AppState.konvaLayer.add(debugMultiDragBox);
     AppState.konvaLayer.batchDraw();
+    multiselect_logExit("updateDebugMultiDragBox");
   }
   function clearDebugMultiDragBox() {
+    multiselect_logEnter("clearDebugMultiDragBox");
     const AppState = getAppState();
     if (debugMultiDragBox) {
       debugMultiDragBox.destroy();
       debugMultiDragBox = null;
       if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     }
+    multiselect_logExit("clearDebugMultiDragBox");
   }
 
   // --- Multi-Drag Handlers ---
   function onMultiDragMove(evt) {
+    multiselect_logEnter("onMultiDragMove", evt);
     const AppState = getAppState();
-    if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) return;
+    if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) {
+      multiselect_logExit("onMultiDragMove (not moving)");
+      return;
+    }
     const pos = AppState.konvaStage.getPointerPosition();
     let dx = pos.x - multiDrag.dragOrigin.x;
     let dy = pos.y - multiDrag.dragOrigin.y;
@@ -246,8 +279,10 @@
     updateDebugMultiDragBox();
     if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     updateSelectionHighlights();
+    multiselect_logExit("onMultiDragMove");
   }
   function onMultiDragEnd(evt) {
+    multiselect_logEnter("onMultiDragEnd", evt);
     const AppState = getAppState();
     multiDrag.moving = false;
     multiDrag.dragOrigin = null;
@@ -259,28 +294,36 @@
     }
     if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     updateSelectionHighlights();
+    multiselect_logExit("onMultiDragEnd");
   }
 
   // --- Lock Checkbox UI Sync ---
   function updateLockCheckboxUI() {
+    multiselect_logEnter("updateLockCheckboxUI");
     const AppState = getAppState();
     const lockCheckbox = document.getElementById("lockCheckbox");
-    if (!lockCheckbox) return;
+    if (!lockCheckbox) {
+      multiselect_logExit("updateLockCheckboxUI (no checkbox)");
+      return;
+    }
     const shapes = AppState.selectedShapes || [];
     if (shapes.length === 0) {
       lockCheckbox.indeterminate = false;
       lockCheckbox.checked = false;
+      multiselect_logExit("updateLockCheckboxUI (none selected)");
       return;
     }
     const allLocked = shapes.every(s => s.locked);
     const noneLocked = shapes.every(s => !s.locked);
     lockCheckbox.indeterminate = !(allLocked || noneLocked);
     lockCheckbox.checked = allLocked;
+    multiselect_logExit("updateLockCheckboxUI");
   }
   window._sceneDesigner.updateLockCheckboxUI = updateLockCheckboxUI;
 
   // --- Attach/override selection logic to sync lock UI ---
   function attachSelectionOverrides() {
+    multiselect_logEnter("attachSelectionOverrides");
     const AppState = getAppState();
     if (!AppState._multiSelectOverridesApplied) {
       const origSelectShape = AppState.selectShape;
@@ -295,14 +338,17 @@
       };
       AppState._multiSelectOverridesApplied = true;
     }
+    multiselect_logExit("attachSelectionOverrides");
   }
 
   // --- Select All logic: uses setSelectedShapes() SSOT setter ---
   function selectAllShapes() {
+    multiselect_logEnter("selectAllShapes");
     const AppState = getAppState();
     if (AppState.shapes && AppState.shapes.length > 0) {
       setSelectedShapes(AppState.shapes.slice());
     }
+    multiselect_logExit("selectAllShapes");
   }
 
   function attachSelectAllHook() {
@@ -341,6 +387,7 @@
 
   // --- Export handlers for event attachment in shapes.konva.js ---
   function exportMultiSelectAPI() {
+    multiselect_logEnter("exportMultiSelectAPI");
     const AppState = getAppState();
     AppState._multiSelect = {
       setSelectedShapes,
@@ -353,14 +400,17 @@
       clearDebugMultiDragBox,
       selectAllShapes
     };
+    multiselect_logExit("exportMultiSelectAPI");
   }
 
   // --- Deferred Initialization ---
   function initMultiselect() {
+    multiselect_logEnter("initMultiselect");
     attachSelectionOverrides();
     attachSelectAllHook();
     attachLockCheckboxHook();
     exportMultiSelectAPI();
+    multiselect_logExit("initMultiselect");
   }
 
   if (document.readyState === "loading") {

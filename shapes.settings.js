@@ -1,15 +1,27 @@
-// COPILOT_PART_settings: 2025-09-11T21:27:00Z
+// COPILOT_PART_settings: 2025-09-12T10:17:00Z
 /*********************************************************
- * SettingsPanel Logic (modular)
- * ----------------------------------------
+ * [settings] Settings Panel Logic (modular)
+ * ------------------------------------------------------
  * Implements the content and UI for the Settings panel.
  * - Provides "Log Level" and "Log Output Destination" selectors.
  * - Both are wired to window.setSetting/getSetting,
  *   affecting runtime logging and streaming for the modular log() system.
- * - Will grow to support more settings as features expand.
+ * - Adheres to project logging schema (see COPILOT_MANIFESTO.md).
  *********************************************************/
 
+// Logging helpers (module tag: [settings])
+function settings_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[settings]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[settings]", level, ...args);
+  }
+}
+function settings_logEnter(fnName, ...args) { settings_log("TRACE", `>> Enter ${fnName}`, ...args); }
+function settings_logExit(fnName, ...result) { settings_log("TRACE", `<< Exit ${fnName}`, ...result); }
+
 window.buildSettingsPanel = function(rootDiv, container, state) {
+  settings_logEnter("buildSettingsPanel", {rootDiv, container, state});
   // Clear any existing content
   rootDiv.innerHTML = "";
 
@@ -50,6 +62,7 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   logLevelSelect.value = currentLevel;
 
   logLevelSelect.addEventListener("change", function() {
+    settings_log("INFO", "Log level changed to", logLevelSelect.value);
     if (typeof window.setSetting === "function") {
       window.setSetting("DEBUG_LOG_LEVEL", logLevelSelect.value);
     } else {
@@ -60,7 +73,7 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
       window._currentLogLevel = window.LOG_LEVELS[logLevelSelect.value] || window.LOG_LEVELS.ERROR;
     }
     if (window.console && typeof window.console.log === "function") {
-      window.console.log(`[SETTINGS] Log level set to ${logLevelSelect.value}`);
+      window.console.log(`[settings] Log level set to ${logLevelSelect.value}`);
     }
   });
 
@@ -95,6 +108,7 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   logDestSelect.value = currentDest;
 
   logDestSelect.addEventListener("change", function() {
+    settings_log("INFO", "Log output destination changed to", logDestSelect.value);
     if (typeof window.setSetting === "function") {
       window.setSetting("LOG_OUTPUT_DEST", logDestSelect.value);
     } else {
@@ -102,7 +116,7 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
       window._settings["LOG_OUTPUT_DEST"] = logDestSelect.value;
     }
     if (window.console && typeof window.console.log === "function") {
-      window.console.log(`[SETTINGS] Log output destination set to ${logDestSelect.value}`);
+      window.console.log(`[settings] Log output destination set to ${logDestSelect.value}`);
     }
   });
 
@@ -115,4 +129,6 @@ window.buildSettingsPanel = function(rootDiv, container, state) {
   rootDiv.style.fontFamily = "Segoe UI, Arial, sans-serif";
   rootDiv.style.fontSize = "16px";
   rootDiv.style.padding = "12px 8px";
+
+  settings_logExit("buildSettingsPanel");
 };

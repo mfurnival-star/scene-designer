@@ -1,16 +1,22 @@
-// COPILOT_PART_handlers: 2025-09-11T21:19:00Z
+// COPILOT_PART_handlers: 2025-09-12T10:07:00Z
 /*********************************************************
- * UI Event Handler Attachment
+ * [handlers] UI Event Handler Attachment
  * ------------------------------------------------------
  * Attaches all toolbar and global event handlers after Golden Layout and panels are ready.
  * Centralizes event handler logic for maintainability.
  * Ensures handlers are attached only after the DOM is fully constructed
  * (including dynamically generated panels).
- * Should be loaded/concatenated immediately after shapes.layout.js.
+ * Adheres to project logging schema and manifesto (see COPILOT_MANIFESTO.md).
  *********************************************************/
 
-// Logging helpers from layout part (assumed loaded before this part)
-function handlers_log(level, ...args) { if (typeof log === "function") log(level, ...args); }
+// Logging helpers (module tag: [handlers])
+function handlers_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[handlers]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[handlers]", level, ...args);
+  }
+}
 function handlers_logEnter(fn, ...a) { handlers_log("TRACE", `>> Enter ${fn}`, ...a); }
 function handlers_logExit(fn, ...r) { handlers_log("TRACE", `<< Exit ${fn}`, ...r); }
 

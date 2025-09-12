@@ -1,6 +1,6 @@
-// COPILOT_PART_konva: 2025-09-11T21:23:00Z
+// COPILOT_PART_konva: 2025-09-12T10:13:00Z
 /*********************************************************
- * CanvasPanel – Image Display & Shape Creation
+ * [konva] Canvas Panel – Image Display & Shape Creation
  * ------------------------------------------------------
  * Handles Canvas setup, image loading, and single-shape creation/selection.
  * - Loads and displays the selected/uploaded image.
@@ -8,7 +8,19 @@
  * - Handles single-shape selection and transformer UI.
  * - Exports key hooks for shapes.multiselect.js (multi-select, drag, highlights).
  * - All state is kept in window._sceneDesigner (SSOT).
+ * - Applies project logging schema (see COPILOT_MANIFESTO.md).
  *********************************************************/
+
+// Logging helpers (module tag: [konva])
+function konva_log(level, ...args) {
+  if (typeof window._externalLogStream === "function") {
+    window._externalLogStream(level, "[konva]", ...args);
+  } else if (window.console && window.console.log) {
+    window.console.log("[konva]", level, ...args);
+  }
+}
+function konva_logEnter(fnName, ...args) { konva_log("TRACE", `>> Enter ${fnName}`, ...args); }
+function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName}`, ...result); }
 
 (function () {
   // App-wide state for the canvas panel (Single Source of Truth)
@@ -18,6 +30,7 @@
   // --- SHAPE CREATION HELPERS ---
 
   function makeReticlePointShape(x, y, color = "#2176ff") {
+    konva_logEnter("makeReticlePointShape", {x, y, color});
     const group = new Konva.Group({ x, y, draggable: true, name: "reticle-point" });
     const hitCircle = new Konva.Circle({
       x: 0, y: 0, radius: 22,
@@ -51,10 +64,12 @@
     group.on("dragend", () => { group.showSelection(false); });
     group.on("mouseenter", () => { document.body.style.cursor = 'pointer'; });
     group.on("mouseleave", () => { document.body.style.cursor = ''; });
+    konva_logExit("makeReticlePointShape", group);
     return group;
   }
 
   function makeRectShape(x, y, width = 80, height = 48, stroke = "#2176ff", fill = "#ffffff00") {
+    konva_logEnter("makeRectShape", {x, y, width, height, stroke, fill});
     const rect = new Konva.Rect({
       x: x, y: y, width: width, height: height,
       stroke: stroke, strokeWidth: 1,
@@ -66,10 +81,12 @@
     rect._id = "rect_" + Math.random().toString(36).slice(2, 10);
     rect.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     rect.on("mouseleave", () => { document.body.style.cursor = ''; });
+    konva_logExit("makeRectShape", rect);
     return rect;
   }
 
   function makeCircleShape(x, y, radius = 24, stroke = "#2176ff", fill = "#ffffff00") {
+    konva_logEnter("makeCircleShape", {x, y, radius, stroke, fill});
     const circle = new Konva.Circle({
       x: x, y: y, radius: radius,
       stroke: stroke, strokeWidth: 1,
@@ -81,12 +98,14 @@
     circle._id = "circ_" + Math.random().toString(36).slice(2, 10);
     circle.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     circle.on("mouseleave", () => { document.body.style.cursor = ''; });
+    konva_logExit("makeCircleShape", circle);
     return circle;
   }
 
   // --- SINGLE-SHAPE SELECTION/TRANSFORMER ---
 
   function selectShape(shape) {
+    konva_logEnter("selectShape", {shape});
     if (AppState.transformer) {
       AppState.transformer.destroy();
       AppState.transformer = null;
@@ -95,7 +114,10 @@
       AppState.selectedShape.showSelection(false);
     AppState.selectedShape = shape;
     AppState.selectedShapes = shape ? [shape] : [];
-    if (!shape) return;
+    if (!shape) {
+      konva_logExit("selectShape");
+      return;
+    }
 
     if (shape._type === "rect") {
       const transformer = new Konva.Transformer({
@@ -140,9 +162,11 @@
     } else if (shape._type === "point") {
       shape.showSelection(true);
     }
+    konva_logExit("selectShape");
   }
 
   function deselectShape() {
+    konva_logEnter("deselectShape");
     if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection)
       AppState.selectedShape.showSelection(false);
     if (AppState.transformer) {
@@ -152,11 +176,13 @@
     AppState.selectedShape = null;
     AppState.selectedShapes = [];
     if (AppState.konvaLayer) AppState.konvaLayer.draw();
+    konva_logExit("deselectShape");
   }
 
   // --- SHAPE LOCKING ---
 
   function setShapeLocked(shape, locked) {
+    konva_logEnter("setShapeLocked", {shape, locked});
     shape.locked = !!locked;
     if (shape.draggable) shape.draggable(!locked);
     if (shape instanceof Konva.Group) shape.draggable(!locked);
@@ -172,15 +198,17 @@
         AppState.transformer.rotateEnabled(shape._type !== 'point');
       }
     }
+    konva_logExit("setShapeLocked");
   }
 
   // --- IMAGE LOADING AND CANVAS INIT ---
 
   function loadImage(src) {
+    konva_logEnter("loadImage", {src});
     return new Promise((resolve, reject) => {
       const img = new window.Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
+      img.onload = () => { konva_log("DEBUG", "Image loaded", {src}); resolve(img); };
+      img.onerror = (e) => { konva_log("ERROR", "Image failed to load", {src, e}); reject(e); };
       img.crossOrigin = "Anonymous";
       img.src = src;
     });
@@ -225,6 +253,7 @@
   }
 
   window.buildCanvasPanel = async function (rootDiv, container, state) {
+    konva_logEnter("buildCanvasPanel", {rootDiv, container, state});
     clearNode(rootDiv);
     const outer = document.createElement("div");
     outer.style.width = "100%";
@@ -248,6 +277,7 @@
     AppState.transformer = null;
 
     async function renderCanvas(imageSrc) {
+      konva_logEnter("renderCanvas", {imageSrc});
       if (AppState.konvaStage) {
         AppState.konvaStage.destroy();
         AppState.konvaStage = null;
@@ -258,6 +288,7 @@
         const msg = document.createElement("div");
         msg.innerHTML = "<p style='text-align:center;font-size:1.1em;color:#888;'>Select or upload an image to begin.</p>";
         konvaDiv.appendChild(msg);
+        konva_logExit("renderCanvas (no imageSrc)");
         return;
       }
 
@@ -265,6 +296,8 @@
       try { img = await loadImage(imageSrc); }
       catch (e) {
         konvaDiv.innerHTML = "<p style='color:crimson;text-align:center;'>Failed to load image.</p>";
+        konva_log("ERROR", "Failed to load image", {imageSrc, error: e});
+        konva_logExit("renderCanvas (load error)");
         return;
       }
       AppState.imageObj = img;
@@ -303,6 +336,7 @@
           selectShape(evt.target);
         }
       });
+      konva_logExit("renderCanvas");
     }
 
     function getCurrentImageSrc() {
@@ -315,6 +349,7 @@
     }
 
     function setupImageLoaderListeners() {
+      konva_logEnter("setupImageLoaderListeners");
       const imageUpload = document.getElementById("imageUpload");
       if (imageUpload) {
         imageUpload.addEventListener("change", function (e) {
@@ -333,6 +368,7 @@
           renderCanvas(src);
         });
       }
+      konva_logExit("setupImageLoaderListeners");
     }
 
     setupImageLoaderListeners();
@@ -345,8 +381,12 @@
     }
 
     function addPointShape() {
+      konva_logEnter("addPointShape");
       const img = AppState.imageObj;
-      if (!img || !AppState.konvaLayer) return;
+      if (!img || !AppState.konvaLayer) {
+        konva_logExit("addPointShape (no image/layer)");
+        return;
+      }
       const canvasArea = document.getElementById("canvas-area");
       let x = Math.round(img.width / 2), y = Math.round(img.height / 2);
       if (canvasArea && AppState.konvaDiv) {
@@ -371,11 +411,16 @@
       AppState.selectedShape = point;
       AppState.selectedShapes = [point];
       point.showSelection(true);
+      konva_logExit("addPointShape");
     }
 
     function addRectShape() {
+      konva_logEnter("addRectShape");
       const img = AppState.imageObj;
-      if (!img || !AppState.konvaLayer) return;
+      if (!img || !AppState.konvaLayer) {
+        konva_logExit("addRectShape (no image/layer)");
+        return;
+      }
       const defaultW = 80, defaultH = 48;
       const canvasArea = document.getElementById("canvas-area");
       let x = Math.round(img.width / 2 - defaultW / 2), y = Math.round(img.height / 2 - defaultH / 2);
@@ -425,11 +470,16 @@
         rect.scaleY(1);
         AppState.konvaLayer.draw();
       });
+      konva_logExit("addRectShape");
     }
 
     function addCircleShape() {
+      konva_logEnter("addCircleShape");
       const img = AppState.imageObj;
-      if (!img || !AppState.konvaLayer) return;
+      if (!img || !AppState.konvaLayer) {
+        konva_logExit("addCircleShape (no image/layer)");
+        return;
+      }
       const defaultRadius = 24;
       const canvasArea = document.getElementById("canvas-area");
       let x = Math.round(img.width / 2), y = Math.round(img.height / 2);
@@ -477,14 +527,17 @@
         circle.strokeWidth(1);
         AppState.konvaLayer.draw();
       });
+      konva_logExit("addCircleShape");
     }
 
     function addShapeFromToolbar() {
+      konva_logEnter("addShapeFromToolbar");
       const type = getSelectedShapeType();
       if (type === "point") addPointShape();
       else if (type === "rect") addRectShape();
       else if (type === "circle") addCircleShape();
       else alert("Only point, rectangle, and circle shapes are implemented in this build.");
+      konva_logExit("addShapeFromToolbar");
     }
 
     // Export hooks for shapes.multiselect.js and shapes.handlers.js
@@ -495,5 +548,7 @@
     AppState.deselectShape = deselectShape;
     AppState.setShapeLocked = setShapeLocked;
     AppState.addShapeFromToolbar = addShapeFromToolbar;
+
+    konva_logExit("buildCanvasPanel");
   };
 })();

@@ -1,28 +1,29 @@
-// COPILOT_PART_logserver: 2025-09-12T07:41:00Z
+// COPILOT_PART_logserver: 2025-09-12T09:56:00Z
 /*********************************************************
- * Log Server / Streaming Integration Module
- * -----------------------------------------
- * Provides a hook for streaming log/error messages to an external server
- * or backend endpoint. Intended to be loaded FIRST in modular shapes.js.
- * - Exposes window._externalLogStream(level, ...args)
+ * [logserver] Log Streaming and External Log Server Integration
+ * ------------------------------------------------------------
+ * - Exposes window._externalLogStream(level, ...args) for log streaming.
  * - Destination controlled by LOG_OUTPUT_DEST setting:
  *     "console" (default): logs to console only
  *     "server": logs to server only (if URL set)
  *     "both": logs to both
  * - To enable server logging, set window._externalLogServerURL, or
- *   use Settings panel (future).
- * - Future: Supports batching, retries, queueing, and log level config.
+ *   use the Settings panel.
+ * - Adheres to project logging schema and manifesto (see COPILOT_MANIFESTO.md).
  *********************************************************/
 
-// --- SAFE LOGGING DEFAULTS (always log errors to console if unset) ---
+// --- LOG LEVEL DEFINITIONS (used across all modules) ---
+window.LOG_LEVELS = window.LOG_LEVELS || {
+  OFF: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
+};
+
+// --- LOGGING SETTINGS DEFAULTS (safe fallback) ---
 window._settings = window._settings || {};
 if (!window._settings.DEBUG_LOG_LEVEL) window._settings.DEBUG_LOG_LEVEL = "ERROR";
 if (!window._settings.LOG_OUTPUT_DEST) window._settings.LOG_OUTPUT_DEST = "console";
-
-// (Optionally set this before loading shapes.js)
 window._externalLogServerURL = window._externalLogServerURL || "";
 
-// LOG_OUTPUT_DEST: "console" | "server" | "both"
+// --- REGISTER LOGGING SETTINGS (if not already present) ---
 window._settingsRegistry = window._settingsRegistry || [];
 if (!window._settingsRegistry.some(s => s.key === "LOG_OUTPUT_DEST")) {
   window._settingsRegistry.push({
@@ -38,9 +39,10 @@ if (!window._settingsRegistry.some(s => s.key === "LOG_OUTPUT_DEST")) {
   });
 }
 
-// Core streaming logic
+// --- LOG STREAMING CORE ---
 window._externalLogStream = async function(level, ...args) {
-  // Read current setting
+  // Project-wide: always tag logs with [logserver]
+  const tag = "[logserver]";
   let dest = (typeof window.getSetting === "function")
     ? window.getSetting("LOG_OUTPUT_DEST")
     : (window._settings && window._settings.LOG_OUTPUT_DEST) || "console";
@@ -70,22 +72,22 @@ window._externalLogStream = async function(level, ...args) {
       // If streaming fails, log locally as fallback
       if (dest === "server") {
         // If server-only, show error in console
-        console.error("[LogStream][FAIL]", level, ...args, e);
+        console.error(`${tag} [FAIL]`, level, ...args, e);
       }
     }
   }
 
   // Helper: Send to console (always log errors to console if unset)
   function sendToConsole() {
+    // Level-specific console output
     if (window.LOG_LEVELS) {
-      // Show warn/error to console.warn, others to console.log
       if (window.LOG_LEVELS[level] <= window.LOG_LEVELS.WARN) {
-        console.warn("[LogStream]", level, ...args);
+        console.warn(`${tag}`, level, ...args);
       } else {
-        console.log("[LogStream]", level, ...args);
+        console.log(`${tag}`, level, ...args);
       }
     } else {
-      console.log("[LogStream]", level, ...args);
+      console.log(`${tag}`, level, ...args);
     }
   }
 
@@ -100,11 +102,12 @@ window._externalLogStream = async function(level, ...args) {
   }
 };
 
-// Optionally, provide a no-op flush (for future batching support)
+// No-op flush for future batching support
 window._externalLogStream.flush = function() {};
 
-// For debugging: test hook
+// --- DEBUG: Self-test ---
 if (!window._logserverTested) {
   window._logserverTested = true;
-  window._externalLogStream("INFO", "LogServer module loaded and ready.");
+  window._externalLogStream("INFO", "[logserver] LogServer module loaded and ready.");
 }
+
