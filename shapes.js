@@ -1042,14 +1042,14 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
     konva_logExit("buildCanvasPanel");
   };
 })();
-// COPILOT_PART_multiselect: 2025-09-12T12:19:40Z
+// COPILOT_PART_multiselect: 2025-09-12T13:23:00Z
 /*********************************************************
  * [multiselect] Multi-Select, Group Drag, Highlights, Lock UI
  * ------------------------------------------------------
  * Handles all multi-selection, group drag, bounding box, and lock UI logic.
  * - Multi-select: Select All, marquee/box selection, multi-selection highlights.
  * - Multi-select drag, clamped group bounding box (with rotation/scale).
- * - Orange debug bounding box during group drag.
+ * - Orange group bounding box during group drag (not debug, now permanent setting).
  * - Locking: Locked shapes block group drag and show red highlight feedback.
  * - Lock checkbox UI always reflects current selection.
  * - Uses setSelectedShapes() as the only way to change selection state.
@@ -1073,7 +1073,8 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
   }
 
   let multiSelectHighlightShapes = [];
-  let debugMultiDragBox = null;
+  // RENAMED: groupBoundingBox (was debugMultiDragBox)
+  let groupBoundingBox = null;
   let _lockedDragAttemptedIDs = [];
 
   // --- Centralized Selection Setter ---
@@ -1121,6 +1122,13 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
 
     updateLockCheckboxUI();
     updateSelectionHighlights();
+
+    // Always clear group bounding box if selection <2
+    if (!AppState.selectedShapes || AppState.selectedShapes.length < 2) {
+      clearGroupBoundingBox();
+      multiselect_log("TRACE", "Cleared group bounding box due to single/no selection.");
+    }
+
     if (AppState.konvaLayer) AppState.konvaLayer.draw();
     if (typeof window.updateList === "function") window.updateList();
     if (typeof window.updateLabelUI === "function") window.updateLabelUI();
@@ -1265,12 +1273,13 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     multiselect_logExit("clampMultiDragDelta", adjDx, adjDy);
     return [adjDx, adjDy];
   }
-  function updateDebugMultiDragBox() {
-    multiselect_logEnter("updateDebugMultiDragBox");
+  // RENAMED: updateGroupBoundingBox (was updateDebugMultiDragBox)
+  function updateGroupBoundingBox() {
+    multiselect_logEnter("updateGroupBoundingBox");
     const AppState = getAppState();
-    if (debugMultiDragBox) debugMultiDragBox.destroy();
+    if (groupBoundingBox) groupBoundingBox.destroy();
     if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) {
-      multiselect_logExit("updateDebugMultiDragBox (not multi)");
+      multiselect_logExit("updateGroupBoundingBox (not multi)");
       return;
     }
 
@@ -1283,7 +1292,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
       maxY = Math.max(maxY, rect.y + rect.height);
     });
 
-    debugMultiDragBox = new Konva.Rect({
+    groupBoundingBox = new Konva.Rect({
       x: minX,
       y: minY,
       width: maxX - minX,
@@ -1294,26 +1303,26 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
       listening: false,
       fill: '#fa0a0a09'
     });
-    AppState.konvaLayer.add(debugMultiDragBox);
+    AppState.konvaLayer.add(groupBoundingBox);
     AppState.konvaLayer.batchDraw();
-    multiselect_logExit("updateDebugMultiDragBox");
+    multiselect_logExit("updateGroupBoundingBox");
   }
-  function clearDebugMultiDragBox() {
-    multiselect_logEnter("clearDebugMultiDragBox");
+  // RENAMED: clearGroupBoundingBox (was clearDebugMultiDragBox)
+  function clearGroupBoundingBox() {
+    multiselect_logEnter("clearGroupBoundingBox");
     const AppState = getAppState();
-    if (debugMultiDragBox) {
-      debugMultiDragBox.destroy();
-      debugMultiDragBox = null;
+    if (groupBoundingBox) {
+      groupBoundingBox.destroy();
+      groupBoundingBox = null;
       if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     }
-    multiselect_logExit("clearDebugMultiDragBox");
+    multiselect_logExit("clearGroupBoundingBox");
   }
 
   // --- Multi-Drag Handlers ---
   function onMultiDragMove(evt) {
     multiselect_logEnter("onMultiDragMove", evt);
     const AppState = getAppState();
-    // --- FIX: Always use AppState.multiDrag, not local variable ---
     const multiDrag = AppState.multiDrag || {};
     if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) {
       multiselect_log("DEBUG", "onMultiDragMove: not moving or missing dragOrigin/stage", {multiDrag, evt});
@@ -1329,7 +1338,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
       obj.shape.x(obj.x + clampedDx);
       obj.shape.y(obj.y + clampedDy);
     });
-    updateDebugMultiDragBox();
+    updateGroupBoundingBox();
     if (AppState.konvaLayer) AppState.konvaLayer.batchDraw();
     updateSelectionHighlights();
     multiselect_logExit("onMultiDragMove");
@@ -1337,13 +1346,12 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
   function onMultiDragEnd(evt) {
     multiselect_logEnter("onMultiDragEnd", evt);
     const AppState = getAppState();
-    // --- FIX: Always use AppState.multiDrag ---
     if (AppState.multiDrag) {
       AppState.multiDrag.moving = false;
       AppState.multiDrag.dragOrigin = null;
       AppState.multiDrag.origPositions = null;
     }
-    clearDebugMultiDragBox();
+    clearGroupBoundingBox();
     if (AppState.konvaStage) {
       AppState.konvaStage.off('mousemove.multidrag touchmove.multidrag');
       AppState.konvaStage.off('mouseup.multidrag touchend.multidrag');
@@ -1398,8 +1406,8 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     updateSelectionHighlights,
     onMultiDragMove,
     onMultiDragEnd,
-    updateDebugMultiDragBox,
-    clearDebugMultiDragBox,
+    updateGroupBoundingBox,
+    clearGroupBoundingBox,
     showLockedHighlightForShapes,
     selectAllShapes
   };
