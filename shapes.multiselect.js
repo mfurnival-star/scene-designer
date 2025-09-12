@@ -1,4 +1,4 @@
-// COPILOT_PART_multiselect: 2025-09-12T12:06:00Z
+// COPILOT_PART_multiselect: 2025-09-12T12:19:40Z
 /*********************************************************
  * [multiselect] Multi-Select, Group Drag, Highlights, Lock UI
  * ------------------------------------------------------
@@ -309,4 +309,55 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     multiselect_logExit("onMultiDragEnd");
   }
 
-  // --- Lock
+  // --- Lock UI and Lock Checkbox Logic ---
+  function updateLockCheckboxUI() {
+    multiselect_logEnter("updateLockCheckboxUI");
+    const AppState = getAppState();
+    const lockCheckbox = document.getElementById("lockCheckbox");
+    if (!lockCheckbox) {
+      multiselect_log("DEBUG", "No lockCheckbox found");
+      multiselect_logExit("updateLockCheckboxUI (no checkbox)");
+      return;
+    }
+    if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) {
+      lockCheckbox.indeterminate = false;
+      lockCheckbox.checked = false;
+      multiselect_log("DEBUG", "No shapes selected, lockCheckbox unchecked");
+      multiselect_logExit("updateLockCheckboxUI (no selection)");
+      return;
+    }
+    const allLocked = AppState.selectedShapes.every(s => s.locked);
+    const noneLocked = AppState.selectedShapes.every(s => !s.locked);
+    lockCheckbox.indeterminate = !(allLocked || noneLocked);
+    lockCheckbox.checked = allLocked;
+    multiselect_log("DEBUG", "updateLockCheckboxUI: updated", {allLocked, noneLocked});
+    multiselect_logExit("updateLockCheckboxUI");
+  }
+
+  // --- Select All Handler ---
+  function selectAllShapes() {
+    multiselect_logEnter("selectAllShapes");
+    const AppState = getAppState();
+    if (!Array.isArray(AppState.shapes)) {
+      multiselect_log("ERROR", "No shapes array in AppState");
+      multiselect_logExit("selectAllShapes (no shapes)");
+      return;
+    }
+    setSelectedShapes(AppState.shapes.slice());
+    multiselect_log("INFO", "Selecting all shapes.", {shape_ids: AppState.shapes.map(s => s._id)});
+    multiselect_logExit("selectAllShapes");
+  }
+
+  // --- Export core API to AppState ---
+  window._sceneDesigner._multiSelect = {
+    setSelectedShapes,
+    updateSelectionHighlights,
+    onMultiDragMove,
+    onMultiDragEnd,
+    updateDebugMultiDragBox,
+    clearDebugMultiDragBox,
+    showLockedHighlightForShapes,
+    selectAllShapes
+  };
+
+})();
