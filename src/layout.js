@@ -8,7 +8,7 @@
  * -----------------------------------------------------------
  */
 
-import GoldenLayout from "https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/+esm";
+import { GoldenLayout } from "https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/+esm";
 
 // Import panel modules (as ES modules; stubbed if not yet implemented)
 import { buildCanvasPanel } from './canvas.js';
@@ -110,4 +110,3 @@ document.addEventListener("DOMContentLoaded", () => {
 
   logLayoutEvent("INFO", "Golden Layout initialized and panels registered.");
 });
-
