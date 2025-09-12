@@ -3,51 +3,38 @@ log.js
 state.js
 canvas.js
 selection.js
+sidebar.js
 settings.js
+layout.js
 main.js
 ```
 
 ---
 
 - **log.js**  
-  Centralized logging system for Scene Designer.  
-  - Provides `log()`, log level/destination, external streaming hooks.
-  - Used by all modules for standardized logging.
+  Centralized logging system for Scene Designer.
 
 - **state.js**  
-  Centralized `AppState` singleton and state management API.  
-  - Holds all model data: shapes, selection, scene, settings.
-  - Provides subscription/event system for state changes.
+  Centralized AppState singleton and state management.
 
 - **canvas.js**  
-  Konva canvas initialization, image background, and shape factories.  
-  - Sets up Konva stage/layer, loads images, creates shapes.
-  - Exports shape creation, add/remove APIs.
+  Konva canvas and shape creation APIs.
 
 - **selection.js**  
-  Shape selection logic for single/multi-select.  
-  - Exports selection mutators and helpers.
-  - Used by sidebar, toolbar, and canvas.
+  Shape selection logic and mutators.
+
+- **sidebar.js**  
+  Shape table/list panel (Golden Layout).
 
 - **settings.js**  
-  Settings registry, persistence, and dynamic UI panel (Golden Layout).  
-  - Defines settings model and dynamic UI rendering.
-  - Integrates with AppState.settings.
-  - Loads/saves to localStorage, supports Pickr color pickers.
-  - Logging config and runtime overrides.
+  Settings registry, persistence, and UI panel (GL).
+
+- **layout.js**  
+  Golden Layout bootstrapping and panel registration.
 
 - **main.js**  
-  App entry point (when NOT using Golden Layout).  
-  - Wires up modules, initializes UI, connects handlers.
+  App entry point (if NOT using Golden Layout).
 
 ---
-
-**When you add Golden Layout:**
-- Add `layout.js` to this index (as the new entry point).
-- Add `sidebar.js` and any other modular panels you build.
-
----
-
-**Instructions:**
-- Place this file in your `src/` directory.
-- Update it whenever you add, remove, or rename module files, per SCENE_DESIGNER_MANIFESTO.md.
+**Instructions:**  
+Keep this file updated per SCENE_DESIGNER_MANIFESTO.md.

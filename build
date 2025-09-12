@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+
+git add . && git commit -m "updates" && git push
+
+exit
 
 # Modular build script for shapes.js and index.html injection
 # - Concatenates JS part files in canonical order from shapes.parts.index.md
