@@ -1,91 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <script>
-    // Centralized LOGGING CONFIGURATION (edit or inject via build script)
-    window._externalLogServerURL = "http://143.47.247.184/logstream";
-  window._externalLogServerToken = "eyJsZXZlbCI6ICJFUlJPUiIsICJhcm";
-    // Token injected by build if set; otherwise not present
-    window._settings = window._settings || {};
-    window._settings.DEBUG_LOG_LEVEL = "ERROR";      // "ERROR", "INFO", "TRACE", etc.
-    window._settings.LOG_OUTPUT_DEST = "both";    // "console", "server", "both"
-  </script>
-  <script src="shapes.js"></script>
   <meta charset="UTF-8">
-  <title>Shape Editor</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- COPILOT_HTML_PART: 2025-09-11T13:27:00Z -->
-  <!-- Eruda: Mobile dev console for debugging on mobile -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
-  <!-- Golden Layout v1.x CSS (REQUIRED for layout to work!) -->
-  <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-base.css">
-  <link rel="stylesheet" href="https://golden-layout.com/files/latest/css/goldenlayout-light-theme.css">
-  <link rel="stylesheet" href="styles.css">
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <!-- Golden Layout v1.x JS (global GoldenLayout variable) -->
-  <script src="https://golden-layout.com/files/latest/js/goldenlayout.min.js"></script>
-  <!-- Konva must be loaded before shapes.js! -->
+  <title>Scene Designer (ES Modules)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Konva.js (canvas engine) -->
   <script src="https://cdn.jsdelivr.net/npm/konva@9.2.0/konva.min.js"></script>
-  <!-- Your main JS app -->
-  <script src="shapes.js"></script>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="desktop-app-layout">
     <header id="app-header">
-      <h1>Shape Editor</h1>
-      <div class="image-loader-ui">
-        <label for="serverImageSelect">Server image:</label>
-        <select id="serverImageSelect">
-          <option value="">-- Choose image --</option>
-          <option value="mainmenu.png">mainmenu.png</option>
-          <option value="battle1.png">battle1.png</option>
-          <option value="scene1.png">scene1.png</option>
-          <option value="scene2.png">scene2.png</option>
-        </select>
-        <label for="imageUpload" style="margin-left:15px;">Upload image:</label>
-        <input type="file" id="imageUpload" accept="image/*">
-      </div>
+      <h1>Scene Designer</h1>
+      <!-- Minimal image loader UI -->
+      <label for="serverImageSelect">Server image:</label>
+      <select id="serverImageSelect">
+        <option value="">-- Choose image --</option>
+        <option value="mainmenu.png">mainmenu.png</option>
+        <option value="battle1.png">battle1.png</option>
+        <option value="scene1.png">scene1.png</option>
+        <option value="scene2.png">scene2.png</option>
+      </select>
+      <label for="imageUpload" style="margin-left:15px;">Upload image:</label>
+      <input type="file" id="imageUpload" accept="image/*">
     </header>
-    <nav id="toolbar">
-      <div class="toolbar-section">
-        <label for="shapeType">Shape:</label>
-        <select id="shapeType" aria-label="Shape Type">
-          <option value="point">Point</option>
-          <option value="rect">Rectangle</option>
-          <option value="circle">Circle</option>
-        </select>
-      </div>
-      <div class="toolbar-section">
-        <label for="strokePickr">Stroke:</label>
-        <button type="button" id="strokePickr"></button>
-        <label for="fillPickr" style="margin-left:8px;">Fill:</label>
-        <button type="button" id="fillPickr"></button>
-      </div>
-      <div class="toolbar-section">
-        <button type="button" id="newBtn">Add</button>
-        <button type="button" id="duplicateBtn">Duplicate</button>
-        <button type="button" id="deleteBtn">Delete</button>
-        <button type="button" id="resetRotationBtn">Reset Rotation</button>
-        <button type="button" id="selectAllBtn">Select All</button>
-      </div>
-      <div class="toolbar-section">
-        <label><input type="checkbox" id="lockCheckbox"> Lock</label>
-        <label style="margin-left:18px;">Align:</label>
-        <select id="alignSelect">
-          <option value="">--</option>
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
-          <option value="top">Top</option>
-          <option value="middle">Middle</option>
-          <option value="bottom">Bottom</option>
-        </select>
-      </div>
-    </nav>
-    <!-- NO inline style here; let flexbox and CSS handle sizing! -->
-    <div id="main-layout"></div>
+    <main id="canvas-area">
+      <div id="container"></div>
+      <div id="errorBox"></div>
+    </main>
+    <aside id="sidebar"></aside>
+    <aside id="settingsPanel"></aside>
   </div>
+  <script type="module" src="./main.js"></script>
 </body>
 </html>
-
