@@ -441,7 +441,7 @@ window.buildSidebarPanel = function(rootDiv, container, state) {
   sidebar_log("DEBUG", "Sidebar panel built (placeholder)");
   sidebar_logExit("buildSidebarPanel");
 };
-// COPILOT_PART_konva: 2025-09-12T10:13:00Z
+// COPILOT_PART_konva: 2025-09-12T10:37:41Z
 /*********************************************************
  * [konva] Canvas Panel – Image Display & Shape Creation
  * ------------------------------------------------------
@@ -507,6 +507,10 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
     group.on("dragend", () => { group.showSelection(false); });
     group.on("mouseenter", () => { document.body.style.cursor = 'pointer'; });
     group.on("mouseleave", () => { document.body.style.cursor = ''; });
+
+    // ENHANCED LOG: Point shape created
+    konva_log("DEBUG", "Created reticle point shape", {id: group._id, x, y, color});
+
     konva_logExit("makeReticlePointShape", group);
     return group;
   }
@@ -524,6 +528,10 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
     rect._id = "rect_" + Math.random().toString(36).slice(2, 10);
     rect.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     rect.on("mouseleave", () => { document.body.style.cursor = ''; });
+
+    // ENHANCED LOG: Rect shape created
+    konva_log("DEBUG", "Created rect shape", {id: rect._id, x, y, width, height, stroke, fill});
+
     konva_logExit("makeRectShape", rect);
     return rect;
   }
@@ -541,6 +549,10 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
     circle._id = "circ_" + Math.random().toString(36).slice(2, 10);
     circle.on("mouseenter", () => { document.body.style.cursor = 'move'; });
     circle.on("mouseleave", () => { document.body.style.cursor = ''; });
+
+    // ENHANCED LOG: Circle shape created
+    konva_log("DEBUG", "Created circle shape", {id: circle._id, x, y, radius, stroke, fill});
+
     konva_logExit("makeCircleShape", circle);
     return circle;
   }
@@ -661,10 +673,17 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
     while (node.firstChild) node.removeChild(node.firstChild);
   }
 
-  // --- MULTI-DRAG HOOKUP (NEW) ---
+  // --- MULTI-DRAG HOOKUP (ENHANCED LOGGING) ---
   function attachMultiDragHandler(shape) {
+    konva_log("TRACE", "attachMultiDragHandler called", {shape_id: shape._id, type: shape._type});
     shape.on("dragstart.multiselect", function(evt) {
-      const AppState = window._sceneDesigner;
+      konva_log("TRACE", "dragstart.multiselect fired", {
+        shape_id: shape._id,
+        shape_type: shape._type,
+        selectedShapes: (AppState.selectedShapes || []).map(s => s._id),
+        isSelected: (AppState.selectedShapes || []).includes(shape),
+        event: evt
+      });
       // Only intercept if multiple shapes are selected, and this shape is among them
       if (
         AppState.selectedShapes &&
@@ -675,10 +694,14 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
       ) {
         // If any selected shape is locked, abort drag attempt and give feedback
         if (AppState.selectedShapes.some(s => s.locked)) {
+          konva_log("DEBUG", "Multi-drag blocked by locked shape", {
+            lockedShapes: AppState.selectedShapes.filter(s => s.locked).map(s => s._id)
+          });
           if (AppState._multiSelect.showLockedHighlightForShapes) {
             AppState._multiSelect.showLockedHighlightForShapes(AppState.selectedShapes.filter(s => s.locked));
           }
           evt.target.stopDrag();
+          konva_log("TRACE", "dragstart.multiselect: stopped drag due to lock", {shape_id: shape._id});
           return;
         }
         // Cancel native drag and start group drag
@@ -688,10 +711,29 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
           dragOrigin: AppState.konvaStage.getPointerPosition(),
           origPositions: AppState.selectedShapes.map(s => ({ shape: s, x: s.x(), y: s.y() }))
         };
+        konva_log("DEBUG", "Multi-drag initialized", {
+          moving: true,
+          dragOrigin: AppState.multiDrag.dragOrigin,
+          origPositions: AppState.multiDrag.origPositions.map(obj => ({id: obj.shape._id, x: obj.x, y: obj.y}))
+        });
         AppState.konvaStage.on('mousemove.multidrag touchmove.multidrag', AppState._multiSelect.onMultiDragMove);
         AppState.konvaStage.on('mouseup.multidrag touchend.multidrag', AppState._multiSelect.onMultiDragEnd);
         if (AppState._multiSelect.updateDebugMultiDragBox) AppState._multiSelect.updateDebugMultiDragBox();
+      } else {
+        konva_log("TRACE", "dragstart.multiselect: not a valid multi-drag scenario", {
+          selectedShapes: AppState.selectedShapes ? AppState.selectedShapes.map(s => s._id) : [],
+          shape_id: shape._id,
+          multiSelectPresent: !!AppState._multiSelect
+        });
       }
+    });
+
+    // Also log attachment of shape event handlers for future diagnostics
+    shape.on("dragstart", (evt) => {
+      konva_log("TRACE", "dragstart (native Konva event)", {
+        shape_id: shape._id,
+        selectedShapes: (AppState.selectedShapes || []).map(s => s._id)
+      });
     });
   }
 
@@ -764,11 +806,13 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
         layer.add(shape);
         // --- Attach multi-drag handler to each shape ---
         attachMultiDragHandler(shape);
+        konva_log("TRACE", "Shape re-added to canvas", {shape_id: shape._id, type: shape._type});
       }
       layer.batchDraw();
 
       // Selection logic: click on stage or image to deselect
       stage.on("mousedown tap", function(evt) {
+        konva_log("TRACE", "stage mousedown/tap", {evt_target: evt.target});
         if (evt.target === stage || evt.target === konvaImage) {
           deselectShape();
         } else if (evt.target.getParent()?.name() === "reticle-point" || evt.target.name() === "reticle-point") {
@@ -854,6 +898,7 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
       AppState.selectedShape = point;
       AppState.selectedShapes = [point];
       point.showSelection(true);
+      konva_log("INFO", "Added point shape to canvas", {id: point._id, x, y});
       konva_logExit("addPointShape");
     }
 
@@ -913,6 +958,7 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
         rect.scaleY(1);
         AppState.konvaLayer.draw();
       });
+      konva_log("INFO", "Added rectangle shape to canvas", {id: rect._id, x, y, width: defaultW, height: defaultH});
       konva_logExit("addRectShape");
     }
 
@@ -970,6 +1016,7 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
         circle.strokeWidth(1);
         AppState.konvaLayer.draw();
       });
+      konva_log("INFO", "Added circle shape to canvas", {id: circle._id, x, y, radius: defaultRadius});
       konva_logExit("addCircleShape");
     }
 
@@ -995,7 +1042,7 @@ function konva_logExit(fnName, ...result) { konva_log("TRACE", `<< Exit ${fnName
     konva_logExit("buildCanvasPanel");
   };
 })();
-// COPILOT_PART_multiselect: 2025-09-12T10:15:00Z
+// COPILOT_PART_multiselect: 2025-09-12T10:45:00Z
 /*********************************************************
  * [multiselect] Multi-Select, Group Drag, Highlights, Lock UI
  * ------------------------------------------------------
@@ -1039,6 +1086,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
 
     // Remove transformer if multiselect or none
     if (AppState.transformer) {
+      multiselect_log("DEBUG", "Destroyed transformer due to multi-select or deselect.");
       AppState.transformer.destroy();
       AppState.transformer = null;
     }
@@ -1047,6 +1095,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     if (AppState.selectedShapes.length === 1) {
       const shape = AppState.selectedShapes[0];
       if (shape._type === "rect" || shape._type === "circle") {
+        multiselect_log("DEBUG", "Adding transformer for single selection", {shape_id: shape._id, type: shape._type});
         const transformer = new Konva.Transformer({
           nodes: [shape],
           enabledAnchors: shape.locked ? [] :
@@ -1060,11 +1109,13 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
         AppState.konvaLayer.draw();
       }
       if (shape._type === "point" && typeof shape.showSelection === "function") {
+        multiselect_log("DEBUG", "Showing selection for point", {shape_id: shape._id});
         shape.showSelection(true);
       }
     } else {
       // Hide selection for points if multi or none
       if (AppState.selectedShape && AppState.selectedShape._type === "point" && AppState.selectedShape.showSelection) {
+        multiselect_log("DEBUG", "Hiding selection for point", {shape_id: AppState.selectedShape._id});
         AppState.selectedShape.showSelection(false);
       }
     }
@@ -1087,6 +1138,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
       AppState.konvaLayer.draw();
     }
     if (!AppState.selectedShapes || AppState.selectedShapes.length < 2 || !AppState.konvaLayer) {
+      multiselect_log("DEBUG", "No multiselect highlights needed.", {selectedShapes: AppState.selectedShapes});
       multiselect_logExit("updateSelectionHighlights (not multi)");
       return;
     }
@@ -1210,6 +1262,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     if (groupBounds.minY < 0) adjDy += -groupBounds.minY;
     if (groupBounds.maxY > stageH) adjDy += stageH - groupBounds.maxY;
 
+    multiselect_log("DEBUG", "clampMultiDragDelta calculated", {input: {dx, dy}, output: {adjDx, adjDy}, origPositions, groupBounds});
     multiselect_logExit("clampMultiDragDelta", adjDx, adjDy);
     return [adjDx, adjDy];
   }
@@ -1262,6 +1315,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     multiselect_logEnter("onMultiDragMove", evt);
     const AppState = getAppState();
     if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) {
+      multiselect_log("DEBUG", "onMultiDragMove: not moving or missing dragOrigin/stage", {multiDrag, evt});
       multiselect_logExit("onMultiDragMove (not moving)");
       return;
     }
@@ -1270,6 +1324,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     let dy = pos.y - multiDrag.dragOrigin.y;
     let [clampedDx, clampedDy] = clampMultiDragDelta(dx, dy, multiDrag.origPositions);
     multiDrag.origPositions.forEach(obj => {
+      multiselect_log("TRACE", "onMultiDragMove: moving shape", {shape_id: obj.shape._id, from: {x: obj.x, y: obj.y}, to: {x: obj.x+clampedDx, y: obj.y+clampedDy}});
       obj.shape.x(obj.x + clampedDx);
       obj.shape.y(obj.y + clampedDy);
     });
@@ -1300,6 +1355,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     const AppState = getAppState();
     const lockCheckbox = document.getElementById("lockCheckbox");
     if (!lockCheckbox) {
+      multiselect_log("WARN", "Lock checkbox not found in DOM.");
       multiselect_logExit("updateLockCheckboxUI (no checkbox)");
       return;
     }
@@ -1307,6 +1363,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     if (shapes.length === 0) {
       lockCheckbox.indeterminate = false;
       lockCheckbox.checked = false;
+      multiselect_log("DEBUG", "updateLockCheckboxUI: none selected");
       multiselect_logExit("updateLockCheckboxUI (none selected)");
       return;
     }
@@ -1314,6 +1371,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     const noneLocked = shapes.every(s => !s.locked);
     lockCheckbox.indeterminate = !(allLocked || noneLocked);
     lockCheckbox.checked = allLocked;
+    multiselect_log("TRACE", "updateLockCheckboxUI: updated", {allLocked, noneLocked});
     multiselect_logExit("updateLockCheckboxUI");
   }
   window._sceneDesigner.updateLockCheckboxUI = updateLockCheckboxUI;
@@ -1325,15 +1383,18 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     if (!AppState._multiSelectOverridesApplied) {
       const origSelectShape = AppState.selectShape;
       AppState.selectShape = function(shape) {
+        multiselect_log("TRACE", "selectShape override called", {shape});
         setSelectedShapes(shape ? [shape] : []);
         if (typeof origSelectShape === "function") origSelectShape(shape);
       };
       const origDeselectShape = AppState.deselectShape;
       AppState.deselectShape = function() {
+        multiselect_log("TRACE", "deselectShape override called");
         setSelectedShapes([]);
         if (typeof origDeselectShape === "function") origDeselectShape();
       };
       AppState._multiSelectOverridesApplied = true;
+      multiselect_log("DEBUG", "Selection overrides attached.");
     }
     multiselect_logExit("attachSelectionOverrides");
   }
@@ -1343,6 +1404,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     multiselect_logEnter("selectAllShapes");
     const AppState = getAppState();
     if (AppState.shapes && AppState.shapes.length > 0) {
+      multiselect_log("INFO", "Selecting all shapes.", {shape_ids: AppState.shapes.map(s => s._id)});
       setSelectedShapes(AppState.shapes.slice());
     }
     multiselect_logExit("selectAllShapes");
@@ -1369,6 +1431,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
           const AppState = getAppState();
           if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
           const newLocked = lockCheckbox.checked;
+          multiselect_log("INFO", "Lock checkbox changed", {newLocked, selectedShapes: AppState.selectedShapes.map(s => s._id)});
           AppState.selectedShapes.forEach(s => {
             if (AppState.setShapeLocked) AppState.setShapeLocked(s, newLocked);
             else s.locked = !!newLocked;
@@ -1397,6 +1460,7 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
       clearDebugMultiDragBox,
       selectAllShapes
     };
+    multiselect_log("INFO", "Exported _multiSelect API to AppState.");
     multiselect_logExit("exportMultiSelectAPI");
   }
 
