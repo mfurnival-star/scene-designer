@@ -1,4 +1,4 @@
-// COPILOT_PART_handlers: 2025-09-12T10:07:00Z
+// COPILOT_PART_handlers: 2025-09-12T13:36:00Z
 /*********************************************************
  * [handlers] UI Event Handler Attachment
  * ------------------------------------------------------
@@ -88,15 +88,14 @@ function handlers_logExit(fn, ...r) { handlers_log("TRACE", `<< Exit ${fn}`, ...
       };
     }
 
-    // SELECT ALL button (optional: implemented in shapes.multiselect.js)
+    // SELECT ALL button (now always uses canonical multi-select API)
     if (selectAllBtn) {
       selectAllBtn.onclick = function (e) {
         handlers_log("TRACE", "Select All button clicked.");
         if (AppState._multiSelect && typeof AppState._multiSelect.selectAllShapes === "function") {
           AppState._multiSelect.selectAllShapes();
-        } else if (Array.isArray(AppState.shapes)) {
-          AppState.selectedShapes = AppState.shapes.slice();
-          handlers_log("DEBUG", "Selected all shapes (fallback)");
+        } else {
+          handlers_log("ERROR", "AppState._multiSelect.selectAllShapes is not available—Select All will not function.");
         }
       };
     }
