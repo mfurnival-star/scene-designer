@@ -1,4 +1,4 @@
-// COPILOT_PART_logserver: 2025-09-12T09:56:00Z
+// COPILOT_PART_logserver: 2025-09-12T10:20:00Z
 /*********************************************************
  * [logserver] Log Streaming and External Log Server Integration
  * ------------------------------------------------------------
@@ -7,6 +7,7 @@
  *     "console" (default): logs to console only
  *     "server": logs to server only (if URL set)
  *     "both": logs to both
+ * - Filters messages by the current log level (see COPILOT_MANIFESTO.md).
  * - To enable server logging, set window._externalLogServerURL, or
  *   use the Settings panel.
  * - Adheres to project logging schema and manifesto (see COPILOT_MANIFESTO.md).
@@ -39,10 +40,24 @@ if (!window._settingsRegistry.some(s => s.key === "LOG_OUTPUT_DEST")) {
   });
 }
 
-// --- LOG STREAMING CORE ---
+// --- LOG STREAMING CORE (with log-level filtering) ---
 window._externalLogStream = async function(level, ...args) {
   // Project-wide: always tag logs with [logserver]
   const tag = "[logserver]";
+
+  // Determine current log level (fallback to "ERROR" if unset)
+  let curLevel = "ERROR";
+  if (typeof window.getSetting === "function") {
+    curLevel = window.getSetting("DEBUG_LOG_LEVEL") || "ERROR";
+  } else if (window._settings && window._settings.DEBUG_LOG_LEVEL) {
+    curLevel = window._settings.DEBUG_LOG_LEVEL;
+  }
+  const curLevelNum = window.LOG_LEVELS[curLevel] ?? window.LOG_LEVELS.ERROR;
+  const msgLevelNum = window.LOG_LEVELS[level] ?? 99; // Unknown levels excluded
+
+  // Only log if message level is at or above current level (lower number = higher priority)
+  if (msgLevelNum > curLevelNum) return;
+
   let dest = (typeof window.getSetting === "function")
     ? window.getSetting("LOG_OUTPUT_DEST")
     : (window._settings && window._settings.LOG_OUTPUT_DEST) || "console";
@@ -110,7 +125,6 @@ if (!window._logserverTested) {
   window._logserverTested = true;
   window._externalLogStream("INFO", "[logserver] LogServer module loaded and ready.");
 }
-
 // COPILOT_PART_layout: 2025-09-12T10:05:00Z
 /*********************************************************
  * [layout] Golden Layout Bootstrapping & Panel Registration
