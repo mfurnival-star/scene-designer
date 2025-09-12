@@ -184,13 +184,13 @@ function layout_logExit(fnName, ...result) { layout_log("TRACE", `<< Exit ${fnNa
                   type: "component",
                   componentName: "SidebarPanel",
                   title: "Shapes",
-                  height: 50
+                  height: 20
                 },
                 {
                   type: "component",
                   componentName: "SettingsPanel",
                   title: "Settings",
-                  height: 50,
+                  height: 80,
                   isClosable: true
                 }
               ]
