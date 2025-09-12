@@ -3,6 +3,7 @@ log.js
 state.js
 canvas.js
 selection.js
+settings.js
 main.js
 ```
 
@@ -28,19 +29,25 @@ main.js
   - Exports selection mutators and helpers.
   - Used by sidebar, toolbar, and canvas.
 
+- **settings.js**  
+  Settings registry, persistence, and dynamic UI panel (Golden Layout).  
+  - Defines settings model and dynamic UI rendering.
+  - Integrates with AppState.settings.
+  - Loads/saves to localStorage, supports Pickr color pickers.
+  - Logging config and runtime overrides.
+
 - **main.js**  
-  Entry point for the app (when NOT using Golden Layout).  
+  App entry point (when NOT using Golden Layout).  
   - Wires up modules, initializes UI, connects handlers.
 
 ---
 
 **When you add Golden Layout:**
 - Add `layout.js` to this index (as the new entry point).
-- Add `sidebar.js` and `settings.js` as you modularize those panels.
+- Add `sidebar.js` and any other modular panels you build.
 
 ---
 
 **Instructions:**
 - Place this file in your `src/` directory.
 - Update it whenever you add, remove, or rename module files, per SCENE_DESIGNER_MANIFESTO.md.
-
