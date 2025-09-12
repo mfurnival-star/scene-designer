@@ -1,4 +1,4 @@
-// COPILOT_PART_logserver: 2025-09-11T21:14:00Z
+// COPILOT_PART_logserver: 2025-09-12T07:41:00Z
 /*********************************************************
  * Log Server / Streaming Integration Module
  * -----------------------------------------
@@ -14,8 +14,13 @@
  * - Future: Supports batching, retries, queueing, and log level config.
  *********************************************************/
 
+// --- SAFE LOGGING DEFAULTS (always log errors to console if unset) ---
+window._settings = window._settings || {};
+if (!window._settings.DEBUG_LOG_LEVEL) window._settings.DEBUG_LOG_LEVEL = "ERROR";
+if (!window._settings.LOG_OUTPUT_DEST) window._settings.LOG_OUTPUT_DEST = "console";
+
 // (Optionally set this before loading shapes.js)
-window._externalLogServerURL = window._externalLogServerURL || ""; // e.g. "http://143.47.247.184/log"
+window._externalLogServerURL = window._externalLogServerURL || "";
 
 // LOG_OUTPUT_DEST: "console" | "server" | "both"
 window._settingsRegistry = window._settingsRegistry || [];
@@ -31,12 +36,6 @@ if (!window._settingsRegistry.some(s => s.key === "LOG_OUTPUT_DEST")) {
     ],
     default: "console"
   });
-}
-
-// Default if not yet set
-window._settings = window._settings || {};
-if (!window._settings.LOG_OUTPUT_DEST) {
-  window._settings.LOG_OUTPUT_DEST = "console";
 }
 
 // Core streaming logic
@@ -76,7 +75,7 @@ window._externalLogStream = async function(level, ...args) {
     }
   }
 
-  // Helper: Send to console
+  // Helper: Send to console (always log errors to console if unset)
   function sendToConsole() {
     if (window.LOG_LEVELS) {
       // Show warn/error to console.warn, others to console.log

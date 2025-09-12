@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<script>
-  window._externalLogServerURL = "http://143.47.247.184/logstream";
-  window._externalLogServerToken = "eyJsZXZlbCI6ICJFUlJPUiIsICJhcm";
-</script>
-<script src="shapes.js"></script>
+  <script>
+    // Centralized LOGGING CONFIGURATION (edit or inject via build script)
+    window._externalLogServerURL = "http://143.47.247.184/logstream";
+    window._externalLogServerToken = "eyJsZXZlbCI6ICJFUlJPUiIsICJhcm";
+    window._settings = window._settings || {};
+    window._settings.DEBUG_LOG_LEVEL = "ERROR";      // "ERROR", "INFO", "TRACE", etc.
+    window._settings.LOG_OUTPUT_DEST = "console";    // "console", "server", "both"
+  </script>
+  <script src="shapes.js"></script>
   <meta charset="UTF-8">
   <title>Shape Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
