@@ -1,4 +1,4 @@
-// COPILOT_PART_multiselect: 2025-09-12T10:45:00Z
+// COPILOT_PART_multiselect: 2025-09-12T12:06:00Z
 /*********************************************************
  * [multiselect] Multi-Select, Group Drag, Highlights, Lock UI
  * ------------------------------------------------------
@@ -30,7 +30,6 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
 
   let multiSelectHighlightShapes = [];
   let debugMultiDragBox = null;
-  let multiDrag = { moving: false, dragOrigin: null, origPositions: null };
   let _lockedDragAttemptedIDs = [];
 
   // --- Centralized Selection Setter ---
@@ -270,6 +269,8 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
   function onMultiDragMove(evt) {
     multiselect_logEnter("onMultiDragMove", evt);
     const AppState = getAppState();
+    // --- FIX: Always use AppState.multiDrag, not local variable ---
+    const multiDrag = AppState.multiDrag || {};
     if (!multiDrag.moving || !multiDrag.dragOrigin || !AppState.konvaStage) {
       multiselect_log("DEBUG", "onMultiDragMove: not moving or missing dragOrigin/stage", {multiDrag, evt});
       multiselect_logExit("onMultiDragMove (not moving)");
@@ -292,9 +293,12 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
   function onMultiDragEnd(evt) {
     multiselect_logEnter("onMultiDragEnd", evt);
     const AppState = getAppState();
-    multiDrag.moving = false;
-    multiDrag.dragOrigin = null;
-    multiDrag.origPositions = null;
+    // --- FIX: Always use AppState.multiDrag ---
+    if (AppState.multiDrag) {
+      AppState.multiDrag.moving = false;
+      AppState.multiDrag.dragOrigin = null;
+      AppState.multiDrag.origPositions = null;
+    }
     clearDebugMultiDragBox();
     if (AppState.konvaStage) {
       AppState.konvaStage.off('mousemove.multidrag touchmove.multidrag');
@@ -305,134 +309,4 @@ function multiselect_logExit(fnName, ...result) { multiselect_log("TRACE", `<< E
     multiselect_logExit("onMultiDragEnd");
   }
 
-  // --- Lock Checkbox UI Sync ---
-  function updateLockCheckboxUI() {
-    multiselect_logEnter("updateLockCheckboxUI");
-    const AppState = getAppState();
-    const lockCheckbox = document.getElementById("lockCheckbox");
-    if (!lockCheckbox) {
-      multiselect_log("WARN", "Lock checkbox not found in DOM.");
-      multiselect_logExit("updateLockCheckboxUI (no checkbox)");
-      return;
-    }
-    const shapes = AppState.selectedShapes || [];
-    if (shapes.length === 0) {
-      lockCheckbox.indeterminate = false;
-      lockCheckbox.checked = false;
-      multiselect_log("DEBUG", "updateLockCheckboxUI: none selected");
-      multiselect_logExit("updateLockCheckboxUI (none selected)");
-      return;
-    }
-    const allLocked = shapes.every(s => s.locked);
-    const noneLocked = shapes.every(s => !s.locked);
-    lockCheckbox.indeterminate = !(allLocked || noneLocked);
-    lockCheckbox.checked = allLocked;
-    multiselect_log("TRACE", "updateLockCheckboxUI: updated", {allLocked, noneLocked});
-    multiselect_logExit("updateLockCheckboxUI");
-  }
-  window._sceneDesigner.updateLockCheckboxUI = updateLockCheckboxUI;
-
-  // --- Attach/override selection logic to sync lock UI ---
-  function attachSelectionOverrides() {
-    multiselect_logEnter("attachSelectionOverrides");
-    const AppState = getAppState();
-    if (!AppState._multiSelectOverridesApplied) {
-      const origSelectShape = AppState.selectShape;
-      AppState.selectShape = function(shape) {
-        multiselect_log("TRACE", "selectShape override called", {shape});
-        setSelectedShapes(shape ? [shape] : []);
-        if (typeof origSelectShape === "function") origSelectShape(shape);
-      };
-      const origDeselectShape = AppState.deselectShape;
-      AppState.deselectShape = function() {
-        multiselect_log("TRACE", "deselectShape override called");
-        setSelectedShapes([]);
-        if (typeof origDeselectShape === "function") origDeselectShape();
-      };
-      AppState._multiSelectOverridesApplied = true;
-      multiselect_log("DEBUG", "Selection overrides attached.");
-    }
-    multiselect_logExit("attachSelectionOverrides");
-  }
-
-  // --- Select All logic: uses setSelectedShapes() SSOT setter ---
-  function selectAllShapes() {
-    multiselect_logEnter("selectAllShapes");
-    const AppState = getAppState();
-    if (AppState.shapes && AppState.shapes.length > 0) {
-      multiselect_log("INFO", "Selecting all shapes.", {shape_ids: AppState.shapes.map(s => s._id)});
-      setSelectedShapes(AppState.shapes.slice());
-    }
-    multiselect_logExit("selectAllShapes");
-  }
-
-  function attachSelectAllHook() {
-    document.addEventListener("DOMContentLoaded", function () {
-      const selectAllBtn = document.getElementById("selectAllBtn");
-      if (selectAllBtn) {
-        selectAllBtn.onclick = function (e) {
-          e.preventDefault();
-          selectAllShapes();
-        };
-      }
-    });
-  }
-
-  // --- Lock checkbox logic: all logic uses single source of truth ---
-  function attachLockCheckboxHook() {
-    document.addEventListener("DOMContentLoaded", function () {
-      const lockCheckbox = document.getElementById("lockCheckbox");
-      if (lockCheckbox) {
-        lockCheckbox.addEventListener('change', function () {
-          const AppState = getAppState();
-          if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
-          const newLocked = lockCheckbox.checked;
-          multiselect_log("INFO", "Lock checkbox changed", {newLocked, selectedShapes: AppState.selectedShapes.map(s => s._id)});
-          AppState.selectedShapes.forEach(s => {
-            if (AppState.setShapeLocked) AppState.setShapeLocked(s, newLocked);
-            else s.locked = !!newLocked;
-          });
-          updateLockCheckboxUI();
-          updateSelectionHighlights();
-          if (typeof window.updateList === "function") window.updateList();
-          if (AppState.konvaLayer) AppState.konvaLayer.draw();
-        });
-      }
-    });
-  }
-
-  // --- Export handlers for event attachment in shapes.konva.js ---
-  function exportMultiSelectAPI() {
-    multiselect_logEnter("exportMultiSelectAPI");
-    const AppState = getAppState();
-    AppState._multiSelect = {
-      setSelectedShapes,
-      updateSelectionHighlights,
-      showLockedHighlightForShapes,
-      updateLockCheckboxUI,
-      onMultiDragMove,
-      onMultiDragEnd,
-      updateDebugMultiDragBox,
-      clearDebugMultiDragBox,
-      selectAllShapes
-    };
-    multiselect_log("INFO", "Exported _multiSelect API to AppState.");
-    multiselect_logExit("exportMultiSelectAPI");
-  }
-
-  // --- Deferred Initialization ---
-  function initMultiselect() {
-    multiselect_logEnter("initMultiselect");
-    attachSelectionOverrides();
-    attachSelectAllHook();
-    attachLockCheckboxHook();
-    exportMultiSelectAPI();
-    multiselect_logExit("initMultiselect");
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initMultiselect);
-  } else {
-    setTimeout(initMultiselect, 0);
-  }
-})();
+  // --- Lock
