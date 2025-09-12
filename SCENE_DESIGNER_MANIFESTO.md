@@ -56,6 +56,11 @@
 - **Professional Code Review and Change Management**:  
   All file/module changes are reviewed for modularity, clarity, and adherence to this manifesto.
 
+- **Import/Export Consistency**:  
+  **Whenever a file imports a function, class, or variable from another, it must actually be exported from that source file.  
+  If not, update the source file to export it, or update the importing file to use the correct source.  
+  This must be checked and enforced for all code requests and file deliveries.**
+
 ---
 
 ## 3. File and Module Structure
@@ -65,6 +70,8 @@
   - Exports only what is needed.
   - Imports dependencies explicitly from other modules.
   - May depend on a central `state.js` for data and event subscriptions.
+  - **Must only import functions, classes, or variables that are actually exported by the source module.**
+  - **If an import is not exported by the source, update the source to export it, or correct the import.**
 - The canonical list of modules and their order is declared in `src/modules.index.md`.
 
 ---
@@ -91,6 +98,7 @@
 - No cross-file globals except for the `AppState` singleton.
 - All cross-module usage is via ES module imports/exports.
 - Modules must never mutate another module’s state directly—use exported APIs or event subscriptions.
+- **All imports must correspond to real exports in the source file. If not, fix the import or the export.**
 
 ---
 
@@ -99,6 +107,7 @@
 - All code delivery is by complete file, never snippets.
 - Any time a module is added, removed, or renamed, update `src/modules.index.md`.
 - All exports and API changes must be reflected in module-level JSDoc comments.
+- **All imports must be checked for correspondence to actual exports. If needed, update the imports or add the appropriate exports.**
 
 ---
 
@@ -109,6 +118,7 @@
   - Logging coverage.
   - API stability and clarity.
   - Adherence to this manifesto.
+  - **Import/export consistency and correctness.**
 
 ---
 
@@ -168,6 +178,13 @@ log("INFO", "[selection] Multi-drag started", {shapeIDs: AppState.selectedShapes
 This document replaces the modular concatenation system described in `COPILOT_MANIFESTO.md`.  
 All lessons, practices, and log-level policies from COPILOT_MANIFESTO.md are maintained and extended here.  
 For product direction and design rationale, see `README.md`.
+
+---
+
+## 14. Import/Export Consistency Rule (2025-09-12)
+
+**Rule:**  
+> For all code requests and deliveries, if a file imports a function, class, or variable from another, it must actually be exported from that source file. If not, update the source file to export it, or update the importing file to use the correct source. This must be checked and enforced for all code requests and file deliveries.
 
 ---
 

@@ -5,7 +5,7 @@
  * - Sets up the Konva stage and layer for annotation.
  * - Handles image loading and background rendering.
  * - Provides shape creation helpers: point, rectangle, circle.
- * - Exports all canvas and shape creation APIs, and buildCanvasPanel for Golden Layout.
+ * - Exports all canvas and shape creation APIs.
  * - No global state; all state via AppState from state.js.
  * - Adheres to SCENE_DESIGNER_MANIFESTO.md.
  * -----------------------------------------------------------

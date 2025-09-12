@@ -11,7 +11,8 @@
  * -----------------------------------------------------------
  */
 
-import { AppState, setSelectedShape, setSelectedShapes, addShape, removeShape } from './state.js';
+import { AppState, addShape, removeShape } from './state.js';
+import { setSelectedShape, setSelectedShapes } from './selection.js';
 import { log } from './log.js';
 
 // Helper — returns a shape's current fill/stroke color (supports Konva.js or plain objects)
