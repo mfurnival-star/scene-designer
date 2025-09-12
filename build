@@ -21,7 +21,7 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "  LOG_DEST          Log destination: console, server, both (default: \$LOG_DEST or console)"
   echo "  LOG_SERVER_URL    Log server URL (default: \$LOG_SERVER_URL or http://143.47.247.184/logstream)"
   echo "  LOG_SERVER_TOKEN  Bearer token for server (default: \$LOGSTREAM_SECRET or blank if unset)"
-  echo "  ENABLE_BEARER     1 to enable Bearer token, 0 to disable (default: \$ENABLE_BEARER or 1)"
+  echo "  ENABLE_BEARER     1 to enable Bearer token, 0 to disable (default: \$DISABLE_BEARER or 0)"
   echo
   echo "Recommended: Set environment variables, e.g.:"
   echo "  export LOG_LEVEL=DEBUG"
@@ -41,7 +41,7 @@ LOG_LEVEL="${LOG_LEVEL:-ERROR}"         # Default log level
 LOG_DEST="${LOG_DEST:-console}"         # Default log destination
 LOG_SERVER_URL="${LOG_SERVER_URL:-http://143.47.247.184/logstream}"
 LOG_SERVER_TOKEN="${LOGSTREAM_SECRET:-}"
-ENABLE_BEARER="${ENABLE_BEARER:-1}"    # 1 to require Bearer, 0 to disable check
+ENABLE_BEARER="${ENABLE_BEARER:-0}"    # 1 to require Bearer, 0 to disable check
 
 # CLI overrides: ./build.sh INFO server http://host/logstream mytoken 1
 if [ $# -ge 1 ]; then LOG_LEVEL="$1"; fi
