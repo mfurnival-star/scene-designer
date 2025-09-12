@@ -2,35 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Scene Designer (ES Modules)</title>
+  <title>Scene Designer (Golden Layout Modular)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Golden Layout 2.5.0 (ESM) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/dist/css/goldenlayout-base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/dist/css/themes/goldenlayout-light-theme.css">
   <!-- Konva.js (canvas engine) -->
   <script src="https://cdn.jsdelivr.net/npm/konva@9.2.0/konva.min.js"></script>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    html, body, #main-layout { height: 100%; width: 100%; margin: 0; padding: 0; }
+    #main-layout { height: 100vh; width: 100vw; background: #f7f9fc; }
+  </style>
 </head>
 <body>
-  <div id="desktop-app-layout">
-    <header id="app-header">
-      <h1>Scene Designer</h1>
-      <!-- Minimal image loader UI -->
-      <label for="serverImageSelect">Server image:</label>
-      <select id="serverImageSelect">
-        <option value="">-- Choose image --</option>
-        <option value="mainmenu.png">mainmenu.png</option>
-        <option value="battle1.png">battle1.png</option>
-        <option value="scene1.png">scene1.png</option>
-        <option value="scene2.png">scene2.png</option>
-      </select>
-      <label for="imageUpload" style="margin-left:15px;">Upload image:</label>
-      <input type="file" id="imageUpload" accept="image/*">
-    </header>
-    <main id="canvas-area">
-      <div id="container"></div>
-      <div id="errorBox"></div>
-    </main>
-    <aside id="sidebar"></aside>
-    <aside id="settingsPanel"></aside>
-  </div>
-  <script type="module" src="./main.js"></script>
+  <div id="main-layout"></div>
+  <!-- All panel logic and UI injected by Golden Layout -->
+  <script type="module">
+    import GoldenLayout from 'https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/+esm';
+    window.GoldenLayout = GoldenLayout;
+  </script>
+  <script src="shapes.js"></script>
 </body>
 </html>
