@@ -1,4 +1,3 @@
-
 node_modules/
 dist/
 venv/
@@ -7,6 +6,10 @@ __pycache__/
 *.log
 *.sqlite3
 .env
-shapes*.js
 shapesfiles/
+shapes.*.js
 server.log
+*.py
+start_http.py
+oldcode/
+oldparts/
