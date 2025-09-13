@@ -2,7 +2,10 @@ import { GoldenLayout } from 'golden-layout';
 
 // Helper for logging to both console and error-log-box
 function debugLog(...args) {
-  if (typeof window.logToBox === 'function') window.logToBox(...args);
+  if (typeof window.logToBox === 'function') window.logToBox(...args.map(a => {
+    if (typeof a === 'object') return '[object Object]';
+    return String(a);
+  }));
   // eslint-disable-next-line no-console
   console.log(...args);
 }
@@ -36,9 +39,9 @@ try {
           ]
         }
       });
-      debugLog("LAYOUT.JS: GoldenLayout instance created:", layout);
+      debugLog("LAYOUT.JS: GoldenLayout instance created:", "[object Object]");
     } catch (e) {
-      debugLog("LAYOUT.JS: ERROR while creating GoldenLayout instance:", e);
+      debugLog("LAYOUT.JS: ERROR while creating GoldenLayout instance:", e?.message || e);
       throw e;
     }
 
@@ -48,7 +51,7 @@ try {
         container.element.innerHTML = "<div style='background:#fda;padding:2em;font-size:2em;'>Golden Layout IS WORKING<br><small>Check console and error-log-box for details.</small></div>";
       });
     } catch (e) {
-      debugLog("LAYOUT.JS: ERROR in registerComponent:", e);
+      debugLog("LAYOUT.JS: ERROR in registerComponent:", e?.message || e);
       throw e;
     }
 
@@ -57,10 +60,10 @@ try {
       layout.init();
       debugLog("LAYOUT.JS: layout.init called, done.");
     } catch (e) {
-      debugLog("LAYOUT.JS: ERROR during layout.init:", e);
+      debugLog("LAYOUT.JS: ERROR during layout.init:", e?.message || e);
       throw e;
     }
   });
 } catch (err) {
-  debugLog("LAYOUT.JS: TOP-LEVEL ERROR", err);
+  debugLog("LAYOUT.JS: TOP-LEVEL ERROR", err?.message || err);
 }
