@@ -1,3 +1,7 @@
+// layout.js – Canonical minimal Golden Layout loader for local ESM use
+// -----------------------------------------------------
+// Only uses local ESM build, NO curly braces.
+// -----------------------------------------------------
 import GoldenLayout from '../lib/golden-layout/goldenlayout.esm.js';
 
 console.log("LAYOUT.JS: imported GoldenLayout:", GoldenLayout);
