@@ -35,3 +35,4 @@ document.addEventListener("DOMContentLoaded", () => {
   layout.init();
 
   console.log("LAYOUT.JS: layout.init called, done.");
+});
