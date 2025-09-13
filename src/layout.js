@@ -1,9 +1,6 @@
 // layout.js – Golden Layout loader for 3-panel setup with local ESM panels
-// -----------------------------------------------------
-// Uses local ESM modules for canvas, sidebar, settings.
-// -----------------------------------------------------
 
-import { GoldenLayout } from 'golden-layout';
+import { GoldenLayout } from 'golden-layout/dist/esm/index.js';
 import { buildCanvasPanel } from './canvas.js';
 import { buildSidebarPanel } from './sidebar.js';
 import { buildSettingsPanel } from './settings.js';
