@@ -2,70 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Scene Designer – Debug Logging Mode</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Eruda: Mobile Dev Console -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
-  <!-- Golden Layout CSS -->
+  <title>Golden Layout Minimal Test</title>
   <link rel="stylesheet" href="https://unpkg.com/golden-layout@2.6.0/dist/css/goldenlayout-base.css">
   <link rel="stylesheet" href="https://unpkg.com/golden-layout@2.6.0/dist/css/themes/goldenlayout-light-theme.css">
   <style>
-    html, body, #gl-root {
-      height: 100%;
-      width: 100%;
-      margin: 0;
-      padding: 0;
-    }
-    #gl-root {
-      height: 100vh;
-      width: 100vw;
-      background: #f7f9fc;
-    }
-    #error-log-box {
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      max-height: 180px;
-      background: #222; color: #fff;
-      font-family: monospace;
-      font-size: 1em;
-      overflow-y: auto;
-      z-index: 9999;
-      padding: 6px 12px;
-      opacity: 0.94;
-    }
+    html, body, #gl-root { height: 100%; width: 100%; margin: 0; padding: 0; }
+    #gl-root { height: 100vh; width: 100vw; background: #f7f9fc; }
   </style>
 </head>
 <body>
   <div id="gl-root"></div>
-  <div id="error-log-box"></div>
+  <script src="https://unpkg.com/golden-layout@2.6.0/dist/goldenlayout.umd.js"></script>
   <script>
-    // Error/console output box for all logs
-    (function(){
-      const box = document.getElementById('error-log-box');
-      function logToBox(...args) {
-        const line = document.createElement('div');
-        line.textContent = args.join(' ');
-        box.appendChild(line);
-        box.scrollTop = box.scrollHeight;
-        if (box.children.length > 200) box.removeChild(box.firstChild);
-      }
-      window.logToBox = logToBox;
-
-      // Wrap console
-      ['log','warn','error'].forEach((level) => {
-        const orig = console[level];
-        console[level] = function(...args) {
-          orig.apply(console, args);
-          logToBox(`[${level.toUpperCase()}]`, ...args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))));
-        };
+    // Use GoldenLayout as a global (window.GoldenLayout)
+    document.addEventListener("DOMContentLoaded", function() {
+      console.log("Minimal test: DOMContentLoaded");
+      var glRoot = document.getElementById("gl-root");
+      var layout = new window.GoldenLayout(glRoot, {
+        root: {
+          type: 'row',
+          content: [
+            { type: 'component', componentName: 'helloPanel', title: 'Hello' }
+          ]
+        }
       });
-
-      window.onerror = function(msg, src, line, col, err) {
-        logToBox(`[ERROR] ${msg} @ ${src}:${line}:${col} ${err ? err.stack : ''}`);
-      };
-    })();
+      layout.registerComponent('helloPanel', function(container) {
+        console.log("helloPanel factory called", container);
+        container.element.innerHTML = "<div style='padding:20px;font-size:2em;background:#fda;'>Golden Layout <b>WORKS</b></div>";
+      });
+      layout.init();
+      console.log("Minimal test: layout.init called");
+    });
   </script>
-  <script src="bundle.js"></script>
 </body>
 </html>
