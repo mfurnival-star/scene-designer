@@ -9,6 +9,7 @@
  * -----------------------------------------------------------
  */
 
+import Konva from 'konva';
 import { AppState, setShapes, addShape, removeShape, setImage } from './state.js';
 import { log } from './log.js';
 
@@ -74,14 +75,12 @@ export function buildCanvasPanel(rootElement, container) {
     }
 
     // Set up Konva
-    // eslint-disable-next-line no-undef
-    const stage = new window.Konva.Stage({
+    const stage = new Konva.Stage({
       container: stageDiv,
       width: 640,
       height: 400
     });
-    // eslint-disable-next-line no-undef
-    const layer = new window.Konva.Layer();
+    const layer = new Konva.Layer();
     stage.add(layer);
 
     // Save to AppState
@@ -99,8 +98,7 @@ export function buildCanvasPanel(rootElement, container) {
         if (AppState.konvaBgImage) {
           AppState.konvaBgImage.destroy();
         }
-        // eslint-disable-next-line no-undef
-        const bgKonvaImage = new window.Konva.Image({
+        const bgKonvaImage = new Konva.Image({
           image: imageObj,
           x: 0,
           y: 0,
@@ -128,23 +126,20 @@ export function buildCanvasPanel(rootElement, container) {
       let shape;
       const stageW = stage.width(), stageH = stage.height();
       if (type === "point") {
-        // eslint-disable-next-line no-undef
-        shape = new window.Konva.Circle({
+        shape = new Konva.Circle({
           x: stageW / 2, y: stageH / 2, radius: 8,
           stroke: "#2176ff", strokeWidth: 2,
           fill: "#fff", draggable: true
         });
       } else if (type === "rect") {
-        // eslint-disable-next-line no-undef
-        shape = new window.Konva.Rect({
+        shape = new Konva.Rect({
           x: stageW / 2 - 40, y: stageH / 2 - 24,
           width: 80, height: 48,
           stroke: "#2176ff", strokeWidth: 2,
           fill: "#fff", draggable: true
         });
       } else if (type === "circle") {
-        // eslint-disable-next-line no-undef
-        shape = new window.Konva.Circle({
+        shape = new Konva.Circle({
           x: stageW / 2, y: stageH / 2, radius: 28,
           stroke: "#2176ff", strokeWidth: 2,
           fill: "#fff", draggable: true
@@ -241,3 +236,4 @@ export function buildCanvasPanel(rootElement, container) {
     throw e;
   }
 }
+

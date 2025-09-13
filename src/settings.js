@@ -12,6 +12,7 @@
 
 import { AppState, setSettings, setSetting, getSetting } from './state.js';
 import { log } from './log.js';
+import Pickr from '@simonwep/pickr';
 
 // Settings registry: extend or modify as needed for new settings.
 export const settingsRegistry = [
@@ -157,6 +158,9 @@ export function buildSettingsPanel(rootElement, container) {
     const fieldsDiv = rootElement.querySelector("#settings-fields-div");
     const saveBtn = rootElement.querySelector("#settings-save-btn");
 
+    // Keep references to Pickr instances to destroy them on re-render
+    const pickrInstances = {};
+
     // Helper to generate setting field
     function renderSettingField(reg) {
       const field = document.createElement("div");
@@ -196,7 +200,7 @@ export function buildSettingsPanel(rootElement, container) {
         field.appendChild(label);
         field.appendChild(input);
       } else if (reg.type === "pickr") {
-        // Color picker using Pickr (assumes Pickr loaded globally)
+        // Color picker using Pickr (ES module import)
         const pickrDiv = document.createElement("div");
         pickrDiv.className = "pickr";
         pickrDiv.id = "setting-" + reg.key + "-pickr";
@@ -205,21 +209,20 @@ export function buildSettingsPanel(rootElement, container) {
         field.appendChild(label);
         field.appendChild(pickrDiv);
         setTimeout(() => {
-          if (window._settingsPickrs && window._settingsPickrs[reg.key]) {
-            window._settingsPickrs[reg.key].destroyAndRemove();
-            delete window._settingsPickrs[reg.key];
+          if (pickrInstances[reg.key]) {
+            pickrInstances[reg.key].destroyAndRemove();
+            delete pickrInstances[reg.key];
           }
-          window._settingsPickrs = window._settingsPickrs || {};
-          window._settingsPickrs[reg.key] = Pickr.create({
+          pickrInstances[reg.key] = Pickr.create({
             el: '#' + pickrDiv.id,
             theme: 'monolith',
             default: getSetting(reg.key),
             components: { preview: true, opacity: true, hue: true, interaction: { hex: true, rgba: true, input: true } }
           });
-          window._settingsPickrs[reg.key].on('change', color => {
+          pickrInstances[reg.key].on('change', color => {
             setSetting(reg.key, color.toHEXA().toString());
           });
-          window._settingsPickrs[reg.key].setColor(getSetting(reg.key));
+          pickrInstances[reg.key].setColor(getSetting(reg.key));
         }, 1);
       } else if (reg.type === "select") {
         input = document.createElement("select");

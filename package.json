@@ -8,7 +8,9 @@
     "build": "webpack --mode production"
   },
   "dependencies": {
-    "golden-layout": "^2.6.0"
+    "@simonwep/pickr": "^1.9.1",
+    "golden-layout": "^2.6.0",
+    "konva": "^10.0.2"
   },
   "devDependencies": {
     "css-loader": "^7.1.2",
