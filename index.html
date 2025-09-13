@@ -14,11 +14,17 @@
   <div id="gl-root"></div>
   <script src="https://unpkg.com/golden-layout@2.6.0/dist/goldenlayout.umd.js"></script>
   <script>
-    // Use GoldenLayout as a global (window.GoldenLayout)
     document.addEventListener("DOMContentLoaded", function() {
       console.log("Minimal test: DOMContentLoaded");
       var glRoot = document.getElementById("gl-root");
-      var layout = new window.GoldenLayout(glRoot, {
+      // Use the correct UMD export
+      var GoldenLayout = window.GoldenLayout || window.GoldenLayout__default;
+      if (!GoldenLayout) {
+        alert("GoldenLayout is not loaded! Check CDN or version.");
+        console.error("GoldenLayout is not loaded!");
+        return;
+      }
+      var layout = new GoldenLayout(glRoot, {
         root: {
           type: 'row',
           content: [
