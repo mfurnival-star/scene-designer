@@ -1,243 +1,120 @@
 /**
- * canvas.js
+ * sidebar.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Konva Panel
- * - Handles all canvas, image, and shape rendering.
- * - Exports buildCanvasPanel() for Golden Layout.
- * - All state flows through AppState (from state.js).
- * - No globals except those attached to AppState.
+ * Shape Table/List Panel for Scene Designer (Golden Layout)
+ * - Displays all shapes in a concise table.
+ * - Lets user select a shape by row, see/edit label, see lock/color.
+ * - Interacts with AppState for all data and selection.
+ * - No globals; all state via AppState.
+ * - Logging via log.js; updates via state.js.
  * -----------------------------------------------------------
  */
 
-import { AppState, setShapes, addShape, removeShape, setImage } from './state.js';
+import { AppState, setShapes, setSelectedShapes } from './state.js';
 import { log } from './log.js';
 
-let konvaInitialized = false;
-
-export function buildCanvasPanel(rootElement, container) {
+// Build the sidebar shape table panel
+export function buildSidebarPanel(rootElement, container) {
   try {
-    log("INFO", "[canvas] buildCanvasPanel called", { rootElement, container });
+    log("INFO", "[sidebar] buildSidebarPanel called", { rootElement, container });
 
-    // Clear and set up root element
-    rootElement.innerHTML = `<div id="canvas-panel-container" style="width:100%;height:100%;position:relative;">
-      <div id="canvas-toolbar" style="padding:4px;background:#f7f7fa;">
-        <input type="file" id="canvas-image-upload" accept="image/*" style="display:inline-block;">
-        <span style="margin-left:8px;">Scene Name:</span>
-        <input id="scene-name-input" style="width:120px;" placeholder="Scene name">
-        <span style="margin-left:8px;">Logic:</span>
-        <select id="scene-logic-select">
-          <option value="AND">AND</option>
-          <option value="OR">OR</option>
-        </select>
+    // Panel skeleton
+    rootElement.innerHTML = `
+      <div id="sidebar-panel-container" style="width:100%;height:100%;background:#f4f8ff;display:flex;flex-direction:column;overflow:auto;">
+        <div style="padding:10px 8px 4px 8px;font-weight:bold;font-size:1.2em;color:#0057d8;">
+          Shape List
+          <button id="sidebar-select-all" style="float:right;font-size:0.9em;">Select All</button>
+        </div>
+        <div id="sidebar-table-div" style="flex:1 1 0;overflow:auto;"></div>
       </div>
-      <div id="konva-stage-div" style="width:100%;height:calc(100% - 38px);background:#eee;"></div>
-    </div>`;
-
-    // Set up toolbar and event handlers
-    const imgUpload = rootElement.querySelector('#canvas-image-upload');
-    const sceneNameInput = rootElement.querySelector('#scene-name-input');
-    const sceneLogicSelect = rootElement.querySelector('#scene-logic-select');
-    const stageDiv = rootElement.querySelector('#konva-stage-div');
-
-    // Restore state to inputs
-    sceneNameInput.value = AppState.sceneName || '';
-    sceneLogicSelect.value = AppState.sceneLogic || 'AND';
-
-    sceneNameInput.addEventListener('input', e => {
-      AppState.sceneName = sceneNameInput.value;
-      log("INFO", "[canvas] Scene name changed", AppState.sceneName);
-    });
-    sceneLogicSelect.addEventListener('change', e => {
-      AppState.sceneLogic = sceneLogicSelect.value;
-      log("INFO", "[canvas] Scene logic changed", AppState.sceneLogic);
-    });
-
-    imgUpload.addEventListener('change', e => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(ev) {
-        setImage(ev.target.result);
-        setBackgroundImage(ev.target.result);
-      };
-      reader.readAsDataURL(file);
-    });
-
-    // Initialize Konva if not already
-    if (konvaInitialized && AppState.konvaStage && AppState.konvaLayer) {
-      // Reparent stage to this new div
-      stageDiv.appendChild(AppState.konvaDiv);
-      AppState.konvaStage.container(stageDiv);
-      AppState.konvaStage.draw();
-      log("DEBUG", "[canvas] Reparented Konva stage");
-      return;
-    }
-
-    // Set up Konva
-    // eslint-disable-next-line no-undef
-    const stage = new window.Konva.Stage({
-      container: stageDiv,
-      width: 640,
-      height: 400
-    });
-    // eslint-disable-next-line no-undef
-    const layer = new window.Konva.Layer();
-    stage.add(layer);
-
-    // Save to AppState
-    AppState.konvaStage = stage;
-    AppState.konvaLayer = layer;
-    AppState.konvaDiv = stageDiv;
-    konvaInitialized = true;
-
-    // Image support
-    function setBackgroundImage(imgSrc) {
-      if (!imgSrc) return;
-      const imageObj = new window.Image();
-      imageObj.onload = function() {
-        // Remove previous Konva image if any
-        if (AppState.konvaBgImage) {
-          AppState.konvaBgImage.destroy();
-        }
-        // eslint-disable-next-line no-undef
-        const bgKonvaImage = new window.Konva.Image({
-          image: imageObj,
-          x: 0,
-          y: 0,
-          width: stage.width(),
-          height: stage.height(),
-          listening: false
-        });
-        layer.add(bgKonvaImage);
-        bgKonvaImage.moveToBottom();
-        AppState.konvaBgImage = bgKonvaImage;
-        layer.draw();
-        log("INFO", "[canvas] Background image loaded");
-      };
-      imageObj.onerror = function() {
-        log("ERROR", "[canvas] Failed to load image", imgSrc);
-        window.alert("Failed to load image: " + imgSrc);
-      };
-      imageObj.src = imgSrc;
-    }
-    // If AppState has image
-    if (AppState.imageURL) setBackgroundImage(AppState.imageURL);
-
-    // Shape creation: Point, Rect, Circle
-    function makeShape(type) {
-      let shape;
-      const stageW = stage.width(), stageH = stage.height();
-      if (type === "point") {
-        // eslint-disable-next-line no-undef
-        shape = new window.Konva.Circle({
-          x: stageW / 2, y: stageH / 2, radius: 8,
-          stroke: "#2176ff", strokeWidth: 2,
-          fill: "#fff", draggable: true
-        });
-      } else if (type === "rect") {
-        // eslint-disable-next-line no-undef
-        shape = new window.Konva.Rect({
-          x: stageW / 2 - 40, y: stageH / 2 - 24,
-          width: 80, height: 48,
-          stroke: "#2176ff", strokeWidth: 2,
-          fill: "#fff", draggable: true
-        });
-      } else if (type === "circle") {
-        // eslint-disable-next-line no-undef
-        shape = new window.Konva.Circle({
-          x: stageW / 2, y: stageH / 2, radius: 28,
-          stroke: "#2176ff", strokeWidth: 2,
-          fill: "#fff", draggable: true
-        });
-      }
-      shape._type = type;
-      shape._label = type.charAt(0).toUpperCase() + type.slice(1);
-      shape.locked = false;
-      attachShapeEvents(shape);
-      return shape;
-    }
-
-    // Attach selection logic (very basic for now)
-    function attachShapeEvents(shape) {
-      shape.on('mousedown', e => {
-        if (AppState.selectedShape === shape) return;
-        AppState.selectedShape = shape;
-        AppState.selectedShapes = [shape];
-        log("DEBUG", "[canvas] Shape selected", { id: shape._id, type: shape._type });
-      });
-      // Drag logic: simple bounds clamp
-      shape.on('dragmove', () => {
-        const s = shape;
-        const x = Math.max(0, Math.min(stage.width(), s.x()));
-        const y = Math.max(0, Math.min(stage.height(), s.y()));
-        s.x(x);
-        s.y(y);
-        layer.batchDraw();
-      });
-    }
-
-    // Add shape toolbar (quick for now)
-    const shapeToolbar = document.createElement('div');
-    shapeToolbar.style = "padding:4px;background:#e9e9fa;border-bottom:1px solid #ccc;";
-    shapeToolbar.innerHTML = `
-      <button id="add-point-btn">Add Point</button>
-      <button id="add-rect-btn">Add Rectangle</button>
-      <button id="add-circle-btn">Add Circle</button>
-      <button id="delete-shape-btn" style="margin-left:16px;">Delete Selected</button>
     `;
-    rootElement.querySelector('#canvas-panel-container').insertBefore(shapeToolbar, stageDiv);
 
-    shapeToolbar.querySelector('#add-point-btn').onclick = () => {
-      const shape = makeShape("point");
-      layer.add(shape);
-      AppState.shapes.push(shape);
-      layer.draw();
-    };
-    shapeToolbar.querySelector('#add-rect-btn').onclick = () => {
-      const shape = makeShape("rect");
-      layer.add(shape);
-      AppState.shapes.push(shape);
-      layer.draw();
-    };
-    shapeToolbar.querySelector('#add-circle-btn').onclick = () => {
-      const shape = makeShape("circle");
-      layer.add(shape);
-      AppState.shapes.push(shape);
-      layer.draw();
-    };
-    shapeToolbar.querySelector('#delete-shape-btn').onclick = () => {
-      if (!AppState.selectedShape) return;
-      AppState.selectedShape.destroy();
-      AppState.shapes = AppState.shapes.filter(s => s !== AppState.selectedShape);
-      AppState.selectedShape = null;
-      AppState.selectedShapes = [];
-      layer.draw();
+    // Hook up select all
+    rootElement.querySelector("#sidebar-select-all").onclick = () => {
+      setSelectedShapes(AppState.shapes.slice());
+      log("INFO", "[sidebar] Select All clicked");
+      renderTable();
     };
 
-    // Select shape on click (basic version)
-    // (Advanced selection logic will be re-added in selection.js)
+    // Render table of shapes
+    function renderTable() {
+      const shapes = AppState.shapes || [];
+      const selArr = AppState.selectedShapes || [];
+      const tableDiv = rootElement.querySelector("#sidebar-table-div");
+      if (!tableDiv) return;
+      let html = `<table class="sidebar-shape-table" style="width:100%;border-collapse:collapse;font-size:1em;">
+        <thead><tr>
+          <th style="width:2em;">#</th>
+          <th>Label</th>
+          <th>Type</th>
+          <th style="width:2em;">L</th>
+          <th style="width:2em;">F</th>
+          <th style="width:2em;">S</th>
+          <th style="width:3em;">X</th>
+          <th style="width:3em;">Y</th>
+          <th style="width:3em;">W/R</th>
+          <th style="width:3em;">H</th>
+        </tr></thead><tbody>`;
 
-    // Responsive resize
-    function resizeCanvas() {
-      const w = stageDiv.clientWidth, h = stageDiv.clientHeight;
-      stage.width(w);
-      stage.height(h);
-      if (AppState.konvaBgImage) {
-        AppState.konvaBgImage.width(w);
-        AppState.konvaBgImage.height(h);
-        AppState.konvaBgImage.x(0);
-        AppState.konvaBgImage.y(0);
-      }
-      layer.draw();
+      shapes.forEach((s, i) => {
+        const t = s._type || '';
+        const lbl = s._label || '';
+        let x = 0, y = 0, w = 0, h = 0;
+        try {
+          const attrs = s.getAttrs ? s.getAttrs() : {};
+          if (t === 'rect') { x = attrs.x; y = attrs.y; w = attrs.width; h = attrs.height; }
+          else if (t === 'circle') { x = attrs.x; y = attrs.y; w = attrs.radius; h = attrs.radius; }
+          else if (t === 'point') { x = attrs.x; y = attrs.y; w = "--"; h = "--"; }
+        } catch { /* fallback to 0 */ }
+        const isSelected = selArr.includes(s);
+        html += `<tr data-idx="${i}"${isSelected ? ' style="background:#d0e7ff;"' : ''}>
+          <td>${i + 1}</td>
+          <td><span class="sidebar-label" style="cursor:pointer;color:#2176ff;text-decoration:underline;">${lbl}</span></td>
+          <td>${t}</td>
+          <td style="text-align:center;">${s.locked ? '🔒' : ''}</td>
+          <td style="background:${s.fill ? (s.fill() || 'transparent') : 'transparent'};border:1px solid #ccc;"></td>
+          <td style="background:${s.stroke ? s.stroke() : 'transparent'};border:1px solid #ccc;"></td>
+          <td>${Math.round(x)}</td>
+          <td>${Math.round(y)}</td>
+          <td>${w}</td>
+          <td>${h}</td>
+        </tr>`;
+      });
+      html += "</tbody></table>";
+      tableDiv.innerHTML = html;
+
+      // Label click selects shape
+      tableDiv.querySelectorAll(".sidebar-label").forEach((el, idx) => {
+        el.onclick = function (e) {
+          setSelectedShapes([AppState.shapes[idx]]);
+          log("INFO", "[sidebar] Shape row clicked", { idx });
+          renderTable();
+        };
+      });
     }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
 
-    log("INFO", "[canvas] Canvas panel fully initialized");
+    // Initial render
+    renderTable();
+
+    // Subscribe to AppState
+    if (!rootElement._appStateUnsub) {
+      rootElement._appStateUnsub = AppState._subscribers = AppState._subscribers || [];
+      const update = () => renderTable();
+      AppState._subscribers.push(update);
+      // Clean up when panel is destroyed
+      if (container && typeof container.on === "function") {
+        container.on("destroy", () => {
+          const idx = AppState._subscribers.indexOf(update);
+          if (idx !== -1) AppState._subscribers.splice(idx, 1);
+        });
+      }
+    }
+
+    log("INFO", "[sidebar] Sidebar panel fully initialized");
   } catch (e) {
-    log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
-    if (window.debugLog) window.debugLog("buildCanvasPanel ERROR", e);
-    alert("CanvasPanel ERROR: " + e.message);
+    log("ERROR", "[sidebar] buildSidebarPanel ERROR", e);
+    if (window.debugLog) window.debugLog("buildSidebarPanel ERROR", e);
+    alert("SidebarPanel ERROR: " + e.message);
     throw e;
   }
 }
