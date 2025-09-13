@@ -30,31 +30,34 @@ document.addEventListener("DOMContentLoaded", () => {
   let layout;
   try {
     debugLog("LAYOUT.JS: About to create GoldenLayout instance...");
-    layout = new GoldenLayout(glRoot, {
-      root: {
-        type: 'row',
-        content: [
-          {
-            type: 'component',
-            componentName: 'SidebarPanel',
-            title: 'Sidebar',
-            width: 20,
-          },
-          {
-            type: 'component',
-            componentName: 'CanvasPanel',
-            title: 'Canvas',
-            width: 60,
-          },
-          {
-            type: 'component',
-            componentName: 'SettingsPanel',
-            title: 'Settings',
-            width: 20,
-          }
-        ]
-      }
-    });
+    layout = new GoldenLayout(
+      {
+        root: {
+          type: 'row',
+          content: [
+            {
+              type: 'component',
+              componentName: 'SidebarPanel',
+              title: 'Sidebar',
+              width: 20,
+            },
+            {
+              type: 'component',
+              componentName: 'CanvasPanel',
+              title: 'Canvas',
+              width: 60,
+            },
+            {
+              type: 'component',
+              componentName: 'SettingsPanel',
+              title: 'Settings',
+              width: 20,
+            }
+          ]
+        }
+      },
+      glRoot // <--- container is second argument!
+    );
     debugLog("LAYOUT.JS: GoldenLayout instance created:", "[object Object]");
   } catch (e) {
     debugLog("LAYOUT.JS: ERROR while creating GoldenLayout instance:", e?.message || e);
