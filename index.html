@@ -2,21 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Golden Layout Local Test</title>
+  <title>Golden Layout CDN ESM Example</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Local Golden Layout CSS -->
-  <link rel="stylesheet" href="lib/golden-layout/css/goldenlayout-base.css">
-  <link rel="stylesheet" href="lib/golden-layout/css/themes/goldenlayout-light-theme.css">
+  <!-- Golden Layout CSS from CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.6.0/dist/css/goldenlayout-base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.6.0/dist/css/themes/goldenlayout-light-theme.css">
   <style>
     html, body, #gl-root { height: 100%; width: 100%; margin: 0; padding: 0; }
     #gl-root { height: 100vh; width: 100vw; background: #f7f9fc; }
   </style>
-  <!-- Eruda for mobile debugging (optional) -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
 </head>
 <body>
   <div id="gl-root"></div>
-  <script type="module" src="./src/layout.js"></script>
+  <script type="module" src="./main.js"></script>
 </body>
 </html>
