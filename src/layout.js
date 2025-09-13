@@ -3,7 +3,7 @@
 // Uses local ESM modules for canvas, sidebar, settings.
 // -----------------------------------------------------
 
-import GoldenLayout from '../lib/golden-layout/goldenlayout.esm.js';
+import { GoldenLayout } from 'golden-layout';
 import { buildCanvasPanel } from './canvas.js';
 import { buildSidebarPanel } from './sidebar.js';
 import { buildSettingsPanel } from './settings.js';
