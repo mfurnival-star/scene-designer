@@ -1,4 +1,4 @@
-import { GoldenLayout } from "https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/+esm";
+import { GoldenLayout } from "https://unpkg.com/golden-layout@2.5.0/dist/goldenlayout.esm.js";
 
 // Basic config: single component
 const layoutConfig = {
