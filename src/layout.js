@@ -1,34 +1,33 @@
-console.log("LAYOUT.JS IS RUNNING");
-alert("If you see this, src/layout.js is loaded and JS is running.");
+import { GoldenLayout } from "https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/+esm";
 
-let glRoot = document.getElementById("gl-root");
-if (glRoot) {
-  glRoot.innerHTML = "<h1 style='color: orange;'>Testing Golden Layout import...</h1>";
-} else {
-  document.body.innerHTML += "<div style='color: red;'>#gl-root not found</div>";
-}
-
-try {
-  // Try importing Golden Layout from CDN
-  import("https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/+esm").then(mod => {
-    const GoldenLayout = mod.GoldenLayout;
-    console.log("GOLDEN LAYOUT imported:", GoldenLayout);
-    alert("Golden Layout imported: " + (GoldenLayout ? "yes" : "no"));
-
-    if (glRoot) {
-      glRoot.innerHTML = "<h1 style='color: green;'>Golden Layout imported: " + (GoldenLayout ? "yes" : "no") + "</h1>";
+// Basic config: single component
+const layoutConfig = {
+  content: [
+    {
+      type: "component",
+      componentName: "HelloPanel",
+      title: "Hello"
     }
-  }).catch(e => {
-    console.error("FAILED TO IMPORT GOLDEN LAYOUT", e);
-    alert("FAILED TO IMPORT GOLDEN LAYOUT: " + e);
-    if (glRoot) {
-      glRoot.innerHTML = "<h1 style='color: red;'>FAILED TO IMPORT GOLDEN LAYOUT<br>" + e + "</h1>";
-    }
+  ]
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  const glRoot = document.getElementById("gl-root");
+  // Wipe the root for safety
+  while (glRoot.firstChild) glRoot.removeChild(glRoot.firstChild);
+
+  // Create Golden Layout instance
+  const layout = new GoldenLayout(glRoot, layoutConfig);
+
+  // Register a single panel/component
+  layout.registerComponent("HelloPanel", (container) => {
+    const el = document.createElement("div");
+    el.style.fontSize = "2em";
+    el.style.color = "#0057d8";
+    el.style.padding = "40px";
+    el.textContent = "Hello, World!";
+    container.element.appendChild(el);
   });
-} catch (err) {
-  console.error("Import threw:", err);
-  alert("Import threw: " + err);
-  if (glRoot) {
-    glRoot.innerHTML = "<h1 style='color: red;'>Import threw: " + err + "</h1>";
-  }
-}
+
+  layout.init();
+});
