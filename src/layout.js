@@ -13,7 +13,7 @@
 import { GoldenLayout } from 'golden-layout';
 import { buildSidebarPanel } from './sidebar.js';
 import { buildCanvasPanel } from './canvas.js';
-import { buildSettingsPanel } from './settings.js';
+import { buildSettingsPanel, loadSettings } from './settings.js';
 import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
 import { AppState, getSetting, setSetting } from './state.js';
 import { log } from './log.js';
@@ -34,7 +34,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load settings once before layout, to ensure correct panel config
   let showErrorLogPanel = true;
   try {
-    // If settings have not yet been loaded, this will default to true
+    // Import and call loadSettings from settings.js for proper persistence
+    loadSettings();
     showErrorLogPanel = getSetting("showErrorLogPanel") !== false;
   } catch {
     showErrorLogPanel = true;

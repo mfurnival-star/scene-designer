@@ -120,7 +120,7 @@ export const settingsRegistry = [
 ];
 
 // Load settings from localStorage (initialization)
-function loadSettings() {
+export function loadSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem("sceneDesignerSettings") || "{}");
     let merged = {};
@@ -135,13 +135,25 @@ function loadSettings() {
 }
 
 // Save settings to localStorage
-function saveSettings() {
+export function saveSettings() {
   try {
     localStorage.setItem("sceneDesignerSettings", JSON.stringify(AppState.settings));
     log("DEBUG", "[settings] Settings saved", AppState.settings);
   } catch (e) {
     log("ERROR", "[settings] saveSettings error", e);
   }
+}
+
+// Patch setSetting/setSettings to persist to localStorage immediately
+const _origSetSetting = setSetting;
+const _origSetSettings = setSettings;
+function setSettingAndSave(key, value) {
+  _origSetSetting(key, value);
+  saveSettings();
+}
+function setSettingsAndSave(settingsObj) {
+  _origSetSettings(settingsObj);
+  saveSettings();
 }
 
 // Build the settings panel UI
@@ -185,7 +197,7 @@ export function buildSettingsPanel(rootElement, container) {
         input.checked = !!getSetting(reg.key);
         input.id = "setting-" + reg.key;
         input.addEventListener("change", () => {
-          setSetting(reg.key, !!input.checked);
+          setSettingAndSave(reg.key, !!input.checked);
         });
         field.appendChild(label);
         field.appendChild(input);
@@ -201,7 +213,7 @@ export function buildSettingsPanel(rootElement, container) {
         input.addEventListener("input", () => {
           let val = Number(input.value);
           if (isNaN(val)) val = reg.default;
-          setSetting(reg.key, val);
+          setSettingAndSave(reg.key, val);
         });
         field.appendChild(label);
         field.appendChild(input);
@@ -226,7 +238,7 @@ export function buildSettingsPanel(rootElement, container) {
             components: { preview: true, opacity: true, hue: true, interaction: { hex: true, rgba: true, input: true } }
           });
           pickrInstances[reg.key].on('change', color => {
-            setSetting(reg.key, color.toHEXA().toString());
+            setSettingAndSave(reg.key, color.toHEXA().toString());
           });
           pickrInstances[reg.key].setColor(getSetting(reg.key));
         }, 1);
@@ -241,7 +253,7 @@ export function buildSettingsPanel(rootElement, container) {
         }
         input.value = getSetting(reg.key);
         input.addEventListener("change", () => {
-          setSetting(reg.key, input.value);
+          setSettingAndSave(reg.key, input.value);
         });
         field.appendChild(label);
         field.appendChild(input);
@@ -269,4 +281,8 @@ export function buildSettingsPanel(rootElement, container) {
     throw e;
   }
 }
+
+// Always patch setters at module load
+// (This ensures any other code using setSetting/setSettings gets persistent storage)
+export { setSettingAndSave as setSetting, setSettingsAndSave as setSettings };
 

@@ -221,6 +221,8 @@ export function buildCanvasPanel(rootElement, container) {
     function attachShapeEvents(shape) {
       shape.off('mousedown.shape dragmove.shape transformstart.shape transformend.shape');
       shape.on('mousedown.shape', (e) => {
+        // Defensive: skip if this shape has been destroyed or is not on the layer
+        if (!shape || !layer.findOne(node => node === shape)) return;
         if (shape.locked) return;
         if (!AppState.selectedShapes.includes(shape)) {
           setSelectedShapes([shape]);
@@ -228,10 +230,14 @@ export function buildCanvasPanel(rootElement, container) {
         updateSelectionHighlight();
       });
       shape.on('dragmove.shape', () => {
+        // Defensive: skip if this shape has been destroyed or is not on the layer
+        if (!shape || !layer.findOne(node => node === shape)) return;
         if (shape.locked) {
           shape.stopDrag();
           return;
         }
+        // Defensive: skip if selection contains destroyed shapes
+        AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
         if (AppState.selectedShapes.length === 1) {
           clampShapeToStage(shape);
         }
@@ -239,11 +245,13 @@ export function buildCanvasPanel(rootElement, container) {
       });
       // For transform: lock aspect for circle
       shape.on('transformstart.shape', () => {
+        if (!shape || !layer.findOne(node => node === shape)) return;
         if (shape._type === "circle") {
           shape.setAttr("scaleY", shape.scaleX());
         }
       });
       shape.on('transformend.shape', () => {
+        if (!shape || !layer.findOne(node => node === shape)) return;
         if (shape._type === "circle") {
           const scale = shape.scaleX();
           shape.radius(shape.radius() * scale);
@@ -305,6 +313,8 @@ export function buildCanvasPanel(rootElement, container) {
     function updateSelectionHighlight() {
       // Remove any old bounding box
       if (groupBoundingBox) { groupBoundingBox.destroy(); groupBoundingBox = null; }
+      // Defensive: filter out destroyed shapes from selection
+      AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
       // Single selection: transformer only if not locked
       if (AppState.selectedShapes.length === 1 && !AppState.selectedShapes[0].locked) {
         if (AppState.transformer) AppState.transformer.destroy();
@@ -480,6 +490,8 @@ export function buildCanvasPanel(rootElement, container) {
     stage.off('dragstart.group dragmove.group dragend.group');
     stage.on('dragstart.group', (evt) => {
       const target = evt.target;
+      // Defensive: skip if target shape is missing
+      if (!target || !layer.findOne(node => node === target)) return;
       if (!AppState.selectedShapes.includes(target)) return;
       if (AppState.selectedShapes.length > 1) {
         if (AppState.selectedShapes.some(s => s.locked)) {
@@ -488,6 +500,8 @@ export function buildCanvasPanel(rootElement, container) {
         } else {
           multiDrag.moving = true;
           multiDrag.dragOrigin = stage.getPointerPosition();
+          // Defensive: filter destroyed shapes
+          AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
           multiDrag.origPositions = AppState.selectedShapes.map(s => ({ shape: s, x: s.x(), y: s.y() }));
           stage.on('mousemove.groupdrag touchmove.groupdrag', onGroupDragMove);
           stage.on('mouseup.groupdrag touchend.groupdrag', onGroupDragEnd);
@@ -496,6 +510,8 @@ export function buildCanvasPanel(rootElement, container) {
     });
     function onGroupDragMove(evt) {
       if (!multiDrag.moving || !multiDrag.dragOrigin) return;
+      // Defensive: ensure all shapes still exist before moving
+      multiDrag.origPositions = multiDrag.origPositions.filter(obj => !!obj.shape && layer.findOne(node => node === obj.shape));
       const pos = stage.getPointerPosition();
       let dx = pos.x - multiDrag.dragOrigin.x;
       let dy = pos.y - multiDrag.dragOrigin.y;
@@ -550,3 +566,4 @@ export function buildCanvasPanel(rootElement, container) {
     throw e;
   }
 }
+
