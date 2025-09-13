@@ -2,28 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Scene Designer (Golden Layout Modular)</title>
+  <title>Golden Layout Hello World</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- Golden Layout CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/dist/css/goldenlayout-base.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/dist/css/themes/goldenlayout-light-theme.css">
-  <!-- Konva.js -->
-  <script src="https://cdn.jsdelivr.net/npm/konva@9.2.0/konva.min.js"></script>
-  <!-- Pickr (color picker) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/monolith.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/pickr.min.js"></script>
-  <!-- Eruda (mobile console) -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
-  <!-- App styles -->
-  <link rel="stylesheet" href="styles.css">
   <style>
     html, body, #gl-root { height: 100%; width: 100%; margin: 0; padding: 0; }
     #gl-root { height: 100vh; width: 100vw; background: #f7f9fc; }
   </style>
 </head>
 <body>
-  <div id="gl-root">Golden Layout root not replaced</div>
+  <div id="gl-root"></div>
   <script type="module" src="./src/layout.js"></script>
 </body>
 </html>
