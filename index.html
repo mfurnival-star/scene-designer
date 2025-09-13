@@ -2,18 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Golden Layout CDN ESM Example</title>
+  <title>Scene Designer – Golden Layout Starter</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Golden Layout CSS from CDN -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.6.0/dist/css/goldenlayout-base.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/golden-layout@2.6.0/dist/css/themes/goldenlayout-light-theme.css">
+  <!-- Golden Layout CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/golden-layout@2.6.0/dist/css/goldenlayout-base.css">
+  <link rel="stylesheet" href="https://unpkg.com/golden-layout@2.6.0/dist/css/themes/goldenlayout-light-theme.css">
   <style>
-    html, body, #gl-root { height: 100%; width: 100%; margin: 0; padding: 0; }
-    #gl-root { height: 100vh; width: 100vw; background: #f7f9fc; }
+    html, body, #gl-root {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #gl-root {
+      height: 100vh;
+      width: 100vw;
+      background: #f7f9fc;
+    }
   </style>
 </head>
 <body>
   <div id="gl-root"></div>
-  <script type="module" src="./main.js"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>

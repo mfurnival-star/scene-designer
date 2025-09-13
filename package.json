@@ -1,0 +1,17 @@
+{
+  "name": "scene-designer",
+  "version": "1.0.0",
+  "description": "A visual tool to create [Scene] config sections for an ADB automation suite.",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "golden-layout": "^2.6.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
