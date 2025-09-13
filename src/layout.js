@@ -1,19 +1,39 @@
-// layout.js – Canonical minimal Golden Layout loader for local ESM use
+// layout.js – Golden Layout loader for 3-panel setup with local ESM panels
 // -----------------------------------------------------
-// Only uses local ESM build, NO curly braces.
+// Uses local ESM modules for canvas, sidebar, settings.
 // -----------------------------------------------------
+
 import GoldenLayout from '../lib/golden-layout/goldenlayout.esm.js';
+import { buildCanvasPanel } from './canvas.js';
+import { buildSidebarPanel } from './sidebar.js';
+import { buildSettingsPanel } from './settings.js';
 
 console.log("LAYOUT.JS: imported GoldenLayout:", GoldenLayout);
 
 const layoutConfig = {
-  content: [
-    {
-      type: "component",
-      componentName: "HelloPanel",
-      title: "Hello"
-    }
-  ]
+  root: {
+    type: 'row',
+    content: [
+      {
+        type: 'component',
+        componentName: 'SidebarPanel',
+        title: 'Sidebar',
+        width: 20,
+      },
+      {
+        type: 'component',
+        componentName: 'CanvasPanel',
+        title: 'Canvas',
+        width: 60,
+      },
+      {
+        type: 'component',
+        componentName: 'SettingsPanel',
+        title: 'Settings',
+        width: 20,
+      }
+    ]
+  }
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -24,15 +44,19 @@ document.addEventListener("DOMContentLoaded", () => {
   console.log("LAYOUT.JS: About to create GoldenLayout instance...");
   const layout = new GoldenLayout(glRoot, layoutConfig);
 
-  console.log("LAYOUT.JS: About to register HelloPanel...");
-  layout.registerComponent("HelloPanel", (container) => {
-    console.log("LAYOUT.JS: HelloPanel factory called", container);
-    const el = document.createElement("div");
-    el.style.fontSize = "2em";
-    el.style.color = "#0057d8";
-    el.style.padding = "40px";
-    el.textContent = "Hello, World! (Local Golden Layout)";
-    container.element.appendChild(el);
+  layout.registerComponent("SidebarPanel", (container) => {
+    console.log("LAYOUT.JS: SidebarPanel factory called", container);
+    buildSidebarPanel(container.element, container);
+  });
+
+  layout.registerComponent("CanvasPanel", (container) => {
+    console.log("LAYOUT.JS: CanvasPanel factory called", container);
+    buildCanvasPanel(container.element, container);
+  });
+
+  layout.registerComponent("SettingsPanel", (container) => {
+    console.log("LAYOUT.JS: SettingsPanel factory called", container);
+    buildSettingsPanel(container.element, container);
   });
 
   console.log("LAYOUT.JS: Calling layout.init...");
