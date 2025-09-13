@@ -110,6 +110,12 @@ export const settingsRegistry = [
       { value: "TRACE", label: "Trace (very verbose)" }
     ],
     default: "OFF"
+  },
+  {
+    key: "showErrorLogPanel",
+    label: "Show Error Log Panel",
+    type: "boolean",
+    default: true
   }
 ];
 
@@ -263,3 +269,4 @@ export function buildSettingsPanel(rootElement, container) {
     throw e;
   }
 }
+

@@ -5,6 +5,7 @@
  * - Exports log(), log levels, and logStream for external server.
  * - Log level and destination (console/server/both) are dynamic and
  *   can be changed at runtime (see settings.js).
+ * - Supports registration of error log panel sinks for in-app UI logging.
  * - Adheres to COPILOT_MANIFESTO.md and SCENE_DESIGNER_MANIFESTO.md.
  * -----------------------------------------------------------
  */
@@ -18,6 +19,24 @@ let curLogLevel = 'ERROR';
 let logDest = 'console'; // "console", "server", "both"
 let externalLogServerURL = '';
 let externalLogServerToken = '';
+
+// --- NEW: Error log panel sinks ---
+const errorLogPanelSinks = [];
+/**
+ * Register a log sink (panel) that receives log messages.
+ * The sink must implement sinkLog(level, ...args).
+ */
+export function registerLogSink(sink) {
+  if (typeof sink === "function" || (sink && typeof sink.sinkLog === "function")) {
+    errorLogPanelSinks.push(sink);
+  }
+}
+/**
+ * Used by errorlog.js to auto-register panel log sink.
+ */
+export function registerErrorLogPanelSink(sink) {
+  registerLogSink(sink);
+}
 
 // Allow runtime reconfiguration
 export function setLogLevel(level) {
@@ -62,6 +81,11 @@ export function log(level, ...args) {
   }
   if ((logDest === "server" || logDest === "both") && externalLogServerURL) {
     logStream(level, ...args);
+  }
+  // --- NEW: Forward logs to all registered log panel sinks
+  for (const sink of errorLogPanelSinks) {
+    if (typeof sink === "function") sink(level, ...args);
+    else if (sink && typeof sink.sinkLog === "function") sink.sinkLog(level, ...args);
   }
 }
 

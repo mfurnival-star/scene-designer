@@ -6,6 +6,7 @@ selection.js
 sidebar.js
 settings.js
 layout.js
+errorlog.js
 main.js
 ```
 
@@ -31,6 +32,9 @@ main.js
 
 - **layout.js**  
   Golden Layout bootstrapping and panel registration.
+
+- **errorlog.js**  
+  Error log panel (Golden Layout), log sink for all error/info/debug messages.
 
 - **main.js**  
   App entry point (if NOT using Golden Layout).
