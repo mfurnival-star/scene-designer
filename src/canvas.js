@@ -30,6 +30,63 @@ function getDefaultAttrs(type) {
   return {};
 }
 
+// --- Robust background image loading (file or server) with correct resizing ---
+function setBackgroundImage(imgSrc) {
+  if (bgKonvaImage) {
+    bgKonvaImage.destroy();
+    bgKonvaImage = null;
+    AppState.konvaLayer?.draw();
+  }
+  if (!imgSrc) {
+    AppState.imageObj = null;
+    AppState.imageURL = null;
+    return;
+  }
+  const imageObj = new window.Image();
+  imageObj.onload = function () {
+    // Save to AppState for downstream use
+    AppState.imageObj = imageObj;
+    AppState.imageURL = imgSrc;
+
+    // Resize stage to image (fit to container or actual size)
+    const stage = AppState.konvaStage;
+    const stageDiv = AppState.konvaDiv;
+    let newW = imageObj.naturalWidth, newH = imageObj.naturalHeight;
+
+    // Fit to parent container, preserving aspect ratio, but never upscale beyond image dimensions
+    if (stageDiv) {
+      const maxW = stageDiv.clientWidth;
+      const maxH = stageDiv.clientHeight;
+      const scale = Math.min(maxW / newW, maxH / newH, 1);
+      newW = Math.round(newW * scale);
+      newH = Math.round(newH * scale);
+    }
+    if (stage) {
+      stage.width(newW);
+      stage.height(newH);
+    }
+
+    // Create and insert Konva.Image at bottom of layer
+    bgKonvaImage = new Konva.Image({
+      image: imageObj,
+      x: 0,
+      y: 0,
+      width: newW,
+      height: newH,
+      listening: false
+    });
+    AppState.konvaLayer.add(bgKonvaImage);
+    bgKonvaImage.moveToBottom();
+    AppState.konvaLayer.draw();
+    log("INFO", "[canvas] Background image loaded and drawn", { imgSrc, newW, newH });
+  };
+  imageObj.onerror = function () {
+    log("ERROR", "[canvas] Failed to load image", imgSrc);
+    window.alert("Failed to load image: " + imgSrc);
+  };
+  imageObj.src = imgSrc;
+}
+
 export function buildCanvasPanel(rootElement, container) {
   try {
     log("INFO", "[canvas] buildCanvasPanel called", { rootElement, container });
@@ -86,31 +143,7 @@ export function buildCanvasPanel(rootElement, container) {
     const unlockBtn = rootElement.querySelector('#unlock-btn');
     const stageDiv = rootElement.querySelector('#konva-stage-div');
 
-    // --- Scene image logic ---
-    function setBackgroundImage(imgSrc) {
-      if (bgKonvaImage) {
-        bgKonvaImage.destroy();
-        bgKonvaImage = null;
-        AppState.konvaLayer?.draw();
-      }
-      if (!imgSrc) return;
-      const imageObj = new window.Image();
-      imageObj.onload = function () {
-        bgKonvaImage = new Konva.Image({
-          image: imageObj,
-          x: 0,
-          y: 0,
-          width: AppState.konvaStage.width(),
-          height: AppState.konvaStage.height(),
-          listening: false
-        });
-        AppState.konvaLayer.add(bgKonvaImage);
-        bgKonvaImage.moveToBottom();
-        AppState.konvaLayer.draw();
-        AppState.imageURL = imgSrc;
-      };
-      imageObj.src = imgSrc;
-    }
+    // --- Scene image logic: Device and Server ---
     imgUpload.addEventListener('change', e => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
@@ -125,8 +158,9 @@ export function buildCanvasPanel(rootElement, container) {
     serverImgSel.addEventListener('change', e => {
       const filename = e.target.value;
       if (!filename) return;
-      setBackgroundImage('./images/' + filename);
-      setImage('./images/' + filename);
+      const imgSrc = './images/' + filename;
+      setImage(imgSrc);
+      setBackgroundImage(imgSrc);
       imgUpload.value = "";
     });
 
@@ -483,14 +517,18 @@ export function buildCanvasPanel(rootElement, container) {
       layer.batchDraw();
     }
 
-    // --- Responsive resize ---
+    // --- Responsive resize: redraw but do not resize image (preserve aspect ratio, fit to container) ---
     function resizeCanvas() {
       const w = stageDiv.clientWidth, h = stageDiv.clientHeight;
       stage.width(w);
       stage.height(h);
-      if (bgKonvaImage) {
-        bgKonvaImage.width(w);
-        bgKonvaImage.height(h);
+      if (bgKonvaImage && AppState.imageObj) {
+        // Fit image into new stage, preserve aspect
+        const imgW = AppState.imageObj.naturalWidth;
+        const imgH = AppState.imageObj.naturalHeight;
+        const scale = Math.min(w / imgW, h / imgH, 1);
+        bgKonvaImage.width(imgW * scale);
+        bgKonvaImage.height(imgH * scale);
         bgKonvaImage.x(0);
         bgKonvaImage.y(0);
       }
