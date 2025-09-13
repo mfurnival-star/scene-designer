@@ -1,7 +1,32 @@
+# Node/Vite build artifacts
+node_modules/
+dist/
+.vite/
+
+# Python virtual environment and caches
+venv/
 __pycache__/
 *.pyc
-.env
-*.sqlite3
+
+# Logs and temp files
 *.log
-*.png
-venv/
+*.sqlite3
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment/config (if any)
+.env
+.env.local
+.env.*.local
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Optional: ignore PNGs if they're test/output, not source
+# *.png
+
