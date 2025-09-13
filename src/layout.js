@@ -3,6 +3,7 @@
  * -----------------------------------------------------------
  * Golden Layout 2.5.0 Bootstrapping & Panel Registration
  * - DEBUG: Alerts, log div, and console logs at every step
+ * - Uses a correct, minimal, Golden Layout 2.x config that matches your desired UI
  * -----------------------------------------------------------
  */
 
@@ -46,13 +47,15 @@ import { buildCanvasPanel } from './canvas.js';
 import { buildSidebarPanel } from './sidebar.js';
 import { buildSettingsPanel } from './settings.js';
 
+/**
+ * Correct Golden Layout 2.x config for your desired UI:
+ * - A row with:
+ *   - Left: CanvasPanel (large area)
+ *   - Right: column with SidebarPanel (top) and SettingsPanel (bottom)
+ * 
+ * Use 'weight' for sizing (Golden Layout 2.x).
+ */
 const layoutConfig = {
-  settings: {
-    showPopoutIcon: false,
-    showCloseIcon: false,
-    showMaximiseIcon: false,
-    hasHeaders: true
-  },
   content: [{
     type: "row",
     content: [
@@ -60,24 +63,23 @@ const layoutConfig = {
         type: "component",
         componentName: "CanvasPanel",
         title: "Canvas",
-        width: 80
+        weight: 4 // 4/5 of the width
       },
       {
         type: "column",
-        width: 20,
+        weight: 1, // 1/5 of the width
         content: [
           {
             type: "component",
             componentName: "SidebarPanel",
             title: "Shapes",
-            height: 20
+            weight: 1 // top half of the column
           },
           {
             type: "component",
             componentName: "SettingsPanel",
             title: "Settings",
-            height: 80,
-            isClosable: true
+            weight: 1 // bottom half of the column
           }
         ]
       }
