@@ -7,3 +7,4 @@
     glRoot.innerHTML = "<div style='color:#d22;font-size:2em'>main.js executed!</div>";
   }
 })();
+

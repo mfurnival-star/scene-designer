@@ -183,3 +183,4 @@ if (typeof window !== "undefined") {
   window.getSetting = getSetting;
   window.subscribeAppState = subscribe;
 }
+

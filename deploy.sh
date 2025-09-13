@@ -1,7 +1,6 @@
 #!/bin/bash
 # Scene Designer Deploy Script
 # ---------------------------------------
-# - Builds Vite project
 # - Rsyncs fresh dist/ output to /var/www/scene-designer/
 # - (Optional) Git commit/push
 # - Logs everything
@@ -16,7 +15,7 @@ DATESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
 cd "$PROJECT_DIR"
 
-echo "[$DATESTAMP] === Building Vite project ==="
+echo "[$DATESTAMP] === Building project ==="
 npm run build
 
 echo "[$DATESTAMP] === Deploying to $DEPLOY_DIR ==="
