@@ -223,6 +223,8 @@ export function buildCanvasPanel(rootElement, container) {
       shape.on('mousedown.shape', (e) => {
         // Defensive: skip if this shape has been destroyed or is not on the layer
         if (!shape || !layer.findOne(node => node === shape)) return;
+        // Remove destroyed shapes from selection
+        AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
         if (shape.locked) return;
         if (!AppState.selectedShapes.includes(shape)) {
           setSelectedShapes([shape]);
@@ -232,12 +234,12 @@ export function buildCanvasPanel(rootElement, container) {
       shape.on('dragmove.shape', () => {
         // Defensive: skip if this shape has been destroyed or is not on the layer
         if (!shape || !layer.findOne(node => node === shape)) return;
+        // Remove destroyed shapes from selection
+        AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
         if (shape.locked) {
           shape.stopDrag();
           return;
         }
-        // Defensive: skip if selection contains destroyed shapes
-        AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
         if (AppState.selectedShapes.length === 1) {
           clampShapeToStage(shape);
         }
@@ -246,12 +248,16 @@ export function buildCanvasPanel(rootElement, container) {
       // For transform: lock aspect for circle
       shape.on('transformstart.shape', () => {
         if (!shape || !layer.findOne(node => node === shape)) return;
+        // Remove destroyed shapes from selection
+        AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
         if (shape._type === "circle") {
           shape.setAttr("scaleY", shape.scaleX());
         }
       });
       shape.on('transformend.shape', () => {
         if (!shape || !layer.findOne(node => node === shape)) return;
+        // Remove destroyed shapes from selection
+        AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
         if (shape._type === "circle") {
           const scale = shape.scaleX();
           shape.radius(shape.radius() * scale);
@@ -372,12 +378,16 @@ export function buildCanvasPanel(rootElement, container) {
     };
     delShapeBtn.onclick = () => {
       if (AppState.selectedShapes.length === 0) return;
+      // Defensive: filter out destroyed shapes from selection
+      AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
       for (const s of AppState.selectedShapes) {
         if (!s.locked) {
           s.destroy();
           AppState.shapes = AppState.shapes.filter(sh => sh !== s);
         }
       }
+      // Remove destroyed shapes from selection
+      AppState.selectedShapes = AppState.selectedShapes.filter(s => !!s && layer.findOne(node => node === s));
       setSelectedShapes([]);
       updateSelectionHighlight();
       layer.draw();
