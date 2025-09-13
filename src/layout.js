@@ -1,33 +1,13 @@
-import { GoldenLayout } from "https://cdn.jsdelivr.net/npm/golden-layout@2.5.0/+esm";
+// -- TEST: Confirm this JS file runs at all --
+console.log("LAYOUT.JS IS RUNNING");
+alert("If you see this, src/layout.js is loaded and JS is running.");
 
-// Minimal Golden Layout config: single component
-const layoutConfig = {
-  content: [
-    {
-      type: "component",
-      componentName: "HelloPanel",
-      title: "Hello"
-    }
-  ]
-};
+// Try to write something directly to the DOM
+const glRoot = document.getElementById("gl-root");
+if (glRoot) {
+  glRoot.innerHTML = "<h1 style='color: red;'>JS is running</h1>";
+} else {
+  document.body.innerHTML += "<div style='color: red;'>#gl-root not found</div>";
+}
 
-document.addEventListener("DOMContentLoaded", () => {
-  const glRoot = document.getElementById("gl-root");
-  // Ensure root is empty
-  while (glRoot.firstChild) glRoot.removeChild(glRoot.firstChild);
-
-  // Create Golden Layout instance
-  const layout = new GoldenLayout(glRoot, layoutConfig);
-
-  // Register a single panel/component called "HelloPanel"
-  layout.registerComponent("HelloPanel", (container) => {
-    const el = document.createElement("div");
-    el.style.fontSize = "2em";
-    el.style.color = "#0057d8";
-    el.style.padding = "40px";
-    el.textContent = "Hello, World!";
-    container.element.appendChild(el);
-  });
-
-  layout.init();
-});
+// Don't import or run Golden Layout yet.
