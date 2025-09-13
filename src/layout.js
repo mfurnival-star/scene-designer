@@ -1,4 +1,4 @@
-import { GoldenLayout } from "https://unpkg.com/golden-layout@2.5.0/dist/goldenlayout.esm.js";
+import { GoldenLayout } from '../lib/golden-layout/goldenlayout.esm.js';
 
 console.log("LAYOUT.JS: imported GoldenLayout:", GoldenLayout);
 
@@ -27,7 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
     el.style.fontSize = "2em";
     el.style.color = "#0057d8";
     el.style.padding = "40px";
-    el.textContent = "Hello, World!";
+    el.textContent = "Hello, World! (Local Golden Layout)";
     container.element.appendChild(el);
   });
 
