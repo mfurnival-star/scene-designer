@@ -1,4 +1,4 @@
-import { GoldenLayout } from '../lib/golden-layout/goldenlayout.esm.js';
+import GoldenLayout from '../lib/golden-layout/goldenlayout.esm.js';
 
 console.log("LAYOUT.JS: imported GoldenLayout:", GoldenLayout);
 
@@ -35,4 +35,3 @@ document.addEventListener("DOMContentLoaded", () => {
   layout.init();
 
   console.log("LAYOUT.JS: layout.init called, done.");
-});
