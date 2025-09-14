@@ -20,11 +20,6 @@ export default {
     port: 3000,
     open: true
   },
-  cache: {
-    type: 'filesystem',
-    // Optional: custom cache directory, e.g.
-    // cacheDirectory: path.resolve(__dirname, '.webpack_cache')
-  },
   module: {
     rules: [
       {
@@ -37,3 +32,4 @@ export default {
     extensions: ['.js']
   }
 };
+

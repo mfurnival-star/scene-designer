@@ -110,7 +110,25 @@ export function buildSidebarPanel(rootElement, container) {
     // Tabulator columns
     const columns = [
       { title: "#", field: "idx", width: 45, hozAlign: "center" },
-      { title: "Label", field: "label", editor: "input", widthGrow: 2 },
+      { title: "Label", field: "label", editor: cell => {
+          // ESM Tabulator v5+ requires function editors
+          const input = document.createElement("input");
+          input.type = "text";
+          input.value = cell.getValue() || '';
+          input.style.width = "95%";
+          input.addEventListener('keydown', (e) => {
+            if (e.key === "Enter") {
+              cell.setValue(input.value);
+              cell.getRow().getTable().deselectRow();
+              input.blur();
+            }
+          });
+          input.addEventListener('blur', () => {
+            cell.setValue(input.value);
+          });
+          setTimeout(() => input.focus(), 10);
+          return input;
+        }, widthGrow: 2 },
       { title: "Type", field: "type", width: 70 },
       { title: "L", field: "locked", width: 36, hozAlign: "center" },
       {
@@ -210,5 +228,4 @@ export function buildSidebarPanel(rootElement, container) {
     containerComponentName: container?.componentName
   });
 }
-
 
