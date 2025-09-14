@@ -294,3 +294,115 @@ index.html
 sent 1,560 bytes  received 326 bytes  3,772.00 bytes/sec
 total size is 352,144  speedup is 186.71
 [2025-09-14 12:19:35] === Git add/commit/push ===
+[main 29f3954] Deploy at 2025-09-14 12:19:35
+ 2 files changed, 368 insertions(+)
+ create mode 100755 debug_deploy.sh
+ create mode 100644 deploy_debug_report.txt
+remote: Already on 'main'        
+remote: sending incremental file list        
+remote: index.html        
+remote: images/        
+remote: images/mainmenu.png        
+remote: images/sample1.png        
+remote: src/        
+remote: src/canvas.js        
+remote: src/errorlog.js        
+remote: src/layout.js        
+remote: src/log.js        
+remote: src/main.js        
+remote: src/modules.index.md        
+remote: src/selection.js        
+remote: src/settings.js        
+remote: src/settings.js_bak        
+remote: src/sidebar.js        
+remote: src/sidebar.js_bak        
+remote: src/state.js        
+remote: 
+remote: sent 814,859 bytes  received 321 bytes  1,630,360.00 bytes/sec        
+remote: total size is 813,565  speedup is 1.00        
+remote: To github.com:mfurnival-star/scene-designer.git        
+remote:    0a9fdd9..29f3954  main -> main        
+To /opt/git/scene-designer.git
+   0a9fdd9..29f3954  main -> main
+[2025-09-14 12:19:35] === Deployment complete! ===
+App should be live at: http://your-server-ip/scene-designer/
+
+--- dist/index.html (AFTER INJECTION) ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- BEGIN LOG SETTINGS -->
+  <script>
+    window._settings = window._settings || {};
+    window._settings.DEBUG_LOG_LEVEL = "TRACE";
+    window._settings.LOG_OUTPUT_DEST = "both";
+    window._externalLogServerURL = "http://143.47.247.184/logstream";
+    window._externalLogServerToken = "";
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+  <script>eruda.init();</script>
+  <!-- END LOG SETTINGS -->
+  <meta charset="UTF-8">
+  <title>Scene Designer (Golden Layout Dev)</title>
+  <link rel="stylesheet" href="https://unpkg.com/golden-layout@2.6.0/dist/css/goldenlayout-base.css">
+  <link rel="stylesheet" href="https://unpkg.com/golden-layout@2.6.0/dist/css/themes/goldenlayout-light-theme.css">
+  <style>
+    html, body, #gl-root { height: 100%; width: 100%; margin: 0; padding: 0; }
+    #gl-root { height: 100vh; width: 100vw; background: #f7f9fc; }
+    /* Removed #error-log-box styles: error log is now a panel! */
+  </style>
+  <!--
+    To inject Eruda for mobile debugging, set INJECT_ERUDA=1 in deploy.sh,
+    which will insert the following lines at build/deploy time:
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+  -->
+</head>
+<body>
+  <div id="gl-root"></div>
+  <!-- Removed error-log-box and all window.logToBox logic -->
+  <script src="bundle.js"></script>
+</body>
+</html>
+
+--- /var/www/scene-designer/index.html (DEPLOYED) ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Scene Designer (Golden Layout Dev)</title>
+  <link rel="stylesheet" href="https://unpkg.com/golden-layout@2.6.0/dist/css/goldenlayout-base.css">
+  <link rel="stylesheet" href="https://unpkg.com/golden-layout@2.6.0/dist/css/themes/goldenlayout-light-theme.css">
+  <style>
+    html, body, #gl-root { height: 100%; width: 100%; margin: 0; padding: 0; }
+    #gl-root { height: 100vh; width: 100vw; background: #f7f9fc; }
+    /* Removed #error-log-box styles: error log is now a panel! */
+  </style>
+  <!-- BEGIN LOG SETTINGS -->
+  <script>
+    window._settings = window._settings || {};
+    window._settings.DEBUG_LOG_LEVEL = "ERROR";
+    window._settings.LOG_OUTPUT_DEST = "console";
+    window._externalLogServerURL = "";
+    window._externalLogServerToken = "";
+  </script>
+  <!-- END LOG SETTINGS -->
+  <!--
+    To inject Eruda for mobile debugging, set INJECT_ERUDA=1 in deploy.sh,
+    which will insert the following lines at build/deploy time:
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+  -->
+</head>
+<body>
+  <div id="gl-root"></div>
+  <!-- Removed error-log-box and all window.logToBox logic -->
+  <script src="bundle.js"></script>
+</body>
+</html>
+
+--- grep LOG_LEVEL and LOG_OUTPUT_DEST in all index.html files ---
+
+--- grep BEGIN LOG SETTINGS in all index.html files ---
+
+==== END OF REPORT ====

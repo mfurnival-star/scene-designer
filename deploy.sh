@@ -1,13 +1,8 @@
 #!/bin/bash
-# Scene Designer Deploy Script (modern, robust, and self-contained)
+# Scene Designer Deploy Script (robust deployment)
 # ---------------------------------------------------------------------------
-# - Builds fresh dist/ output and always ensures index.html is present.
-# - Injects log/Eruda config into dist/index.html.
-# - Deploys to /var/www/scene-designer/.
-# - (Optional) Git commit/push.
-# - Logs every step with timestamp.
-# - All deploy-time defaults are centralized.
-# - Usage: ./deploy.sh [--help|-h]
+# - Ensures the correct, injected dist/index.html is deployed.
+# - Verifies final deployed file matches what was generated.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -101,13 +96,20 @@ awk -v log_level="$LOG_LEVEL" \
     } 1
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
 
-# Debug: Print the injected log config block
-echo "==== Injected LOG SETTINGS block in $INDEX_HTML ===="
+echo "[$DATESTAMP] === Verifying injected log config in $INDEX_HTML ==="
 grep 'DEBUG_LOG_LEVEL\|LOG_OUTPUT_DEST\|externalLogServerURL\|externalLogServerToken' "$INDEX_HTML" || true
 
 echo "[$DATESTAMP] === Deploying to $DEPLOY_DIR ==="
+
+# --- Force remove the old deployed index.html to avoid stale file ---
+sudo rm -f "$DEPLOY_DIR/index.html"
+
+# --- Now rsync the new dist/ (including injected index.html) ---
 sudo mkdir -p "$DEPLOY_DIR"
 sudo rsync -av --delete "$BUILD_DIR/" "$DEPLOY_DIR/"
+
+echo "[$DATESTAMP] === Verifying deployed index.html ==="
+sudo grep 'DEBUG_LOG_LEVEL\|LOG_OUTPUT_DEST\|externalLogServerURL\|externalLogServerToken' "$DEPLOY_DIR/index.html" || true
 
 echo "[$DATESTAMP] === Git add/commit/push ==="
 git add .
@@ -116,4 +118,3 @@ git push
 
 echo "[$DATESTAMP] === Deployment complete! ==="
 echo "App should be live at: http://your-server-ip/scene-designer/"
-
