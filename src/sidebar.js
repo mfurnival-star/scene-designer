@@ -9,12 +9,12 @@
  * - Logging via log.js; updates via state.js.
  * - Logging policy: Use INFO for user actions, DEBUG for table updates, ERROR for UI problems.
  * - ES module only: imports Tabulator from npm, no globals, no window.*.
+ * - TRACE-level logging for all function entry/exit (diagnostic).
  * -----------------------------------------------------------
  */
 
 import { AppState, setShapes, setSelectedShapes } from './state.js';
 import { log } from './log.js';
-// CORRECTED: Use named import for Tabulator ES module
 import { Tabulator } from 'tabulator-tables';
 
 // Internal reference to Tabulator instance
@@ -22,24 +22,39 @@ let tabulatorInstance = null;
 
 // Helper: Format color swatch for Tabulator
 function colorSwatchCell(color) {
+  log("TRACE", "[sidebar] colorSwatchCell entry", { color });
   const c = color && typeof color === "function" ? color() : color;
-  return `<div style="background:${c || 'transparent'};border:1px solid #bbb;width:20px;height:20px;display:inline-block;border-radius:4px;"></div>`;
+  const html = `<div style="background:${c || 'transparent'};border:1px solid #bbb;width:20px;height:20px;display:inline-block;border-radius:4px;"></div>`;
+  log("TRACE", "[sidebar] colorSwatchCell exit", { html });
+  return html;
 }
 
 // Helper: Get shape attributes for table
 function getShapeAttrs(s) {
+  log("TRACE", "[sidebar] getShapeAttrs entry", { s });
   try {
-    if (!s || typeof s.getAttrs !== "function") return {};
-    return s.getAttrs();
-  } catch {
+    if (!s || typeof s.getAttrs !== "function") {
+      log("TRACE", "[sidebar] getShapeAttrs exit (no getAttrs)");
+      return {};
+    }
+    const attrs = s.getAttrs();
+    log("TRACE", "[sidebar] getShapeAttrs exit", { attrs });
+    return attrs;
+  } catch (e) {
+    log("ERROR", "[sidebar] getShapeAttrs error", e);
+    log("TRACE", "[sidebar] getShapeAttrs exit (error)");
     return {};
   }
 }
 
 // Build the sidebar shape table panel using Tabulator
 export function buildSidebarPanel(rootElement, container) {
+  log("TRACE", "[sidebar] buildSidebarPanel entry", {
+    rootElementType: rootElement?.tagName,
+    containerTitle: container?.title,
+    containerComponentName: container?.componentName
+  });
   try {
-    // LOG ONLY SERIALIZABLE INFO, do not log container or rootElement directly
     log("INFO", "[sidebar] buildSidebarPanel called", {
       rootElementType: rootElement?.tagName,
       containerTitle: container?.title,
@@ -59,15 +74,18 @@ export function buildSidebarPanel(rootElement, container) {
 
     // Hook up select all
     rootElement.querySelector("#sidebar-select-all").onclick = () => {
+      log("TRACE", "[sidebar] sidebar-select-all onclick entry");
       setSelectedShapes(AppState.shapes.slice());
       log("INFO", "[sidebar] Select All clicked");
       if (tabulatorInstance) tabulatorInstance.replaceData(makeTableData());
+      log("TRACE", "[sidebar] sidebar-select-all onclick exit");
     };
 
     // Helper: Build data array for Tabulator
     function makeTableData() {
+      log("TRACE", "[sidebar] makeTableData entry");
       const shapes = AppState.shapes || [];
-      return shapes.map((s, i) => {
+      const data = shapes.map((s, i) => {
         const attrs = getShapeAttrs(s);
         let x = 0, y = 0, w = 0, h = 0;
         if (s._type === 'rect') { x = attrs.x; y = attrs.y; w = attrs.width; h = attrs.height; }
@@ -85,6 +103,8 @@ export function buildSidebarPanel(rootElement, container) {
           selected: AppState.selectedShapes.includes(s)
         };
       });
+      log("TRACE", "[sidebar] makeTableData exit", { rowCount: data.length });
+      return data;
     }
 
     // Tabulator columns
@@ -113,10 +133,12 @@ export function buildSidebarPanel(rootElement, container) {
 
     // Destroy old Tabulator instance if present
     if (tabulatorInstance && typeof tabulatorInstance.destroy === "function") {
+      log("TRACE", "[sidebar] destroying old tabulatorInstance");
       tabulatorInstance.destroy();
       tabulatorInstance = null;
     }
 
+    log("TRACE", "[sidebar] instantiating Tabulator");
     tabulatorInstance = new Tabulator(tableDiv, {
       data: makeTableData(),
       layout: "fitColumns",
@@ -124,6 +146,7 @@ export function buildSidebarPanel(rootElement, container) {
       height: "100%",
       selectable: true,
       rowFormatter: function (row) {
+        log("TRACE", "[sidebar] Tabulator rowFormatter entry", { rowData: row.getData() });
         // Highlight selected rows
         const data = row.getData();
         if (data.selected) {
@@ -131,14 +154,18 @@ export function buildSidebarPanel(rootElement, container) {
         } else {
           row.getElement().style.background = "";
         }
+        log("TRACE", "[sidebar] Tabulator rowFormatter exit");
       },
       rowClick: function (e, row) {
+        log("TRACE", "[sidebar] Tabulator rowClick entry", { idx: row.getData().idx - 1 });
         const s = row.getData()._shape;
         setSelectedShapes([s]);
         log("INFO", "[sidebar] Shape row clicked", { idx: row.getData().idx - 1 });
         tabulatorInstance.replaceData(makeTableData());
+        log("TRACE", "[sidebar] Tabulator rowClick exit");
       },
       cellEdited: function (cell) {
+        log("TRACE", "[sidebar] Tabulator cellEdited entry", { cell });
         // Inline label editing
         const field = cell.getField();
         const s = cell.getData()._shape;
@@ -146,12 +173,15 @@ export function buildSidebarPanel(rootElement, container) {
           s._label = cell.getValue();
           log("DEBUG", "[sidebar] Label edited", { newLabel: cell.getValue(), shapeType: s._type, shapeId: s._id });
         }
+        log("TRACE", "[sidebar] Tabulator cellEdited exit");
       }
     });
 
     // Subscribe to AppState to update table on shapes or selection change
     if (!rootElement._appStateUnsub) {
+      log("TRACE", "[sidebar] registering AppState update subscriber");
       const update = () => {
+        log("TRACE", "[sidebar] AppState update triggered");
         if (tabulatorInstance) tabulatorInstance.replaceData(makeTableData());
       };
       AppState._subscribers = AppState._subscribers || [];
@@ -160,6 +190,7 @@ export function buildSidebarPanel(rootElement, container) {
       // Clean up when panel is destroyed
       if (container && typeof container.on === "function") {
         container.on("destroy", () => {
+          log("TRACE", "[sidebar] panel destroy event");
           const idx = AppState._subscribers.indexOf(update);
           if (idx !== -1) AppState._subscribers.splice(idx, 1);
         });
@@ -170,7 +201,14 @@ export function buildSidebarPanel(rootElement, container) {
   } catch (e) {
     log("ERROR", "[sidebar] buildSidebarPanel ERROR", e);
     alert("SidebarPanel ERROR: " + e.message);
+    log("TRACE", "[sidebar] buildSidebarPanel exit (error)");
     throw e;
   }
+  log("TRACE", "[sidebar] buildSidebarPanel exit", {
+    rootElementType: rootElement?.tagName,
+    containerTitle: container?.title,
+    containerComponentName: container?.componentName
+  });
 }
+
 

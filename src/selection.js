@@ -7,6 +7,7 @@
  * - Exports selection API for use by sidebar, toolbar, and canvas modules.
  * - Logs all selection changes and user actions at appropriate log levels.
  * - Adheres to SCENE_DESIGNER_MANIFESTO.md.
+ * - TRACE-level logging for all function entry/exit (diagnostic).
  * -----------------------------------------------------------
  */
 
@@ -21,7 +22,7 @@ export function setSelectedShape(shape) {
   log("TRACE", "[selection] setSelectedShape entry", { shape });
   if (AppState.selectedShape === shape) {
     log("DEBUG", "[selection] setSelectedShape: no change", { shape });
-    log("TRACE", "[selection] setSelectedShape exit");
+    log("TRACE", "[selection] setSelectedShape exit (no change)");
     return;
   }
   AppState.selectedShape = shape;
@@ -52,24 +53,29 @@ export function setSelectedShapes(arr) {
  * Select all shapes currently in AppState.
  */
 export function selectAllShapes() {
+  log("TRACE", "[selection] selectAllShapes entry");
   log("INFO", "[selection] selectAllShapes called");
   setSelectedShapes(AppState.shapes.slice());
+  log("TRACE", "[selection] selectAllShapes exit");
 }
 
 /**
  * Deselect all shapes.
  */
 export function deselectAll() {
+  log("TRACE", "[selection] deselectAll entry");
   log("INFO", "[selection] deselectAll called");
   AppState.selectedShape = null;
   AppState.selectedShapes = [];
   notifySelectionChanged();
+  log("TRACE", "[selection] deselectAll exit");
 }
 
 /**
  * Notify subscribers of selection change.
  */
 function notifySelectionChanged() {
+  log("TRACE", "[selection] notifySelectionChanged entry");
   log("DEBUG", "[selection] notifySelectionChanged", {
     selectedShape: AppState.selectedShape,
     selectedShapes: AppState.selectedShapes
@@ -83,6 +89,7 @@ function notifySelectionChanged() {
       }
     });
   }
+  log("TRACE", "[selection] notifySelectionChanged exit");
 }
 
 /**
@@ -93,7 +100,7 @@ export function attachSelectionHandlers(shape) {
   log("TRACE", "[selection] attachSelectionHandlers entry", { shape });
   if (!shape || typeof shape.on !== "function") {
     log("WARN", "[selection] attachSelectionHandlers: not a valid shape", { shape });
-    log("TRACE", "[selection] attachSelectionHandlers exit");
+    log("TRACE", "[selection] attachSelectionHandlers exit (not valid)");
     return;
   }
   // Remove old handlers to avoid duplicate listeners
@@ -123,7 +130,10 @@ export function attachSelectionHandlers(shape) {
  * @returns {boolean}
  */
 export function isShapeSelected(shape) {
-  return !!shape && AppState.selectedShapes.includes(shape);
+  log("TRACE", "[selection] isShapeSelected entry", { shape });
+  const result = !!shape && AppState.selectedShapes.includes(shape);
+  log("TRACE", "[selection] isShapeSelected exit", { result });
+  return result;
 }
 
 /**
@@ -131,7 +141,10 @@ export function isShapeSelected(shape) {
  * @returns {Array}
  */
 export function getSelectedShapes() {
-  return AppState.selectedShapes;
+  log("TRACE", "[selection] getSelectedShapes entry");
+  const result = AppState.selectedShapes;
+  log("TRACE", "[selection] getSelectedShapes exit", { result });
+  return result;
 }
 
 /**
@@ -139,7 +152,10 @@ export function getSelectedShapes() {
  * @returns {Object|null}
  */
 export function getSelectedShape() {
-  return AppState.selectedShape;
+  log("TRACE", "[selection] getSelectedShape entry");
+  const result = AppState.selectedShape;
+  log("TRACE", "[selection] getSelectedShape exit", { result });
+  return result;
 }
 
 // --- Self-test log ---

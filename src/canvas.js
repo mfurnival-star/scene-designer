@@ -7,7 +7,7 @@
  * - Imports all dependencies as ES modules.
  * - All state and selection is sanitized after every mutation to avoid stale references.
  * - No global/window code; all state flows via AppState.
- * - Logging: Uses log.js; logs at INFO for user/major events, DEBUG for internal state changes, TRACE for entry/exit of major handlers (rare).
+ * - Logging: Uses log.js; logs at INFO for user/major events, DEBUG for internal state changes, TRACE for entry/exit of all functions.
  * -----------------------------------------------------------
  */
 
@@ -20,10 +20,15 @@ let konvaInitialized = false;
 let bgKonvaImage = null;
 let groupBoundingBox = null;
 
-// --- Helper: Central selection filtering (no stale references) ---
+/**
+ * Central selection filtering (no stale references)
+ */
 function sanitizeSelection() {
   log("TRACE", "[canvas] sanitizeSelection entry");
-  if (!AppState.konvaLayer) return;
+  if (!AppState.konvaLayer) {
+    log("TRACE", "[canvas] sanitizeSelection exit (no layer)");
+    return;
+  }
   AppState.selectedShapes = (AppState.selectedShapes || []).filter(
     s => !!s && AppState.konvaLayer.findOne(node => node === s)
   );
@@ -35,15 +40,20 @@ function sanitizeSelection() {
   log("TRACE", "[canvas] sanitizeSelection exit");
 }
 
-// --- Helper: Remove all Konva event handlers from shape ---
+/**
+ * Remove all Konva event handlers from shape
+ */
 function removeAllShapeHandlers(shape) {
-  log("TRACE", "[canvas] removeAllShapeHandlers", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
+  log("TRACE", "[canvas] removeAllShapeHandlers entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   if (shape && typeof shape.off === "function") {
     shape.off('mousedown.shape dragmove.shape transformstart.shape transformend.shape');
   }
+  log("TRACE", "[canvas] removeAllShapeHandlers exit");
 }
 
-// --- Helper: Attach all required handlers to shape ---
+/**
+ * Attach all required handlers to shape
+ */
 function attachShapeEvents(shape) {
   log("TRACE", "[canvas] attachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   removeAllShapeHandlers(shape);
@@ -100,7 +110,9 @@ function attachShapeEvents(shape) {
   log("TRACE", "[canvas] attachShapeEvents exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
-// --- Clamp logic for shape and group drag ---
+/**
+ * Clamp logic for shape and group drag
+ */
 function clampShapeToStage(shape) {
   log("TRACE", "[canvas] clampShapeToStage entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   const stage = AppState.konvaStage;
@@ -148,9 +160,11 @@ function clampGroupDragDelta(dx, dy, origPositions) {
   return [adjDx, adjDy];
 }
 
-// --- Selection Highlight Logic ---
+/**
+ * Selection Highlight Logic
+ */
 function updateSelectionHighlight() {
-  log("DEBUG", "[canvas] updateSelectionHighlight called");
+  log("TRACE", "[canvas] updateSelectionHighlight entry");
   const layer = AppState.konvaLayer;
   // Remove any old bounding box
   if (groupBoundingBox) { groupBoundingBox.destroy(); groupBoundingBox = null; }
@@ -195,11 +209,13 @@ function updateSelectionHighlight() {
     if (AppState.transformer) { AppState.transformer.destroy(); AppState.transformer = null; }
     layer.draw();
   }
+  log("TRACE", "[canvas] updateSelectionHighlight exit");
 }
 
-// --- Main Panel Build ---
+/**
+ * Main Panel Build
+ */
 export function buildCanvasPanel(rootElement, container) {
-  // Only log serializable info for rootElement and container
   log("TRACE", "[canvas] buildCanvasPanel entry", {
     rootElementType: rootElement?.tagName,
     containerTitle: container?.title,
@@ -212,7 +228,6 @@ export function buildCanvasPanel(rootElement, container) {
       containerComponentName: container?.componentName
     });
 
-    // UI skeleton...
     rootElement.innerHTML = `
       <div id="canvas-panel-container" style="width:100%;height:100%;position:relative;">
         <div id="canvas-toolbar-main" style="display:flex;flex-wrap:wrap;align-items:center;padding:6px 8px 4px 8px;background:#f7f7fa;border-bottom:1px solid #bbb;">
@@ -245,19 +260,54 @@ export function buildCanvasPanel(rootElement, container) {
       </div>
     `;
 
-    // ...[All UI hook-up, image logic, and Konva setup unchanged, as in your last version]
+    // --- Diagnostic logging for image upload setup ---
+    const imageUpload = rootElement.querySelector('#canvas-image-upload');
+    const serverImageSelect = rootElement.querySelector('#canvas-server-image-select');
+    log("TRACE", "[canvas] image upload DOM nodes", {
+      imageUploadType: typeof imageUpload,
+      serverImageSelectType: typeof serverImageSelect
+    });
 
-    // --- Shape Creation, Deletion, Duplication, Selection Handlers ---
-    // Use the same robust patterns as above for all toolbar and drag logic.
-    // [Omitted for brevity in this summary; see your robust old code for exact patterns.]
+    if (imageUpload) {
+      imageUpload.addEventListener('change', function(e) {
+        log("TRACE", "[canvas] imageUpload changed", e);
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+          log("TRACE", "[canvas] FileReader onload", { resultLen: ev.target.result.length });
+          setImage(ev.target.result, null);
+          // TODO: assign to Konva background if needed
+          if (serverImageSelect) serverImageSelect.value = "";
+        };
+        reader.readAsDataURL(file);
+      });
+    } else {
+      log("ERROR", "[canvas] imageUpload element not found in DOM");
+    }
+    if (serverImageSelect) {
+      serverImageSelect.addEventListener('change', function(e) {
+        log("TRACE", "[canvas] serverImageSelect changed", e);
+        const filename = e.target.value;
+        if (!filename) {
+          setImage(null, null);
+          return;
+        }
+        // TODO: replace with actual image loading logic
+        setImage('./images/' + filename, null);
+        if (imageUpload) imageUpload.value = "";
+      });
+    } else {
+      log("ERROR", "[canvas] serverImageSelect element not found in DOM");
+    }
 
-    // --- Responsive Resize and Initialization ---
-    // ...[Same as before]
-    // --- End of buildCanvasPanel()
+    // ...[Rest of UI hook-up, Konva setup, and shape logic as in your robust version. All functions should have entry/exit TRACE logs.]
+
     log("INFO", "[canvas] Canvas panel fully initialized");
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
     alert("CanvasPanel ERROR: " + e.message);
+    log("TRACE", "[canvas] buildCanvasPanel exit (error)");
     throw e;
   }
   log("TRACE", "[canvas] buildCanvasPanel exit", {

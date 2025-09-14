@@ -50,9 +50,13 @@ export const AppState = {
  * @returns {Function} Unsubscribe function.
  */
 export function subscribe(fn) {
-  log("TRACE", "[state] subscribe() called", fn);
-  if (typeof fn !== "function") return () => {};
+  log("TRACE", "[state] subscribe() entry", fn);
+  if (typeof fn !== "function") {
+    log("TRACE", "[state] subscribe() exit (not a function)");
+    return () => {};
+  }
   AppState._subscribers.push(fn);
+  log("TRACE", "[state] subscribe() exit (subscribed)");
   return () => {
     const idx = AppState._subscribers.indexOf(fn);
     if (idx !== -1) AppState._subscribers.splice(idx, 1);
@@ -65,11 +69,12 @@ export function subscribe(fn) {
  * @param {*} details - Optional change metadata.
  */
 function notifySubscribers(details = {}) {
-  log("DEBUG", "[state] notifySubscribers", details);
+  log("TRACE", "[state] notifySubscribers entry", details);
   for (const fn of AppState._subscribers) {
     try { fn(AppState, details); }
     catch (e) { log("ERROR", "[state] Subscriber error", e); }
   }
+  log("TRACE", "[state] notifySubscribers exit");
 }
 
 /**
@@ -77,10 +82,11 @@ function notifySubscribers(details = {}) {
  * @param {Array} newShapes
  */
 export function setShapes(newShapes) {
-  log("TRACE", "[state] setShapes() called", newShapes);
+  log("TRACE", "[state] setShapes() entry", newShapes);
   AppState.shapes = Array.isArray(newShapes) ? newShapes : [];
   notifySubscribers({ type: "shapes", shapes: AppState.shapes });
   log("DEBUG", "[state] setShapes: shapes updated", AppState.shapes);
+  log("TRACE", "[state] setShapes() exit");
 }
 
 /**
@@ -88,11 +94,12 @@ export function setShapes(newShapes) {
  * @param {Array} arr
  */
 export function setSelectedShapes(arr) {
-  log("TRACE", "[state] setSelectedShapes() called", arr);
+  log("TRACE", "[state] setSelectedShapes() entry", arr);
   AppState.selectedShapes = Array.isArray(arr) ? arr : [];
   AppState.selectedShape = AppState.selectedShapes.length === 1 ? AppState.selectedShapes[0] : null;
   notifySubscribers({ type: "selection", selectedShapes: AppState.selectedShapes });
   log("DEBUG", "[state] setSelectedShapes: selection updated", AppState.selectedShapes);
+  log("TRACE", "[state] setSelectedShapes() exit");
 }
 
 /**
@@ -100,11 +107,15 @@ export function setSelectedShapes(arr) {
  * @param {Object} shape
  */
 export function addShape(shape) {
-  log("TRACE", "[state] addShape() called", shape);
-  if (!shape) return;
+  log("TRACE", "[state] addShape() entry", shape);
+  if (!shape) {
+    log("TRACE", "[state] addShape() exit (no shape)");
+    return;
+  }
   AppState.shapes.push(shape);
   notifySubscribers({ type: "addShape", shape });
   log("DEBUG", "[state] addShape: shape added", shape);
+  log("TRACE", "[state] addShape() exit");
 }
 
 /**
@@ -112,11 +123,15 @@ export function addShape(shape) {
  * @param {Object} shape
  */
 export function removeShape(shape) {
-  log("TRACE", "[state] removeShape() called", shape);
-  if (!shape) return;
+  log("TRACE", "[state] removeShape() entry", shape);
+  if (!shape) {
+    log("TRACE", "[state] removeShape() exit (no shape)");
+    return;
+  }
   AppState.shapes = AppState.shapes.filter(s => s !== shape);
   notifySubscribers({ type: "removeShape", shape });
   log("DEBUG", "[state] removeShape: shape removed", shape);
+  log("TRACE", "[state] removeShape() exit");
 }
 
 /**
@@ -124,10 +139,11 @@ export function removeShape(shape) {
  * @param {String} name
  */
 export function setSceneName(name) {
-  log("TRACE", "[state] setSceneName() called", name);
+  log("TRACE", "[state] setSceneName() entry", name);
   AppState.sceneName = name || '';
   notifySubscribers({ type: "sceneName", sceneName: AppState.sceneName });
   log("DEBUG", "[state] setSceneName: sceneName updated", AppState.sceneName);
+  log("TRACE", "[state] setSceneName() exit");
 }
 
 /**
@@ -135,10 +151,11 @@ export function setSceneName(name) {
  * @param {String} logic
  */
 export function setSceneLogic(logic) {
-  log("TRACE", "[state] setSceneLogic() called", logic);
+  log("TRACE", "[state] setSceneLogic() entry", logic);
   AppState.sceneLogic = ['AND', 'OR'].includes(logic) ? logic : 'AND';
   notifySubscribers({ type: "sceneLogic", sceneLogic: AppState.sceneLogic });
   log("DEBUG", "[state] setSceneLogic: sceneLogic updated", AppState.sceneLogic);
+  log("TRACE", "[state] setSceneLogic() exit");
 }
 
 /**
@@ -147,11 +164,12 @@ export function setSceneLogic(logic) {
  * @param {HTMLImageElement} [imgObj]
  */
 export function setImage(url, imgObj = null) {
-  log("TRACE", "[state] setImage() called", { url, imgObj });
+  log("TRACE", "[state] setImage() entry", { url, imgObj });
   AppState.imageURL = url || null;
   AppState.imageObj = imgObj || null;
   notifySubscribers({ type: "image", imageURL: AppState.imageURL, imageObj: AppState.imageObj });
   log("DEBUG", "[state] setImage: image updated", { url: AppState.imageURL, imgObj: !!AppState.imageObj });
+  log("TRACE", "[state] setImage() exit");
 }
 
 /**
@@ -159,10 +177,11 @@ export function setImage(url, imgObj = null) {
  * @param {Object} settingsObj
  */
 export function setSettings(settingsObj) {
-  log("TRACE", "[state] setSettings() called", settingsObj);
+  log("TRACE", "[state] setSettings() entry", settingsObj);
   AppState.settings = { ...AppState.settings, ...settingsObj };
   notifySubscribers({ type: "settings", settings: AppState.settings });
   log("DEBUG", "[state] setSettings: settings updated", AppState.settings);
+  log("TRACE", "[state] setSettings() exit");
 }
 
 /**
@@ -171,10 +190,11 @@ export function setSettings(settingsObj) {
  * @param {*} value
  */
 export function setSetting(key, value) {
-  log("TRACE", "[state] setSetting() called", { key, value });
+  log("TRACE", "[state] setSetting() entry", { key, value });
   AppState.settings[key] = value;
   notifySubscribers({ type: "setting", key, value });
   log("DEBUG", "[state] setSetting: setting updated", { key, value });
+  log("TRACE", "[state] setSetting() exit");
 }
 
 /**
@@ -183,8 +203,10 @@ export function setSetting(key, value) {
  * @returns {*}
  */
 export function getSetting(key) {
-  log("TRACE", "[state] getSetting() called", { key });
-  return AppState.settings[key];
+  log("TRACE", "[state] getSetting() entry", { key });
+  const value = AppState.settings[key];
+  log("TRACE", "[state] getSetting() exit", { value });
+  return value;
 }
 
 // --- Self-test log ---
@@ -205,5 +227,4 @@ if (typeof window !== "undefined") {
   window.getSetting = getSetting;
   window.subscribeAppState = subscribe;
 }
-
 

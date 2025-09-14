@@ -8,6 +8,7 @@
  * - No use of window.* or global log boxes: all logs routed to ErrorLogPanel via ES module.
  * - Logging via log.js.
  * - Logging policy: Use INFO for panel registration, user-visible events, and layout lifecycle; DEBUG for internal state; ERROR for problems.
+ * - TRACE-level entry/exit logging for all functions.
  * -----------------------------------------------------------
  */
 
@@ -21,7 +22,17 @@ import { log } from './log.js';
 
 log("INFO", "[layout] layout.js module loaded and ready!");
 
+function logEntryExit(fn, name) {
+  return function(...args) {
+    log("TRACE", `[layout] ${name} entry`, ...args);
+    const result = fn.apply(this, args);
+    log("TRACE", `[layout] ${name} exit`, result);
+    return result;
+  };
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  log("TRACE", "[layout] DOMContentLoaded handler entry");
   log("INFO", "[layout] DOMContentLoaded fired");
 
   const glRoot = document.getElementById("gl-root");
@@ -29,6 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (!glRoot) {
     log("ERROR", "[layout] #gl-root not found!");
+    log("TRACE", "[layout] DOMContentLoaded handler exit (no glRoot)");
     return;
   }
 
@@ -98,40 +110,61 @@ document.addEventListener("DOMContentLoaded", () => {
     log("INFO", "[layout] GoldenLayout instance created.");
   } catch (e) {
     log("ERROR", "[layout] ERROR while creating GoldenLayout instance:", e?.message || e);
+    log("TRACE", "[layout] DOMContentLoaded handler exit (GoldenLayout error)");
     throw e;
   }
 
   try {
     layout.registerComponent('SidebarPanel', (container) => {
+      log("TRACE", "[layout] SidebarPanel factory entry", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
       log("INFO", "[layout] SidebarPanel factory called", {
         title: container?.title,
         componentName: container?.componentName
       });
       buildSidebarPanel(container.element, container);
+      log("TRACE", "[layout] SidebarPanel factory exit");
     });
 
     layout.registerComponent('CanvasPanel', (container) => {
+      log("TRACE", "[layout] CanvasPanel factory entry", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
       log("INFO", "[layout] CanvasPanel factory called", {
         title: container?.title,
         componentName: container?.componentName
       });
       buildCanvasPanel(container.element, container);
+      log("TRACE", "[layout] CanvasPanel factory exit");
     });
 
     layout.registerComponent('SettingsPanel', (container) => {
+      log("TRACE", "[layout] SettingsPanel factory entry", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
       log("INFO", "[layout] SettingsPanel factory called", {
         title: container?.title,
         componentName: container?.componentName
       });
       buildSettingsPanel(container.element, container);
+      log("TRACE", "[layout] SettingsPanel factory exit");
     });
 
     layout.registerComponent('ErrorLogPanel', (container) => {
+      log("TRACE", "[layout] ErrorLogPanel factory entry", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
       log("INFO", "[layout] ErrorLogPanel factory called", {
         title: container?.title,
         componentName: container?.componentName
       });
       buildErrorLogPanel(container.element, container);
+      log("TRACE", "[layout] ErrorLogPanel factory exit");
     });
 
     // Register log sink so all log messages go to ErrorLogPanel if open
@@ -140,6 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
     log("DEBUG", "[layout] All panel factories registered, log sink registered");
   } catch (e) {
     log("ERROR", "[layout] ERROR in registerComponent:", e?.message || e);
+    log("TRACE", "[layout] DOMContentLoaded handler exit (registerComponent error)");
     throw e;
   }
 
@@ -149,6 +183,10 @@ document.addEventListener("DOMContentLoaded", () => {
     log("INFO", "[layout] layout.init called, done.");
   } catch (e) {
     log("ERROR", "[layout] ERROR during layout.init:", e?.message || e);
+    log("TRACE", "[layout] DOMContentLoaded handler exit (layout.init error)");
     throw e;
   }
+
+  log("TRACE", "[layout] DOMContentLoaded handler exit");
 });
+
