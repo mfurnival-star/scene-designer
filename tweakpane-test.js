@@ -1,33 +1,20 @@
-/**
- * tweakpane-demo.js
- * -------------------------------------------
- * Minimal Tweakpane ESM usage for Scene Designer
- * - No CSS import required (styles are injected automatically)
- * - Demonstrates addInput usage
- * -------------------------------------------
- */
-
+// Import the Pane class from tweakpane package
 import { Pane } from 'tweakpane';
 
-const obj = {
-  foo: true,
-  bar: 42,
-  baz: 'a'
-};
+window.addEventListener('DOMContentLoaded', () => {
+  // Create a new Tweakpane instance
+  const pane = new Pane();
 
-const root = document.createElement('div');
-root.style.margin = "2em";
-document.body.appendChild(root);
+  // Example data object to control
+  const params = {
+    speed: 5,
+    enabled: true,
+    color: '#ff0000'
+  };
 
-const pane = new Pane({
-  container: root,
-  title: 'Tweakpane Demo',
-  expanded: true
+  // Add inputs to the pane for each parameter
+  pane.addInput(params, 'speed', { min: 0, max: 10 });
+  pane.addInput(params, 'enabled');
+  pane.addInput(params, 'color');
 });
 
-pane.addInput(obj, 'foo', { label: 'A Boolean' });
-pane.addInput(obj, 'bar', { label: 'A Number', min: 0, max: 100 });
-pane.addInput(obj, 'baz', { label: 'A Select', options: { a: 'Option A', b: 'Option B' } });
-
-// For debugging in browser:
-window._tweakpaneDemoObj = obj;
