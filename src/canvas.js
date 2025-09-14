@@ -7,6 +7,7 @@
  * - Imports all dependencies as ES modules.
  * - All state and selection is sanitized after every mutation to avoid stale references.
  * - No global/window code; all state flows via AppState.
+ * - Logging: Uses log.js; logs at INFO for user/major events, DEBUG for internal state changes, TRACE for entry/exit of major handlers (rare).
  * -----------------------------------------------------------
  */
 
@@ -21,6 +22,7 @@ let groupBoundingBox = null;
 
 // --- Helper: Central selection filtering (no stale references) ---
 function sanitizeSelection() {
+  log("TRACE", "[canvas] sanitizeSelection entry");
   if (!AppState.konvaLayer) return;
   AppState.selectedShapes = (AppState.selectedShapes || []).filter(
     s => !!s && AppState.konvaLayer.findOne(node => node === s)
@@ -30,10 +32,12 @@ function sanitizeSelection() {
   } else {
     AppState.selectedShape = null;
   }
+  log("TRACE", "[canvas] sanitizeSelection exit");
 }
 
 // --- Helper: Remove all Konva event handlers from shape ---
 function removeAllShapeHandlers(shape) {
+  log("TRACE", "[canvas] removeAllShapeHandlers", shape);
   if (shape && typeof shape.off === "function") {
     shape.off('mousedown.shape dragmove.shape transformstart.shape transformend.shape');
   }
@@ -41,9 +45,11 @@ function removeAllShapeHandlers(shape) {
 
 // --- Helper: Attach all required handlers to shape ---
 function attachShapeEvents(shape) {
+  log("TRACE", "[canvas] attachShapeEvents entry", shape);
   removeAllShapeHandlers(shape);
 
   shape.on('mousedown.shape', (e) => {
+    log("DEBUG", "[canvas] mousedown.shape event", { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape.locked) return;
@@ -54,6 +60,7 @@ function attachShapeEvents(shape) {
   });
 
   shape.on('dragmove.shape', () => {
+    log("DEBUG", "[canvas] dragmove.shape event", { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape.locked) {
@@ -65,6 +72,7 @@ function attachShapeEvents(shape) {
   });
 
   shape.on('transformstart.shape', () => {
+    log("DEBUG", "[canvas] transformstart.shape event", { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape._type === "circle") {
@@ -73,6 +81,7 @@ function attachShapeEvents(shape) {
   });
 
   shape.on('transformend.shape', () => {
+    log("DEBUG", "[canvas] transformend.shape event", { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape._type === "circle") {
@@ -88,10 +97,12 @@ function attachShapeEvents(shape) {
     updateSelectionHighlight();
     AppState.konvaLayer.batchDraw();
   });
+  log("TRACE", "[canvas] attachShapeEvents exit", shape);
 }
 
 // --- Clamp logic for shape and group drag ---
 function clampShapeToStage(shape) {
+  log("TRACE", "[canvas] clampShapeToStage entry", { shape });
   const stage = AppState.konvaStage;
   let minX, minY, maxX, maxY;
   if (shape._type === "rect") {
@@ -108,9 +119,11 @@ function clampShapeToStage(shape) {
   if (maxY > stage.height()) dy = stage.height() - maxY;
   shape.x(shape.x() + dx);
   shape.y(shape.y() + dy);
+  log("TRACE", "[canvas] clampShapeToStage exit", { shape });
 }
 
 function clampGroupDragDelta(dx, dy, origPositions) {
+  log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy, origPositions });
   const stage = AppState.konvaStage;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   origPositions.forEach(obj => {
@@ -131,11 +144,13 @@ function clampGroupDragDelta(dx, dy, origPositions) {
   if (maxX > stage.width()) adjDx += stage.width() - maxX;
   if (minY < 0) adjDy += -minY;
   if (maxY > stage.height()) adjDy += stage.height() - maxY;
+  log("TRACE", "[canvas] clampGroupDragDelta exit", { adjDx, adjDy });
   return [adjDx, adjDy];
 }
 
 // --- Selection Highlight Logic ---
 function updateSelectionHighlight() {
+  log("DEBUG", "[canvas] updateSelectionHighlight called");
   const layer = AppState.konvaLayer;
   // Remove any old bounding box
   if (groupBoundingBox) { groupBoundingBox.destroy(); groupBoundingBox = null; }
@@ -184,6 +199,7 @@ function updateSelectionHighlight() {
 
 // --- Main Panel Build ---
 export function buildCanvasPanel(rootElement, container) {
+  log("TRACE", "[canvas] buildCanvasPanel entry", { rootElement, container });
   try {
     log("INFO", "[canvas] buildCanvasPanel called", { rootElement, container });
 
@@ -235,5 +251,5 @@ export function buildCanvasPanel(rootElement, container) {
     alert("CanvasPanel ERROR: " + e.message);
     throw e;
   }
+  log("TRACE", "[canvas] buildCanvasPanel exit", { rootElement, container });
 }
-

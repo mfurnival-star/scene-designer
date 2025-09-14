@@ -8,6 +8,7 @@
  * - All settings metadata is defined in settingsRegistry.
  * - Logging via log.js.
  * - Updates log.js config at runtime when log level/destination/server/token is changed.
+ * - Logging policy: Use INFO for panel/user actions, DEBUG for settings changes, ERROR for problems.
  * -----------------------------------------------------------
  */
 
@@ -152,7 +153,6 @@ export function loadSettings() {
       merged[reg.key] = (reg.key in stored) ? stored[reg.key] : reg.default;
     }
     setSettings(merged);
-    // Sync log.js config with loaded settings
     updateLogConfigFromSettings(merged);
     log("DEBUG", "[settings] Settings loaded", merged);
   } catch (e) {
@@ -177,10 +177,12 @@ const _origSetSettings = setSettings;
 function setSettingAndSave(key, value) {
   _origSetSetting(key, value);
   saveSettings();
+  log("DEBUG", "[settings] setSettingAndSave", { key, value });
 }
 function setSettingsAndSave(settingsObj) {
   _origSetSettings(settingsObj);
   saveSettings();
+  log("DEBUG", "[settings] setSettingsAndSave", settingsObj);
 }
 
 // Sync log.js config any time relevant settings change

@@ -7,6 +7,7 @@
  * - Interacts with AppState for all data and selection.
  * - No globals; all state via AppState.
  * - Logging via log.js; updates via state.js.
+ * - Logging policy: Use INFO for user actions, DEBUG for table updates, ERROR for UI problems.
  * -----------------------------------------------------------
  */
 
@@ -38,6 +39,7 @@ export function buildSidebarPanel(rootElement, container) {
 
     // Render table of shapes
     function renderTable() {
+      log("DEBUG", "[sidebar] renderTable called");
       const shapes = AppState.shapes || [];
       const selArr = AppState.selectedShapes || [];
       const tableDiv = rootElement.querySelector("#sidebar-table-div");
@@ -113,8 +115,8 @@ export function buildSidebarPanel(rootElement, container) {
     log("INFO", "[sidebar] Sidebar panel fully initialized");
   } catch (e) {
     log("ERROR", "[sidebar] buildSidebarPanel ERROR", e);
-    if (window.debugLog) window.debugLog("buildSidebarPanel ERROR", e);
     alert("SidebarPanel ERROR: " + e.message);
     throw e;
   }
 }
+

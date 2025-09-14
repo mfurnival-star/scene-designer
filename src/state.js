@@ -8,6 +8,7 @@
  * - Mutations only via exported setters and methods.
  * - No global state except the exported AppState.
  * - Adheres to SCENE_DESIGNER_MANIFESTO.md.
+ * - Logging: Uses log.js; logs at DEBUG for state changes, TRACE for setter entry/exit if deep tracing is enabled.
  * -----------------------------------------------------------
  */
 
@@ -49,11 +50,13 @@ export const AppState = {
  * @returns {Function} Unsubscribe function.
  */
 export function subscribe(fn) {
+  log("TRACE", "[state] subscribe() called", fn);
   if (typeof fn !== "function") return () => {};
   AppState._subscribers.push(fn);
   return () => {
     const idx = AppState._subscribers.indexOf(fn);
     if (idx !== -1) AppState._subscribers.splice(idx, 1);
+    log("TRACE", "[state] unsubscribe() called", fn);
   };
 }
 
@@ -74,8 +77,10 @@ function notifySubscribers(details = {}) {
  * @param {Array} newShapes
  */
 export function setShapes(newShapes) {
+  log("TRACE", "[state] setShapes() called", newShapes);
   AppState.shapes = Array.isArray(newShapes) ? newShapes : [];
   notifySubscribers({ type: "shapes", shapes: AppState.shapes });
+  log("DEBUG", "[state] setShapes: shapes updated", AppState.shapes);
 }
 
 /**
@@ -83,9 +88,11 @@ export function setShapes(newShapes) {
  * @param {Array} arr
  */
 export function setSelectedShapes(arr) {
+  log("TRACE", "[state] setSelectedShapes() called", arr);
   AppState.selectedShapes = Array.isArray(arr) ? arr : [];
   AppState.selectedShape = AppState.selectedShapes.length === 1 ? AppState.selectedShapes[0] : null;
   notifySubscribers({ type: "selection", selectedShapes: AppState.selectedShapes });
+  log("DEBUG", "[state] setSelectedShapes: selection updated", AppState.selectedShapes);
 }
 
 /**
@@ -93,9 +100,11 @@ export function setSelectedShapes(arr) {
  * @param {Object} shape
  */
 export function addShape(shape) {
+  log("TRACE", "[state] addShape() called", shape);
   if (!shape) return;
   AppState.shapes.push(shape);
   notifySubscribers({ type: "addShape", shape });
+  log("DEBUG", "[state] addShape: shape added", shape);
 }
 
 /**
@@ -103,9 +112,11 @@ export function addShape(shape) {
  * @param {Object} shape
  */
 export function removeShape(shape) {
+  log("TRACE", "[state] removeShape() called", shape);
   if (!shape) return;
   AppState.shapes = AppState.shapes.filter(s => s !== shape);
   notifySubscribers({ type: "removeShape", shape });
+  log("DEBUG", "[state] removeShape: shape removed", shape);
 }
 
 /**
@@ -113,8 +124,10 @@ export function removeShape(shape) {
  * @param {String} name
  */
 export function setSceneName(name) {
+  log("TRACE", "[state] setSceneName() called", name);
   AppState.sceneName = name || '';
   notifySubscribers({ type: "sceneName", sceneName: AppState.sceneName });
+  log("DEBUG", "[state] setSceneName: sceneName updated", AppState.sceneName);
 }
 
 /**
@@ -122,8 +135,10 @@ export function setSceneName(name) {
  * @param {String} logic
  */
 export function setSceneLogic(logic) {
+  log("TRACE", "[state] setSceneLogic() called", logic);
   AppState.sceneLogic = ['AND', 'OR'].includes(logic) ? logic : 'AND';
   notifySubscribers({ type: "sceneLogic", sceneLogic: AppState.sceneLogic });
+  log("DEBUG", "[state] setSceneLogic: sceneLogic updated", AppState.sceneLogic);
 }
 
 /**
@@ -132,9 +147,11 @@ export function setSceneLogic(logic) {
  * @param {HTMLImageElement} [imgObj]
  */
 export function setImage(url, imgObj = null) {
+  log("TRACE", "[state] setImage() called", { url, imgObj });
   AppState.imageURL = url || null;
   AppState.imageObj = imgObj || null;
   notifySubscribers({ type: "image", imageURL: AppState.imageURL, imageObj: AppState.imageObj });
+  log("DEBUG", "[state] setImage: image updated", { url: AppState.imageURL, imgObj: !!AppState.imageObj });
 }
 
 /**
@@ -142,8 +159,10 @@ export function setImage(url, imgObj = null) {
  * @param {Object} settingsObj
  */
 export function setSettings(settingsObj) {
+  log("TRACE", "[state] setSettings() called", settingsObj);
   AppState.settings = { ...AppState.settings, ...settingsObj };
   notifySubscribers({ type: "settings", settings: AppState.settings });
+  log("DEBUG", "[state] setSettings: settings updated", AppState.settings);
 }
 
 /**
@@ -152,8 +171,10 @@ export function setSettings(settingsObj) {
  * @param {*} value
  */
 export function setSetting(key, value) {
+  log("TRACE", "[state] setSetting() called", { key, value });
   AppState.settings[key] = value;
   notifySubscribers({ type: "setting", key, value });
+  log("DEBUG", "[state] setSetting: setting updated", { key, value });
 }
 
 /**
@@ -162,6 +183,7 @@ export function setSetting(key, value) {
  * @returns {*}
  */
 export function getSetting(key) {
+  log("TRACE", "[state] getSetting() called", { key });
   return AppState.settings[key];
 }
 
@@ -183,4 +205,5 @@ if (typeof window !== "undefined") {
   window.getSetting = getSetting;
   window.subscribeAppState = subscribe;
 }
+
 

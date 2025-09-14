@@ -18,12 +18,17 @@ import { log } from './log.js';
  * @param {Object|null} shape - Shape object or null to clear.
  */
 export function setSelectedShape(shape) {
-  log("DEBUG", "[selection] setSelectedShape called", { shape });
-  if (AppState.selectedShape === shape) return;
+  log("TRACE", "[selection] setSelectedShape entry", { shape });
+  if (AppState.selectedShape === shape) {
+    log("DEBUG", "[selection] setSelectedShape: no change", { shape });
+    log("TRACE", "[selection] setSelectedShape exit");
+    return;
+  }
   AppState.selectedShape = shape;
   AppState.selectedShapes = shape ? [shape] : [];
   log("INFO", "[selection] Single shape selected", { id: shape?._id, type: shape?._type });
   notifySelectionChanged();
+  log("TRACE", "[selection] setSelectedShape exit");
 }
 
 /**
@@ -31,7 +36,7 @@ export function setSelectedShape(shape) {
  * @param {Array} arr - Array of shape objects.
  */
 export function setSelectedShapes(arr) {
-  log("DEBUG", "[selection] setSelectedShapes called", { arr });
+  log("TRACE", "[selection] setSelectedShapes entry", { arr });
   const newArr = Array.isArray(arr) ? arr : [];
   AppState.selectedShapes = newArr;
   AppState.selectedShape = newArr.length === 1 ? newArr[0] : null;
@@ -40,6 +45,7 @@ export function setSelectedShapes(arr) {
     types: AppState.selectedShapes.map(s => s._type)
   });
   notifySelectionChanged();
+  log("TRACE", "[selection] setSelectedShapes exit");
 }
 
 /**
@@ -64,6 +70,10 @@ export function deselectAll() {
  * Notify subscribers of selection change.
  */
 function notifySelectionChanged() {
+  log("DEBUG", "[selection] notifySelectionChanged", {
+    selectedShape: AppState.selectedShape,
+    selectedShapes: AppState.selectedShapes
+  });
   if (typeof AppState._subscribers === "object" && Array.isArray(AppState._subscribers)) {
     AppState._subscribers.forEach(fn => {
       try {
@@ -80,7 +90,12 @@ function notifySelectionChanged() {
  * @param {Object} shape - Shape object to attach handlers to.
  */
 export function attachSelectionHandlers(shape) {
-  if (!shape || typeof shape.on !== "function") return;
+  log("TRACE", "[selection] attachSelectionHandlers entry", { shape });
+  if (!shape || typeof shape.on !== "function") {
+    log("WARN", "[selection] attachSelectionHandlers: not a valid shape", { shape });
+    log("TRACE", "[selection] attachSelectionHandlers exit");
+    return;
+  }
   // Remove old handlers to avoid duplicate listeners
   shape.off("mousedown.selection");
   shape.on("mousedown.selection", function(evt) {
@@ -99,6 +114,7 @@ export function attachSelectionHandlers(shape) {
       setSelectedShape(shape);
     }
   });
+  log("TRACE", "[selection] attachSelectionHandlers exit");
 }
 
 /**

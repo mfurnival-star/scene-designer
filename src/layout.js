@@ -7,6 +7,7 @@
  * - Error log panel is included on startup if AppState.settings.showErrorLogPanel is true.
  * - No use of window.* or global log boxes: all logs routed to ErrorLogPanel via ES module.
  * - Logging via log.js.
+ * - Logging policy: Use INFO for panel registration, user-visible events, and layout lifecycle; DEBUG for internal state; ERROR for problems.
  * -----------------------------------------------------------
  */
 
@@ -37,7 +38,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // Import and call loadSettings from settings.js for proper persistence
     loadSettings();
     showErrorLogPanel = getSetting("showErrorLogPanel") !== false;
-  } catch {
+    log("DEBUG", "[layout] Loaded settings, showErrorLogPanel:", showErrorLogPanel);
+  } catch (e) {
+    log("ERROR", "[layout] Error loading settings, defaulting showErrorLogPanel to true", e);
     showErrorLogPanel = true;
   }
 
@@ -82,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       ]
     };
+    log("DEBUG", "[layout] ErrorLogPanel added to layout");
   }
 
   let layout;
@@ -121,6 +125,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Register log sink so all log messages go to ErrorLogPanel if open
     registerErrorLogSink();
 
+    log("DEBUG", "[layout] All panel factories registered, log sink registered");
   } catch (e) {
     log("ERROR", "[layout] ERROR in registerComponent:", e?.message || e);
     throw e;
