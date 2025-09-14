@@ -10,7 +10,8 @@
   "dependencies": {
     "@simonwep/pickr": "^1.9.1",
     "golden-layout": "^2.6.0",
-    "konva": "^10.0.2"
+    "konva": "^10.0.2",
+    "loglevel": "^1.9.2"
   },
   "devDependencies": {
     "css-loader": "^7.1.2",
