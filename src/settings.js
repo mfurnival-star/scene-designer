@@ -15,7 +15,8 @@
 import { AppState, setSettings, setSetting, getSetting } from './state.js';
 import { log, setLogLevel, setLogDestination, setLogServerURL, setLogServerToken } from './log.js';
 import Pickr from '@simonwep/pickr';
-import Tweakpane from 'tweakpane';
+// CORRECTED: Use named import for Tweakpane ES module
+import { Pane as Tweakpane } from 'tweakpane';
 import localforage from 'localforage';
 
 // Settings registry: extend or modify as needed for new settings.

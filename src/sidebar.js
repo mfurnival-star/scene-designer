@@ -14,7 +14,8 @@
 
 import { AppState, setShapes, setSelectedShapes } from './state.js';
 import { log } from './log.js';
-import Tabulator from 'tabulator-tables';
+// CORRECTED: Use named import for Tabulator ES module
+import { Tabulator } from 'tabulator-tables';
 
 // Internal reference to Tabulator instance
 let tabulatorInstance = null;
@@ -167,3 +168,4 @@ export function buildSidebarPanel(rootElement, container) {
     throw e;
   }
 }
+
