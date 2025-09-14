@@ -141,6 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
       log("TRACE", "[layout] CanvasPanel factory exit");
     });
 
+    // === FIX: Delay SettingsPanel construction until visible ===
     layout.registerComponent('SettingsPanel', (container) => {
       log("TRACE", "[layout] SettingsPanel factory entry", {
         title: container?.title,
@@ -150,7 +151,11 @@ document.addEventListener("DOMContentLoaded", () => {
         title: container?.title,
         componentName: container?.componentName
       });
-      buildSettingsPanel(container.element, container);
+      // Golden Layout: only build panel after it's visible/attached
+      container.on('open', () => {
+        log("TRACE", "[layout] SettingsPanel container 'open' event");
+        buildSettingsPanel(container.element, container);
+      });
       log("TRACE", "[layout] SettingsPanel factory exit");
     });
 
