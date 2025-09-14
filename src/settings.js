@@ -315,6 +315,21 @@ export function buildSettingsPanel(rootElement, container) {
         log("TRACE", "[settings] buildSettingsPanel after loadSettings (resolved)", {
           AppStateSettings: AppState.settings
         });
+
+        // --- DIAGNOSTIC: Ensure all keys are initialized and create a POJO for Tweakpane ---
+        const settingsPOJO = {};
+        for (const reg of settingsRegistry) {
+          // Always ensure the key exists on AppState.settings
+          if (!(reg.key in AppState.settings)) {
+            AppState.settings[reg.key] = reg.default;
+          }
+          settingsPOJO[reg.key] = AppState.settings[reg.key];
+        }
+        log("DEBUG", "[settings] settingsPOJO plain object check", {
+          proto: Object.getPrototypeOf(settingsPOJO),
+          isPlain: Object.getPrototypeOf(settingsPOJO) === Object.prototype
+        });
+
         // Clear panel
         rootElement.innerHTML = `
           <div id="settings-panel-container" style="width:100%;height:100%;background:#e7f8eb;display:flex;flex-direction:column;overflow:auto;">
@@ -357,19 +372,29 @@ export function buildSettingsPanel(rootElement, container) {
         settingsRegistry.forEach(reg => {
           const key = reg.key;
           try {
+            // Diagnostic: log plainness and key existence
+            log("DEBUG", "[settings] addInput plainness", {
+              key,
+              value: settingsPOJO[key],
+              hasKey: Object.prototype.hasOwnProperty.call(settingsPOJO, key),
+              isPlain: Object.getPrototypeOf(settingsPOJO) === Object.prototype
+            });
+
             if (reg.type === "boolean") {
-              pane.addInput(AppState.settings, key, {
+              pane.addInput(settingsPOJO, key, {
                 label: reg.label,
               }).on('change', ev => {
+                settingsPOJO[key] = ev.value;
                 setSettingAndSave(key, ev.value);
               });
             } else if (reg.type === "number") {
-              pane.addInput(AppState.settings, key, {
+              pane.addInput(settingsPOJO, key, {
                 label: reg.label,
                 min: reg.min,
                 max: reg.max,
                 step: reg.step
               }).on('change', ev => {
+                settingsPOJO[key] = ev.value;
                 setSettingAndSave(key, ev.value);
               });
             } else if (reg.type === "pickr") {
@@ -396,25 +421,29 @@ export function buildSettingsPanel(rootElement, container) {
                 pickrInstances[key] = Pickr.create({
                   el: '#' + pickrDiv.id,
                   theme: 'monolith',
-                  default: AppState.settings[key],
+                  default: settingsPOJO[key],
                   components: { preview: true, opacity: true, hue: true, interaction: { hex: true, rgba: true, input: true } }
                 });
                 pickrInstances[key].on('change', color => {
-                  setSettingAndSave(key, color.toHEXA().toString());
+                  const newColor = color.toHEXA().toString();
+                  settingsPOJO[key] = newColor;
+                  setSettingAndSave(key, newColor);
                 });
-                pickrInstances[key].setColor(AppState.settings[key]);
+                pickrInstances[key].setColor(settingsPOJO[key]);
               }, 1);
             } else if (reg.type === "select") {
-              pane.addInput(AppState.settings, key, {
+              pane.addInput(settingsPOJO, key, {
                 label: reg.label,
                 options: reg.options.reduce((acc, cur) => { acc[cur.value] = cur.label; return acc; }, {}),
               }).on('change', ev => {
+                settingsPOJO[key] = ev.value;
                 setSettingAndSave(key, ev.value);
               });
             } else if (reg.type === "text") {
-              pane.addInput(AppState.settings, key, {
+              pane.addInput(settingsPOJO, key, {
                 label: reg.label,
               }).on('change', ev => {
+                settingsPOJO[key] = ev.value;
                 setSettingAndSave(key, ev.value);
               });
             }
