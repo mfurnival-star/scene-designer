@@ -276,11 +276,19 @@ function updateConsoleInterceptionFromSettings(settings) {
 }
 
 export function buildSettingsPanel(rootElement, container) {
+  log("DEBUG", "[settings] buildSettingsPanel: TOP OF FUNCTION", {
+    PaneType: typeof Pane,
+    Pane,
+    PickrType: typeof Pickr,
+    Pickr
+  });
+
   log("TRACE", "[settings] buildSettingsPanel entry", {
     rootElementType: rootElement?.tagName,
     containerTitle: container?.title,
     containerComponentName: container?.componentName
   });
+
   try {
     log("INFO", "[settings] buildSettingsPanel called", {
       rootElementType: rootElement?.tagName,
@@ -299,8 +307,8 @@ export function buildSettingsPanel(rootElement, container) {
     }
 
     // Log Tweakpane and Pickr before usage for diagnostics
-    log("DEBUG", "[settings] Tweakpane import check", { PaneType: typeof Pane, Pane });
-    log("DEBUG", "[settings] Pickr import check", { PickrType: typeof Pickr, Pickr });
+    log("DEBUG", "[settings] Tweakpane import check (pre-panel)", { PaneType: typeof Pane, Pane });
+    log("DEBUG", "[settings] Pickr import check (pre-panel)", { PickrType: typeof Pickr, Pickr });
     log("DEBUG", "[settings] settingsRegistry length", { len: settingsRegistry.length });
 
     if (typeof Pane !== "function") {
@@ -353,11 +361,13 @@ export function buildSettingsPanel(rootElement, container) {
 
         let pane;
         try {
+          log("DEBUG", "[settings] Instantiating Tweakpane...", { PaneType: typeof Pane, Pane });
           pane = new Pane({
             container: fieldsDiv,
             title: 'Settings',
             expanded: true
           });
+          log("DEBUG", "[settings] Tweakpane instance created", { paneType: typeof pane, pane });
         } catch (e) {
           log("ERROR", "[settings] Tweakpane instantiation failed", e);
           fieldsDiv.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed: Tweakpane error (${e.message})</div>`;
@@ -381,6 +391,7 @@ export function buildSettingsPanel(rootElement, container) {
             });
 
             if (reg.type === "boolean") {
+              log("DEBUG", `[settings] Tweakpane addInput: boolean for ${key}`);
               pane.addInput(settingsPOJO, key, {
                 label: reg.label,
               }).on('change', ev => {
@@ -388,6 +399,7 @@ export function buildSettingsPanel(rootElement, container) {
                 setSettingAndSave(key, ev.value);
               });
             } else if (reg.type === "number") {
+              log("DEBUG", `[settings] Tweakpane addInput: number for ${key}`);
               pane.addInput(settingsPOJO, key, {
                 label: reg.label,
                 min: reg.min,
@@ -398,6 +410,7 @@ export function buildSettingsPanel(rootElement, container) {
                 setSettingAndSave(key, ev.value);
               });
             } else if (reg.type === "pickr") {
+              log("DEBUG", `[settings] Rendering Pickr color picker for ${key}`);
               // For Pickr, create a div container in the tweakpane
               const pickrDiv = document.createElement("div");
               pickrDiv.id = "pickr-" + key;
@@ -430,8 +443,10 @@ export function buildSettingsPanel(rootElement, container) {
                   setSettingAndSave(key, newColor);
                 });
                 pickrInstances[key].setColor(settingsPOJO[key]);
+                log("DEBUG", `[settings] Pickr instance created for ${key}`);
               }, 1);
             } else if (reg.type === "select") {
+              log("DEBUG", `[settings] Tweakpane addInput: select for ${key}`);
               pane.addInput(settingsPOJO, key, {
                 label: reg.label,
                 options: reg.options.reduce((acc, cur) => { acc[cur.value] = cur.label; return acc; }, {}),
@@ -440,6 +455,7 @@ export function buildSettingsPanel(rootElement, container) {
                 setSettingAndSave(key, ev.value);
               });
             } else if (reg.type === "text") {
+              log("DEBUG", `[settings] Tweakpane addInput: text for ${key}`);
               pane.addInput(settingsPOJO, key, {
                 label: reg.label,
               }).on('change', ev => {
@@ -481,5 +497,4 @@ export function buildSettingsPanel(rootElement, container) {
 
 // Always patch setters at module load
 export { setSettingAndSave as setSetting, setSettingsAndSave as setSettings };
-
 
