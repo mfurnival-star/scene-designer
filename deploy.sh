@@ -1,5 +1,5 @@
 #!/bin/bash
-# Scene Designer Deploy Script (modernized with log config injection and help)
+# Scene Designer Deploy Script (modern, robust, and self-contained)
 # ---------------------------------------------------------------------------
 # - Builds fresh dist/ output and always ensures index.html is present.
 # - Injects log/Eruda config into dist/index.html.
@@ -100,6 +100,10 @@ awk -v log_level="$LOG_LEVEL" \
         next;
     } 1
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
+
+# Debug: Print the injected log config block
+echo "==== Injected LOG SETTINGS block in $INDEX_HTML ===="
+grep 'DEBUG_LOG_LEVEL\|LOG_OUTPUT_DEST\|externalLogServerURL\|externalLogServerToken' "$INDEX_HTML" || true
 
 echo "[$DATESTAMP] === Deploying to $DEPLOY_DIR ==="
 sudo mkdir -p "$DEPLOY_DIR"
