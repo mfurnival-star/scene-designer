@@ -7,11 +7,12 @@
  * - Persists settings in localStorage.
  * - All settings metadata is defined in settingsRegistry.
  * - Logging via log.js.
+ * - Updates log.js config at runtime when log level/destination/server/token is changed.
  * -----------------------------------------------------------
  */
 
 import { AppState, setSettings, setSetting, getSetting } from './state.js';
-import { log } from './log.js';
+import { log, setLogLevel, setLogDestination, setLogServerURL, setLogServerToken } from './log.js';
 import Pickr from '@simonwep/pickr';
 
 // Settings registry: extend or modify as needed for new settings.
@@ -112,6 +113,29 @@ export const settingsRegistry = [
     default: "OFF"
   },
   {
+    key: "LOG_OUTPUT_DEST",
+    label: "Log Output Destination",
+    type: "select",
+    options: [
+      { value: "console", label: "Console Only" },
+      { value: "server", label: "Remote Server Only" },
+      { value: "both", label: "Both Console and Server" }
+    ],
+    default: "console"
+  },
+  {
+    key: "LOG_SERVER_URL",
+    label: "Log Server URL",
+    type: "text",
+    default: ""
+  },
+  {
+    key: "LOG_SERVER_TOKEN",
+    label: "Log Server Token",
+    type: "text",
+    default: ""
+  },
+  {
     key: "showErrorLogPanel",
     label: "Show Error Log Panel",
     type: "boolean",
@@ -128,23 +152,26 @@ export function loadSettings() {
       merged[reg.key] = (reg.key in stored) ? stored[reg.key] : reg.default;
     }
     setSettings(merged);
+    // Sync log.js config with loaded settings
+    updateLogConfigFromSettings(merged);
     log("DEBUG", "[settings] Settings loaded", merged);
   } catch (e) {
     log("ERROR", "[settings] loadSettings error", e);
   }
 }
 
-// Save settings to localStorage
+// Save settings to localStorage and update log config if relevant
 export function saveSettings() {
   try {
     localStorage.setItem("sceneDesignerSettings", JSON.stringify(AppState.settings));
+    updateLogConfigFromSettings(AppState.settings);
     log("DEBUG", "[settings] Settings saved", AppState.settings);
   } catch (e) {
     log("ERROR", "[settings] saveSettings error", e);
   }
 }
 
-// Patch setSetting/setSettings to persist to localStorage immediately
+// Patch setSetting/setSettings to persist to localStorage immediately and update log config
 const _origSetSetting = setSetting;
 const _origSetSettings = setSettings;
 function setSettingAndSave(key, value) {
@@ -154,6 +181,15 @@ function setSettingAndSave(key, value) {
 function setSettingsAndSave(settingsObj) {
   _origSetSettings(settingsObj);
   saveSettings();
+}
+
+// Sync log.js config any time relevant settings change
+function updateLogConfigFromSettings(settings) {
+  if (!settings) return;
+  if ("DEBUG_LOG_LEVEL" in settings) setLogLevel(settings.DEBUG_LOG_LEVEL);
+  if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
+  if ("LOG_SERVER_URL" in settings) setLogServerURL(settings.LOG_SERVER_URL);
+  if ("LOG_SERVER_TOKEN" in settings) setLogServerToken(settings.LOG_SERVER_TOKEN);
 }
 
 // Build the settings panel UI
@@ -257,6 +293,17 @@ export function buildSettingsPanel(rootElement, container) {
         });
         field.appendChild(label);
         field.appendChild(input);
+      } else if (reg.type === "text") {
+        input = document.createElement("input");
+        input.type = "text";
+        input.value = getSetting(reg.key);
+        input.id = "setting-" + reg.key;
+        input.style = "width:200px;margin-left:8px;";
+        input.addEventListener("input", () => {
+          setSettingAndSave(reg.key, input.value);
+        });
+        field.appendChild(label);
+        field.appendChild(input);
       }
       fieldsDiv.appendChild(field);
     }
@@ -276,7 +323,6 @@ export function buildSettingsPanel(rootElement, container) {
     log("INFO", "[settings] Settings panel rendered");
   } catch (e) {
     log("ERROR", "[settings] buildSettingsPanel ERROR", e);
-    if (window.debugLog) window.debugLog("buildSettingsPanel ERROR", e);
     alert("SettingsPanel ERROR: " + e.message);
     throw e;
   }

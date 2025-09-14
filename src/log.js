@@ -14,13 +14,21 @@ export const LOG_LEVELS = {
   OFF: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
 };
 
-// Default logging configuration (can be overridden by settings.js)
-let curLogLevel = 'ERROR';
-let logDest = 'console'; // "console", "server", "both"
-let externalLogServerURL = '';
-let externalLogServerToken = '';
+// --- Initial config is set from window._settings if present (see deploy.sh injection) ---
+let curLogLevel = typeof window !== "undefined" && window._settings?.DEBUG_LOG_LEVEL
+  ? window._settings.DEBUG_LOG_LEVEL
+  : 'ERROR';
+let logDest = typeof window !== "undefined" && window._settings?.LOG_OUTPUT_DEST
+  ? window._settings.LOG_OUTPUT_DEST
+  : 'console';
+let externalLogServerURL = typeof window !== "undefined" && window._externalLogServerURL
+  ? window._externalLogServerURL
+  : '';
+let externalLogServerToken = typeof window !== "undefined" && window._externalLogServerToken
+  ? window._externalLogServerToken
+  : '';
 
-// --- NEW: Error log panel sinks ---
+// --- Error log panel sinks ---
 const errorLogPanelSinks = [];
 /**
  * Register a log sink (panel) that receives log messages.
@@ -58,7 +66,7 @@ export function setLogServerToken(token) {
   externalLogServerToken = token || '';
 }
 
-// Main log function
+// Main log function. TRACE is extremely verbose and rarely used (for entry/exit).
 export function log(level, ...args) {
   const curLevelNum = LOG_LEVELS[curLogLevel] ?? LOG_LEVELS.ERROR;
   const msgLevelNum = LOG_LEVELS[level] ?? 99;
@@ -68,7 +76,6 @@ export function log(level, ...args) {
   const tag = "[log]";
   if (logDest === "console" || logDest === "both") {
     if (level === "ERROR") {
-      // Always use error for ERROR
       // eslint-disable-next-line no-console
       console.error(tag, level, ...args);
     } else if (level === "WARN") {
@@ -82,7 +89,7 @@ export function log(level, ...args) {
   if ((logDest === "server" || logDest === "both") && externalLogServerURL) {
     logStream(level, ...args);
   }
-  // --- NEW: Forward logs to all registered log panel sinks
+  // Forward logs to all registered log panel sinks
   for (const sink of errorLogPanelSinks) {
     if (typeof sink === "function") sink(level, ...args);
     else if (sink && typeof sink.sinkLog === "function") sink.sinkLog(level, ...args);
@@ -134,3 +141,4 @@ if (typeof window !== "undefined") {
   window.setLogServerToken = setLogServerToken;
   window.LOG_LEVELS = LOG_LEVELS;
 }
+

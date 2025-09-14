@@ -10,6 +10,21 @@
     #gl-root { height: 100vh; width: 100vw; background: #f7f9fc; }
     /* Removed #error-log-box styles: error log is now a panel! */
   </style>
+  <!-- BEGIN LOG SETTINGS -->
+  <script>
+    window._settings = window._settings || {};
+    window._settings.DEBUG_LOG_LEVEL = "ERROR";
+    window._settings.LOG_OUTPUT_DEST = "console";
+    window._externalLogServerURL = "";
+    window._externalLogServerToken = "";
+  </script>
+  <!-- END LOG SETTINGS -->
+  <!--
+    To inject Eruda for mobile debugging, set INJECT_ERUDA=1 in deploy.sh,
+    which will insert the following lines at build/deploy time:
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+  -->
 </head>
 <body>
   <div id="gl-root"></div>
