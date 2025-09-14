@@ -111,6 +111,9 @@ sudo rsync -av --delete "$BUILD_DIR/" "$DEPLOY_DIR/"
 echo "[$DATESTAMP] === Verifying deployed index.html ==="
 sudo grep 'DEBUG_LOG_LEVEL\|LOG_OUTPUT_DEST\|externalLogServerURL\|externalLogServerToken' "$DEPLOY_DIR/index.html" || true
 
+# Restart Nginx to ensure latest files are served
+sudo systemctl restart nginx
+
 echo "[$DATESTAMP] === Git add/commit/push ==="
 git add .
 git commit -m "Deploy at $DATESTAMP"
