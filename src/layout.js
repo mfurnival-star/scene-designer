@@ -103,22 +103,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   try {
     layout.registerComponent('SidebarPanel', (container) => {
-      log("INFO", "[layout] SidebarPanel factory called", container);
+      log("INFO", "[layout] SidebarPanel factory called", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
       buildSidebarPanel(container.element, container);
     });
 
     layout.registerComponent('CanvasPanel', (container) => {
-      log("INFO", "[layout] CanvasPanel factory called", container);
+      log("INFO", "[layout] CanvasPanel factory called", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
       buildCanvasPanel(container.element, container);
     });
 
     layout.registerComponent('SettingsPanel', (container) => {
-      log("INFO", "[layout] SettingsPanel factory called", container);
+      log("INFO", "[layout] SettingsPanel factory called", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
       buildSettingsPanel(container.element, container);
     });
 
     layout.registerComponent('ErrorLogPanel', (container) => {
-      log("INFO", "[layout] ErrorLogPanel factory called", container);
+      log("INFO", "[layout] ErrorLogPanel factory called", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
       buildErrorLogPanel(container.element, container);
     });
 
@@ -140,4 +152,3 @@ document.addEventListener("DOMContentLoaded", () => {
     throw e;
   }
 });
-
