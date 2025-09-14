@@ -1,6 +1,6 @@
 /**
  * settings.js
- * -----------------------------------------------------------
+ * -------------------------------------------------------------------
  * Settings Panel for Scene Designer (Golden Layout)
  * - Dynamic settings UI using Tweakpane (ESM) and Pickr (ESM) for color pickers.
  * - All settings are stored in AppState.settings via state.js.
@@ -8,18 +8,20 @@
  * - All settings metadata is defined in settingsRegistry.
  * - Logging via log.js.
  * - Updates log.js config at runtime when log level/destination/server/token is changed.
+ * - Now includes setting for enabling/disabling full console interception (for mobile/dev).
  * - Logging policy: Use INFO for panel/user actions, DEBUG for settings changes, ERROR for problems.
- * - Now: TRACE-level entry/exit logging for all functions.
- * -----------------------------------------------------------
+ * - TRACE-level entry/exit logging for all functions.
+ * -------------------------------------------------------------------
  */
 
 import { AppState, setSettings, setSetting, getSetting } from './state.js';
 import { log, setLogLevel, setLogDestination, setLogServerURL, setLogServerToken } from './log.js';
+import { enableConsoleInterception, disableConsoleInterception, isConsoleInterceptionEnabled } from './console-stream.js';
 import Pickr from '@simonwep/pickr';
 import { Pane as Tweakpane } from 'tweakpane';
 import localforage from 'localforage';
 
-// Settings registry: extend or modify as needed for new settings.
+// --- Settings Registry ---
 export const settingsRegistry = [
   {
     key: "multiDragBox",
@@ -140,6 +142,12 @@ export const settingsRegistry = [
     default: ""
   },
   {
+    key: "INTERCEPT_CONSOLE",
+    label: "Intercept All Console Logs (for Mobile/Dev)",
+    type: "boolean",
+    default: false
+  },
+  {
     key: "showErrorLogPanel",
     label: "Show Error Log Panel",
     type: "boolean",
@@ -147,7 +155,7 @@ export const settingsRegistry = [
   }
 ];
 
-// -- Persistence using localForage (async) --
+// --- Persistence using localForage (async) ---
 localforage.config({
   name: 'scene-designer',
   storeName: 'settings'
@@ -163,6 +171,7 @@ export async function loadSettings() {
     }
     setSettings(merged);
     updateLogConfigFromSettings(merged);
+    updateConsoleInterceptionFromSettings(merged);
     log("DEBUG", "[settings] Settings loaded", merged);
     log("TRACE", "[settings] loadSettings exit");
     return merged;
@@ -178,6 +187,7 @@ export async function saveSettings() {
   try {
     await localforage.setItem("sceneDesignerSettings", AppState.settings);
     updateLogConfigFromSettings(AppState.settings);
+    updateConsoleInterceptionFromSettings(AppState.settings);
     log("DEBUG", "[settings] Settings saved", AppState.settings);
     log("TRACE", "[settings] saveSettings exit");
   } catch (e) {
@@ -228,6 +238,23 @@ function updateLogConfigFromSettings(settings) {
   if ("LOG_SERVER_URL" in settings) setLogServerURL(settings.LOG_SERVER_URL);
   if ("LOG_SERVER_TOKEN" in settings) setLogServerToken(settings.LOG_SERVER_TOKEN);
   log("TRACE", "[settings] updateLogConfigFromSettings exit");
+}
+
+function updateConsoleInterceptionFromSettings(settings) {
+  log("TRACE", "[settings] updateConsoleInterceptionFromSettings entry", settings);
+  if (!settings) return;
+  if (settings.INTERCEPT_CONSOLE) {
+    if (!isConsoleInterceptionEnabled()) {
+      enableConsoleInterception();
+      log("INFO", "[settings] Console interception ENABLED");
+    }
+  } else {
+    if (isConsoleInterceptionEnabled()) {
+      disableConsoleInterception();
+      log("INFO", "[settings] Console interception DISABLED");
+    }
+  }
+  log("TRACE", "[settings] updateConsoleInterceptionFromSettings exit");
 }
 
 export function buildSettingsPanel(rootElement, container) {

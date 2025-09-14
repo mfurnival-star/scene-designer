@@ -1,5 +1,7 @@
 ```filelist
 log.js
+console-stream.js
+global-errors.js
 state.js
 canvas.js
 selection.js
@@ -13,7 +15,14 @@ main.js
 ---
 
 - **log.js**  
-  Centralized logging system for Scene Designer.
+  Centralized, pluggable logging system for Scene Designer.  
+  All logs use `log()`; supports runtime config, pluggable sinks, and safe serialization.
+
+- **console-stream.js**  
+  Console method interception for streaming all console logs (log/error/warn/info/debug/trace) via logger.
+
+- **global-errors.js**  
+  Global error and unhandled promise rejection handler; forwards all browser-level errors to logger.
 
 - **state.js**  
   Centralized AppState singleton and state management.

@@ -1,111 +1,148 @@
 /**
  * log.js
- * -----------------------------------------------------------
- * Centralized logging system for Scene Designer.
- * - Uses loglevel as the core logger for robust levels and output.
- * - Adds safe serialization (handles Error/cyclic objects).
- * - Log level and destination (console/server/both) are dynamic and
- *   can be changed at runtime (see settings.js).
- * - Supports registration of error log panel sinks for in-app UI logging.
- * - Adheres to COPILOT_MANIFESTO.md and SCENE_DESIGNER_MANIFESTO.md.
- * - TRACE-level logging for all functions.
- * -----------------------------------------------------------
+ * -------------------------------------------------------------------
+ * Centralized, pluggable logging system for Scene Designer (ESM only).
+ * - All logs routed through log() at appropriate level/tag.
+ * - Supports runtime config of level, destination, server, and sinks.
+ * - Pluggable log sinks (console, server, in-app panels, etc).
+ * - Safe serialization (handles cyclic/Error objects).
+ * - Zero use of window.*, no globals except optional debug attach.
+ * - Compatible with console interception and global error handlers.
+ * - Exports: log, setLogLevel/getLogLevel, setLogDestination, setLogServerURL,
+ *            setLogServerToken, configureLogging, registerLogSink.
+ * -------------------------------------------------------------------
+ * Dependencies: None (uses built-in fetch, Date, etc).
+ * -------------------------------------------------------------------
  */
 
-import loglevel from 'loglevel';
-
 export const LOG_LEVELS = {
-  OFF: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
+  silent: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
 };
 
-// Map "OFF" (our config/UI) to "silent" (loglevel's string)
-function mapLogLevel(level) {
-  if (!level) return "error";
-  if (level === "OFF" || level === "off") return "silent";
-  return level.toLowerCase ? level.toLowerCase() : level;
-}
+let curLogLevel = "INFO";
+let logDest = "console"; // "console", "server", or "both"
+let externalLogServerURL = "";
+let externalLogServerToken = "";
 
-let curLogLevel = typeof window !== "undefined" && window._settings?.DEBUG_LOG_LEVEL
-  ? window._settings.DEBUG_LOG_LEVEL
-  : 'ERROR';
-let logDest = typeof window !== "undefined" && window._settings?.LOG_OUTPUT_DEST
-  ? window._settings.LOG_OUTPUT_DEST
-  : 'console';
-let externalLogServerURL = typeof window !== "undefined" && window._externalLogServerURL
-  ? window._externalLogServerURL
-  : '';
-let externalLogServerToken = typeof window !== "undefined" && window._externalLogServerToken
-  ? window._externalLogServerToken
-  : '';
+// Pluggable sinks: each receives (level, ...args)
+const logSinks = [];
 
-const errorLogPanelSinks = [];
+/**
+ * Register a log sink (fn(level, ...args) or {sinkLog(level, ...args)})
+ */
 export function registerLogSink(sink) {
-  log("TRACE", "[log] registerLogSink entry", { sink });
+  // Do not log() here (bootstrapping order).
   if (typeof sink === "function" || (sink && typeof sink.sinkLog === "function")) {
-    errorLogPanelSinks.push(sink);
+    logSinks.push(sink);
   }
-  log("TRACE", "[log] registerLogSink exit", { errorLogPanelSinksCount: errorLogPanelSinks.length });
-}
-export function registerErrorLogPanelSink(sink) {
-  log("TRACE", "[log] registerErrorLogPanelSink entry", { sink });
-  registerLogSink(sink);
-  log("TRACE", "[log] registerErrorLogPanelSink exit");
 }
 
-// --- Safe serialization for log arguments ---
-function safeStringify(arg) {
-  loglevel.trace("[log] safeStringify entry", arg);
+/**
+ * Set the log level at runtime.
+ * @param {"silent"|"ERROR"|"WARN"|"INFO"|"DEBUG"|"TRACE"} level
+ */
+export function setLogLevel(level) {
+  curLogLevel = normalizeLevel(level);
+}
+export function getLogLevel() {
+  return curLogLevel;
+}
+
+/**
+ * Set log destination at runtime.
+ * @param {"console"|"server"|"both"} dest
+ */
+export function setLogDestination(dest) {
+  if (["console", "server", "both"].includes(dest)) logDest = dest;
+}
+export function getLogDestination() {
+  return logDest;
+}
+
+/**
+ * Set external log server URL/token.
+ */
+export function setLogServerURL(url) {
+  externalLogServerURL = url || "";
+}
+export function setLogServerToken(token) {
+  externalLogServerToken = token || "";
+}
+
+/**
+ * Configure all logging params at once (used by settings.js).
+ */
+export function configureLogging({ level, dest, serverURL, token }) {
+  if (level) setLogLevel(level);
+  if (dest) setLogDestination(dest);
+  if (serverURL) setLogServerURL(serverURL);
+  if (token) setLogServerToken(token);
+}
+
+/**
+ * Normalize log level string.
+ */
+function normalizeLevel(level) {
+  if (!level) return "INFO";
+  const l = String(level).toUpperCase();
+  if (l === "OFF") return "silent";
+  if (l === "SILENT") return "silent";
+  if (l in LOG_LEVELS) return l;
+  if (LOG_LEVELS.hasOwnProperty(l)) return l;
+  // Default fallback
+  return "INFO";
+}
+
+/**
+ * Map log level string to numeric value.
+ */
+function levelNum(level) {
+  const l = normalizeLevel(level);
+  return LOG_LEVELS[l] ?? 99;
+}
+
+/**
+ * Safe serialization for log arguments.
+ */
+export function safeStringify(arg) {
   if (arg instanceof Error) {
-    loglevel.trace("[log] safeStringify exit (Error instance)");
     return `[Error: ${arg.message}]${arg.stack ? "\n" + arg.stack : ""}`;
   }
   try {
     // Handle cyclic references gracefully
     const seen = new WeakSet();
-    const result = JSON.stringify(arg, function(key, value) {
+    return JSON.stringify(arg, function (key, value) {
       if (typeof value === "object" && value !== null) {
         if (seen.has(value)) return "[Cyclic]";
         seen.add(value);
       }
       return value;
     });
-    loglevel.trace("[log] safeStringify exit (success)");
-    return result;
   } catch (e) {
     // Fallback
     if (typeof arg === "object" && arg !== null) {
-      loglevel.trace("[log] safeStringify exit (unserializable object fallback)");
       return "[Unserializable Object: " + (arg.constructor?.name || "Object") + "]";
     }
-    loglevel.trace("[log] safeStringify exit (fallback to String)");
     return String(arg);
   }
 }
 
-// --- Extra: Harden log argument for console output ---
+/**
+ * Harden log arg for console output.
+ */
 function safeLogArg(arg) {
-  loglevel.trace("[log] safeLogArg entry", arg);
   try {
-    // If it's a DOM element
     if (typeof Element !== "undefined" && arg instanceof Element) {
-      loglevel.trace("[log] safeLogArg exit (Element)");
       return `<${arg.tagName.toLowerCase()} id="${arg.id}" class="${arg.className}">`;
     }
-    // Golden Layout container or suspiciously complex object
     if (arg && arg.constructor && arg.constructor.name &&
-        /Container|Layout|Panel|Manager/.test(arg.constructor.name)) {
-      loglevel.trace("[log] safeLogArg exit (GL container)");
+      /Container|Layout|Panel|Manager/.test(arg.constructor.name)) {
       return `[${arg.constructor.name}]`;
     }
-    // If it's a Konva shape, just return its type and id
     if (arg && arg._id && arg._type) {
-      loglevel.trace("[log] safeLogArg exit (Konva shape)");
       return `{type:"${arg._type}", id:"${arg._id}"}`;
     }
-    // Try to JSON.stringify (will invoke safeStringify)
-    // If it's a plain object or array
     if (typeof arg === "object") {
-      // Try a shallow copy if it's not null
       if (arg !== null) {
         const shallow = {};
         for (const k in arg) {
@@ -113,74 +150,62 @@ function safeLogArg(arg) {
             shallow[k] = arg[k];
           }
         }
-        // Only display shallow if not empty
-        if (Object.keys(shallow).length > 0) {
-          loglevel.trace("[log] safeLogArg exit (shallow obj)");
-          return shallow;
-        }
+        if (Object.keys(shallow).length > 0) return shallow;
       }
     }
-    // Otherwise, return arg as-is (primitive)
-    loglevel.trace("[log] safeLogArg exit (primitive)");
     return arg;
   } catch (e) {
-    // Fallback for anything else
-    loglevel.trace("[log] safeLogArg exit (unserializable fallback)", e);
     return `[Unserializable: ${arg && arg.constructor && arg.constructor.name}]`;
   }
 }
 
-// --- Set up loglevel ---
-loglevel.setLevel(mapLogLevel(curLogLevel)); // e.g. 'debug', 'info', etc.
-
 /**
- * Central log function (hardened: never throws on cyclic/non-serializable objects)
+ * Central log function (all modules must use this!).
+ * @param {"ERROR"|"WARN"|"INFO"|"DEBUG"|"TRACE"} level
+ * @param  {...any} args
  */
 export function log(level, ...args) {
-  // Entry log for diagnostics
-  // NOTE: Do NOT log() from here or you'll infinite loop! Use loglevel.* instead.
-  const curLevelNum = LOG_LEVELS[curLogLevel] ?? LOG_LEVELS.ERROR;
-  const msgLevelNum = LOG_LEVELS[level] ?? 99;
+  const msgLevelNum = levelNum(level);
+  const curLevelNum = levelNum(curLogLevel);
   if (msgLevelNum > curLevelNum) return;
 
-  // Console output via loglevel
+  // Console output
   if (logDest === "console" || logDest === "both") {
-    // Map our levels to loglevel's methods
-    const lvl = level.toLowerCase();
+    const lvl = String(level).toUpperCase();
     const safeArgs = args.map(safeLogArg);
-    if (lvl === "error") loglevel.error("[log]", level, ...safeArgs);
-    else if (lvl === "warn") loglevel.warn("[log]", level, ...safeArgs);
-    else if (lvl === "info") loglevel.info("[log]", level, ...safeArgs);
-    else if (lvl === "debug") loglevel.debug("[log]", level, ...safeArgs);
-    else if (lvl === "trace") loglevel.trace("[log]", level, ...safeArgs);
-    else loglevel.log("[log]", level, ...safeArgs);
+    // Map to console methods (TRACE->debug, everything else as per)
+    if (typeof console !== "undefined") {
+      if (lvl === "ERROR" && console.error) console.error("[log]", level, ...safeArgs);
+      else if (lvl === "WARN" && console.warn) console.warn("[log]", level, ...safeArgs);
+      else if (lvl === "INFO" && console.info) console.info("[log]", level, ...safeArgs);
+      else if (lvl === "DEBUG" && console.debug) console.debug("[log]", level, ...safeArgs);
+      else if (lvl === "TRACE" && console.debug) console.debug("[log]", level, ...safeArgs);
+      else if (console.log) console.log("[log]", level, ...safeArgs);
+    }
   }
   // Server streaming
   if ((logDest === "server" || logDest === "both") && externalLogServerURL) {
     logStream(level, ...args);
   }
   // Panel sinks
-  for (const sink of errorLogPanelSinks) {
+  for (const sink of logSinks) {
     try {
       if (typeof sink === "function") sink(level, ...args);
       else if (sink && typeof sink.sinkLog === "function") sink.sinkLog(level, ...args);
     } catch (e) {
       // Never allow a log sink to throw
-      loglevel.warn("[log]", "Log sink error", e);
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn("[log]", "Log sink error", e);
+      }
     }
   }
-  // Exit log for diagnostics (do not call log() itself!)
 }
 
 /**
- * Async log streaming to external server (safe serialization)
+ * Async log streaming to external server (safe serialization).
  */
 export async function logStream(level, ...args) {
-  loglevel.trace("[log] logStream entry", { level, args });
-  if (!externalLogServerURL) {
-    loglevel.trace("[log] logStream exit (no server url)");
-    return;
-  }
+  if (!externalLogServerURL) return;
   try {
     const payload = {
       level,
@@ -192,70 +217,24 @@ export async function logStream(level, ...args) {
     };
     await fetch(externalLogServerURL, {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    loglevel.trace("[log] logStream exit (success)");
   } catch (e) {
-    loglevel.error("[log]", level, "Failed to stream log", ...args, e);
-    loglevel.trace("[log] logStream exit (error)", e);
+    if (typeof console !== "undefined" && console.error) {
+      console.error("[log]", level, "Failed to stream log", ...args, e);
+    }
   }
 }
 
 /**
- * Allow runtime reconfiguration
+ * For settings.js to fully re-sync config (optional).
  */
-export function setLogLevel(level) {
-  loglevel.trace("[log] setLogLevel entry", { level });
-  if (level && level in LOG_LEVELS) {
-    curLogLevel = level;
-    const mappedLevel = mapLogLevel(level);
-    loglevel.setLevel(mappedLevel);
-  }
-  loglevel.trace("[log] setLogLevel exit", { curLogLevel });
-}
-export function getLogLevel() {
-  loglevel.trace("[log] getLogLevel entry");
-  loglevel.trace("[log] getLogLevel exit", { curLogLevel });
-  return curLogLevel;
-}
-export function setLogDestination(dest) {
-  loglevel.trace("[log] setLogDestination entry", { dest });
-  if (['console', 'server', 'both'].includes(dest)) logDest = dest;
-  loglevel.trace("[log] setLogDestination exit", { logDest });
-}
-export function getLogDestination() {
-  loglevel.trace("[log] getLogDestination entry");
-  loglevel.trace("[log] getLogDestination exit", { logDest });
-  return logDest;
-}
-export function setLogServerURL(url) {
-  loglevel.trace("[log] setLogServerURL entry", { url });
-  externalLogServerURL = url || '';
-  loglevel.trace("[log] setLogServerURL exit", { externalLogServerURL });
-}
-export function setLogServerToken(token) {
-  loglevel.trace("[log] setLogServerToken entry", { token });
-  externalLogServerToken = token || '';
-  loglevel.trace("[log] setLogServerToken exit", { externalLogServerToken });
+export function reconfigureLoggingFromSettings({ level, dest, serverURL, token }) {
+  configureLogging({ level, dest, serverURL, token });
 }
 
-/**
- * For settings.js to fully re-sync config (optional)
- */
-export function configureLogging({level, dest, serverURL, token}) {
-  loglevel.trace("[log] configureLogging entry", {level, dest, serverURL, token});
-  if (level) setLogLevel(level);
-  if (dest) setLogDestination(dest);
-  if (serverURL) setLogServerURL(serverURL);
-  if (token) setLogServerToken(token);
-  loglevel.trace("[log] configureLogging exit");
-}
-
-// Self-test on import
-loglevel.info("[log]", "INFO", "[log] log.js module loaded and ready.");
-
-// Optionally (for backwards compatibility), attach to window for debugging
+// Optional: Attach to global for debug only (remove for production)
 if (typeof window !== "undefined") {
   window.log = log;
   window.setLogLevel = setLogLevel;
@@ -264,5 +243,3 @@ if (typeof window !== "undefined") {
   window.setLogServerToken = setLogServerToken;
   window.LOG_LEVELS = LOG_LEVELS;
 }
-
-
