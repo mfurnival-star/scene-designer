@@ -206,7 +206,11 @@ function updateLogConfigFromSettings(settings) {
 // Build the settings panel UI using Tweakpane (with Pickr for color fields)
 export function buildSettingsPanel(rootElement, container) {
   try {
-    log("INFO", "[settings] buildSettingsPanel called", { rootElement, container });
+    log("INFO", "[settings] buildSettingsPanel called", {
+      rootElementType: rootElement?.tagName,
+      containerTitle: container?.title,
+      containerComponentName: container?.componentName
+    });
 
     // Ensure settings are loaded
     loadSettings().then(() => {
@@ -319,5 +323,4 @@ export function buildSettingsPanel(rootElement, container) {
 
 // Always patch setters at module load
 export { setSettingAndSave as setSetting, setSettingsAndSave as setSettings };
-
 

@@ -39,7 +39,12 @@ function getShapeAttrs(s) {
 // Build the sidebar shape table panel using Tabulator
 export function buildSidebarPanel(rootElement, container) {
   try {
-    log("INFO", "[sidebar] buildSidebarPanel called", { rootElement, container });
+    // LOG ONLY SERIALIZABLE INFO, do not log container or rootElement directly
+    log("INFO", "[sidebar] buildSidebarPanel called", {
+      rootElementType: rootElement?.tagName,
+      containerTitle: container?.title,
+      containerComponentName: container?.componentName
+    });
 
     // Panel skeleton
     rootElement.innerHTML = `
@@ -139,7 +144,7 @@ export function buildSidebarPanel(rootElement, container) {
         const s = cell.getData()._shape;
         if (field === "label" && s) {
           s._label = cell.getValue();
-          log("DEBUG", "[sidebar] Label edited", { newLabel: cell.getValue(), shape: s });
+          log("DEBUG", "[sidebar] Label edited", { newLabel: cell.getValue(), shapeType: s._type, shapeId: s._id });
         }
       }
     });

@@ -64,10 +64,49 @@ function safeStringify(arg) {
   }
 }
 
+// --- Extra: Harden log argument for console output ---
+function safeLogArg(arg) {
+  try {
+    // If it's a DOM element
+    if (typeof Element !== "undefined" && arg instanceof Element) {
+      return `<${arg.tagName.toLowerCase()} id="${arg.id}" class="${arg.className}">`;
+    }
+    // Golden Layout container or suspiciously complex object
+    if (arg && arg.constructor && arg.constructor.name &&
+        /Container|Layout|Panel|Manager/.test(arg.constructor.name)) {
+      return `[${arg.constructor.name}]`;
+    }
+    // If it's a Konva shape, just return its type and id
+    if (arg && arg._id && arg._type) {
+      return `{type:"${arg._type}", id:"${arg._id}"}`;
+    }
+    // Try to JSON.stringify (will invoke safeStringify)
+    // If it's a plain object or array
+    if (typeof arg === "object") {
+      // Try a shallow copy if it's not null
+      if (arg !== null) {
+        const shallow = {};
+        for (const k in arg) {
+          if (typeof arg[k] !== "object" && typeof arg[k] !== "function") {
+            shallow[k] = arg[k];
+          }
+        }
+        // Only display shallow if not empty
+        if (Object.keys(shallow).length > 0) return shallow;
+      }
+    }
+    // Otherwise, return arg as-is (primitive)
+    return arg;
+  } catch (e) {
+    // Fallback for anything else
+    return `[Unserializable: ${arg && arg.constructor && arg.constructor.name}]`;
+  }
+}
+
 // --- Set up loglevel ---
 loglevel.setLevel(curLogLevel.toLowerCase ? curLogLevel.toLowerCase() : curLogLevel); // e.g. 'debug', 'info', etc.
 
-// Central log function
+// Central log function (hardened: never throws on cyclic/non-serializable objects)
 export function log(level, ...args) {
   const curLevelNum = LOG_LEVELS[curLogLevel] ?? LOG_LEVELS.ERROR;
   const msgLevelNum = LOG_LEVELS[level] ?? 99;
@@ -77,12 +116,13 @@ export function log(level, ...args) {
   if (logDest === "console" || logDest === "both") {
     // Map our levels to loglevel's methods
     const lvl = level.toLowerCase();
-    if (lvl === "error") loglevel.error("[log]", level, ...args);
-    else if (lvl === "warn") loglevel.warn("[log]", level, ...args);
-    else if (lvl === "info") loglevel.info("[log]", level, ...args);
-    else if (lvl === "debug") loglevel.debug("[log]", level, ...args);
-    else if (lvl === "trace") loglevel.trace("[log]", level, ...args);
-    else loglevel.log("[log]", level, ...args);
+    const safeArgs = args.map(safeLogArg);
+    if (lvl === "error") loglevel.error("[log]", level, ...safeArgs);
+    else if (lvl === "warn") loglevel.warn("[log]", level, ...safeArgs);
+    else if (lvl === "info") loglevel.info("[log]", level, ...safeArgs);
+    else if (lvl === "debug") loglevel.debug("[log]", level, ...safeArgs);
+    else if (lvl === "trace") loglevel.trace("[log]", level, ...safeArgs);
+    else loglevel.log("[log]", level, ...safeArgs);
   }
   // Server streaming
   if ((logDest === "server" || logDest === "both") && externalLogServerURL) {
@@ -90,8 +130,13 @@ export function log(level, ...args) {
   }
   // Panel sinks
   for (const sink of errorLogPanelSinks) {
-    if (typeof sink === "function") sink(level, ...args);
-    else if (sink && typeof sink.sinkLog === "function") sink.sinkLog(level, ...args);
+    try {
+      if (typeof sink === "function") sink(level, ...args);
+      else if (sink && typeof sink.sinkLog === "function") sink.sinkLog(level, ...args);
+    } catch (e) {
+      // Never allow a log sink to throw
+      loglevel.warn("[log]", "Log sink error", e);
+    }
   }
 }
 
@@ -160,3 +205,4 @@ if (typeof window !== "undefined") {
   window.setLogServerToken = setLogServerToken;
   window.LOG_LEVELS = LOG_LEVELS;
 }
+

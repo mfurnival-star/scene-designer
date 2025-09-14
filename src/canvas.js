@@ -37,7 +37,7 @@ function sanitizeSelection() {
 
 // --- Helper: Remove all Konva event handlers from shape ---
 function removeAllShapeHandlers(shape) {
-  log("TRACE", "[canvas] removeAllShapeHandlers", shape);
+  log("TRACE", "[canvas] removeAllShapeHandlers", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   if (shape && typeof shape.off === "function") {
     shape.off('mousedown.shape dragmove.shape transformstart.shape transformend.shape');
   }
@@ -45,11 +45,11 @@ function removeAllShapeHandlers(shape) {
 
 // --- Helper: Attach all required handlers to shape ---
 function attachShapeEvents(shape) {
-  log("TRACE", "[canvas] attachShapeEvents entry", shape);
+  log("TRACE", "[canvas] attachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   removeAllShapeHandlers(shape);
 
   shape.on('mousedown.shape', (e) => {
-    log("DEBUG", "[canvas] mousedown.shape event", { shape });
+    log("DEBUG", "[canvas] mousedown.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape.locked) return;
@@ -60,7 +60,7 @@ function attachShapeEvents(shape) {
   });
 
   shape.on('dragmove.shape', () => {
-    log("DEBUG", "[canvas] dragmove.shape event", { shape });
+    log("DEBUG", "[canvas] dragmove.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape.locked) {
@@ -72,7 +72,7 @@ function attachShapeEvents(shape) {
   });
 
   shape.on('transformstart.shape', () => {
-    log("DEBUG", "[canvas] transformstart.shape event", { shape });
+    log("DEBUG", "[canvas] transformstart.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape._type === "circle") {
@@ -81,7 +81,7 @@ function attachShapeEvents(shape) {
   });
 
   shape.on('transformend.shape', () => {
-    log("DEBUG", "[canvas] transformend.shape event", { shape });
+    log("DEBUG", "[canvas] transformend.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape._type === "circle") {
@@ -97,12 +97,12 @@ function attachShapeEvents(shape) {
     updateSelectionHighlight();
     AppState.konvaLayer.batchDraw();
   });
-  log("TRACE", "[canvas] attachShapeEvents exit", shape);
+  log("TRACE", "[canvas] attachShapeEvents exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
 // --- Clamp logic for shape and group drag ---
 function clampShapeToStage(shape) {
-  log("TRACE", "[canvas] clampShapeToStage entry", { shape });
+  log("TRACE", "[canvas] clampShapeToStage entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   const stage = AppState.konvaStage;
   let minX, minY, maxX, maxY;
   if (shape._type === "rect") {
@@ -119,11 +119,11 @@ function clampShapeToStage(shape) {
   if (maxY > stage.height()) dy = stage.height() - maxY;
   shape.x(shape.x() + dx);
   shape.y(shape.y() + dy);
-  log("TRACE", "[canvas] clampShapeToStage exit", { shape });
+  log("TRACE", "[canvas] clampShapeToStage exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
 function clampGroupDragDelta(dx, dy, origPositions) {
-  log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy, origPositions });
+  log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy }); // Don't log origPositions, could be circular
   const stage = AppState.konvaStage;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   origPositions.forEach(obj => {
@@ -199,9 +199,18 @@ function updateSelectionHighlight() {
 
 // --- Main Panel Build ---
 export function buildCanvasPanel(rootElement, container) {
-  log("TRACE", "[canvas] buildCanvasPanel entry", { rootElement, container });
+  // Only log serializable info for rootElement and container
+  log("TRACE", "[canvas] buildCanvasPanel entry", {
+    rootElementType: rootElement?.tagName,
+    containerTitle: container?.title,
+    containerComponentName: container?.componentName
+  });
   try {
-    log("INFO", "[canvas] buildCanvasPanel called", { rootElement, container });
+    log("INFO", "[canvas] buildCanvasPanel called", {
+      rootElementType: rootElement?.tagName,
+      containerTitle: container?.title,
+      containerComponentName: container?.componentName
+    });
 
     // UI skeleton...
     rootElement.innerHTML = `
@@ -251,5 +260,10 @@ export function buildCanvasPanel(rootElement, container) {
     alert("CanvasPanel ERROR: " + e.message);
     throw e;
   }
-  log("TRACE", "[canvas] buildCanvasPanel exit", { rootElement, container });
+  log("TRACE", "[canvas] buildCanvasPanel exit", {
+    rootElementType: rootElement?.tagName,
+    containerTitle: container?.title,
+    containerComponentName: container?.componentName
+  });
 }
+
