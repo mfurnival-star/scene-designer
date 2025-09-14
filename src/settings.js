@@ -161,10 +161,28 @@ localforage.config({
   storeName: 'settings'
 });
 
+// --- Merge in window._settings and window._externalLogServerURL on first load ---
+function mergeInitialSettingsFromWindow(stored) {
+  let winSettings = {};
+  if (typeof window !== "undefined" && window._settings && typeof window._settings === "object") {
+    winSettings = { ...window._settings };
+  }
+  // For legacy _externalLogServerURL/_externalLogServerToken
+  if (typeof window !== "undefined" && window._externalLogServerURL) {
+    winSettings.LOG_SERVER_URL = window._externalLogServerURL;
+  }
+  if (typeof window !== "undefined" && window._externalLogServerToken) {
+    winSettings.LOG_SERVER_TOKEN = window._externalLogServerToken;
+  }
+  return { ...stored, ...winSettings };
+}
+
 export async function loadSettings() {
   log("TRACE", "[settings] loadSettings entry");
   try {
-    const stored = (await localforage.getItem("sceneDesignerSettings")) || {};
+    let stored = (await localforage.getItem("sceneDesignerSettings")) || {};
+    // On first load, merge in any window-injected settings (for deploy-time config)
+    stored = mergeInitialSettingsFromWindow(stored);
     let merged = {};
     for (const reg of settingsRegistry) {
       merged[reg.key] = (reg.key in stored) ? stored[reg.key] : reg.default;
@@ -269,6 +287,16 @@ export function buildSettingsPanel(rootElement, container) {
       containerTitle: container?.title,
       containerComponentName: container?.componentName
     });
+
+    // Check if rootElement exists and is visible
+    if (!rootElement) {
+      log("ERROR", "[settings] buildSettingsPanel: rootElement is null or undefined");
+      alert("Settings panel root element not found! (No content will be shown)");
+      return;
+    }
+    if (rootElement.offsetParent === null) {
+      log("ERROR", "[settings] buildSettingsPanel: rootElement is not visible (may be hidden)");
+    }
 
     // Log Tweakpane and Pickr before usage for diagnostics
     log("DEBUG", "[settings] Tweakpane import check", { TweakpaneType: typeof Tweakpane });
