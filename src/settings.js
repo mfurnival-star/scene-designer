@@ -1,5 +1,5 @@
 /**
- * settings.js
+ * settings.js (part 1 of 2)
  * -------------------------------------------------------------------
  * Settings Panel for Scene Designer (Golden Layout)
  * - Dynamic settings UI using Tweakpane (ESM) and Pickr (ESM) for color pickers.
@@ -383,10 +383,11 @@ export function buildSettingsPanel(rootElement, container) {
 
         // Helper: render a Tweakpane input for each setting
         settingsRegistry.forEach(reg => {
+          // (Continued in part 2...)
           const key = reg.key;
           try {
             // Diagnostic: log plainness and key existence
-            log("DEBUG", "[settings] addInput plainness", {
+            log("DEBUG", "[settings] addBinding plainness", {
               key,
               value: settingsPOJO[key],
               hasKey: Object.prototype.hasOwnProperty.call(settingsPOJO, key),
@@ -394,7 +395,7 @@ export function buildSettingsPanel(rootElement, container) {
             });
 
             // Log the current key/value/type for even more granularity
-            log("DEBUG", "[settings] addInput about to call", {
+            log("DEBUG", "[settings] addBinding about to call", {
               key,
               value: settingsPOJO[key],
               type: reg.type,
@@ -403,16 +404,16 @@ export function buildSettingsPanel(rootElement, container) {
             });
 
             if (reg.type === "boolean") {
-              log("DEBUG", `[settings] Tweakpane addInput: boolean for ${key}`);
-              pane.addInput(settingsPOJO, key, {
+              log("DEBUG", `[settings] Tweakpane addBinding: boolean for ${key}`);
+              pane.addBinding(settingsPOJO, key, {
                 label: reg.label,
               }).on('change', ev => {
                 settingsPOJO[key] = ev.value;
                 setSettingAndSave(key, ev.value);
               });
             } else if (reg.type === "number") {
-              log("DEBUG", `[settings] Tweakpane addInput: number for ${key}`);
-              pane.addInput(settingsPOJO, key, {
+              log("DEBUG", `[settings] Tweakpane addBinding: number for ${key}`);
+              pane.addBinding(settingsPOJO, key, {
                 label: reg.label,
                 min: reg.min,
                 max: reg.max,
@@ -458,8 +459,8 @@ export function buildSettingsPanel(rootElement, container) {
                 log("DEBUG", `[settings] Pickr instance created for ${key}`);
               }, 1);
             } else if (reg.type === "select") {
-              log("DEBUG", `[settings] Tweakpane addInput: select for ${key}`);
-              pane.addInput(settingsPOJO, key, {
+              log("DEBUG", `[settings] Tweakpane addBinding: select for ${key}`);
+              pane.addBinding(settingsPOJO, key, {
                 label: reg.label,
                 options: reg.options.reduce((acc, cur) => { acc[cur.value] = cur.label; return acc; }, {}),
               }).on('change', ev => {
@@ -467,8 +468,8 @@ export function buildSettingsPanel(rootElement, container) {
                 setSettingAndSave(key, ev.value);
               });
             } else if (reg.type === "text") {
-              log("DEBUG", `[settings] Tweakpane addInput: text for ${key}`);
-              pane.addInput(settingsPOJO, key, {
+              log("DEBUG", `[settings] Tweakpane addBinding: text for ${key}`);
+              pane.addBinding(settingsPOJO, key, {
                 label: reg.label,
               }).on('change', ev => {
                 settingsPOJO[key] = ev.value;
@@ -527,4 +528,3 @@ export function buildSettingsPanel(rootElement, container) {
 
 // Always patch setters at module load
 export { setSettingAndSave as setSetting, setSettingsAndSave as setSettings };
-
