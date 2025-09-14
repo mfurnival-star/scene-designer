@@ -18,7 +18,7 @@ import { AppState, setSettings, setSetting, getSetting } from './state.js';
 import { log, setLogLevel, setLogDestination, setLogServerURL, setLogServerToken } from './log.js';
 import { enableConsoleInterception, disableConsoleInterception, isConsoleInterceptionEnabled } from './console-stream.js';
 import Pickr from '@simonwep/pickr';
-import { Pane as Tweakpane } from 'tweakpane';
+import { Pane } from 'tweakpane';
 import localforage from 'localforage';
 
 // --- Settings Registry ---
@@ -299,9 +299,16 @@ export function buildSettingsPanel(rootElement, container) {
     }
 
     // Log Tweakpane and Pickr before usage for diagnostics
-    log("DEBUG", "[settings] Tweakpane import check", { TweakpaneType: typeof Tweakpane });
-    log("DEBUG", "[settings] Pickr import check", { PickrType: typeof Pickr });
+    log("DEBUG", "[settings] Tweakpane import check", { PaneType: typeof Pane, Pane });
+    log("DEBUG", "[settings] Pickr import check", { PickrType: typeof Pickr, Pickr });
     log("DEBUG", "[settings] settingsRegistry length", { len: settingsRegistry.length });
+
+    if (typeof Pane !== "function") {
+      rootElement.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed: Tweakpane (Pane) not loaded as ES module.<br>
+      Check your webpack and npm dependencies: tweakpane@4.x must be imported as <code>import { Pane } from 'tweakpane'</code>.</div>`;
+      log("ERROR", "[settings] Pane (Tweakpane) is not a constructor/function! Check import.");
+      return;
+    }
 
     loadSettings()
       .then(() => {
@@ -331,7 +338,7 @@ export function buildSettingsPanel(rootElement, container) {
 
         let pane;
         try {
-          pane = new Tweakpane({
+          pane = new Pane({
             container: fieldsDiv,
             title: 'Settings',
             expanded: true
