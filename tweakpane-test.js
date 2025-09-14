@@ -1,9 +1,9 @@
 import { Pane } from 'tweakpane';
 
-const obj = { testBoolean: true, testNumber: 42, testSelect: 'a' };
-const pane = new Pane({ title: 'Tweakpane Test', expanded: true });
-pane.addInput(obj, 'testBoolean', { label: 'A Boolean' });
-pane.addInput(obj, 'testNumber', { label: 'A Number', min: 0, max: 100 });
-pane.addInput(obj, 'testSelect', { label: 'A Select', options: { a: 'Option A', b: 'Option B' } });
+const obj = { foo: true, bar: 42 };
+const container = document.createElement('div');
+document.body.appendChild(container);
 
-window._tweakpaneTestObj = obj;
+const pane = new Pane({ container });
+pane.addInput(obj, 'foo', { label: 'Foo' });
+pane.addInput(obj, 'bar', { label: 'Bar' });
