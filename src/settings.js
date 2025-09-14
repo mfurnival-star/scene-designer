@@ -482,3 +482,4 @@ export function buildSettingsPanel(rootElement, container) {
 // Always patch setters at module load
 export { setSettingAndSave as setSetting, setSettingsAndSave as setSettings };
 
+

@@ -1,0 +1,54 @@
+echo "====== npm ls tweakpane, tabulator-tables, @simonwep/pickr, golden-layout, localforage ======"
+npm ls tweakpane tabulator-tables @simonwep/pickr golden-layout localforage || echo "(npm ls failed)"
+
+echo
+echo "====== package.json ======"
+cat package.json
+
+echo
+echo "====== webpack.config.js ======"
+cat webpack.config.js 2>/dev/null || echo "(no webpack.config.js found)"
+
+echo
+echo "====== src directory structure (files & sizes) ======"
+find src -type f -exec ls -lh {} \; | sort
+
+echo
+echo "====== dist directory structure (files & sizes) ======"
+find dist -type f -exec ls -lh {} \; | sort
+
+echo
+echo "====== node_modules directory (top-level, filtered) ======"
+ls -l node_modules | grep -E 'tweakpane|pickr|tabulator|golden|localforage' || echo "(none found)"
+
+echo
+echo "====== All Tweakpane imports in src/ ======"
+grep -rn "tweakpane" src/ || echo "(none found)"
+
+echo
+echo "====== All Pickr imports in src/ ======"
+grep -rn "pickr" src/ || echo "(none found)"
+
+echo
+echo "====== All Tabulator imports in src/ ======"
+grep -rn "tabulator" src/ || echo "(none found)"
+
+echo
+echo "====== Tweakpane usage in settings.js ======"
+grep -rn "Pane" src/settings.js || echo "(no Pane usage found in settings.js)"
+
+echo
+echo "====== HTML entry points ======"
+cat index.html 2>/dev/null
+cat tweakpane-test.html 2>/dev/null
+
+echo
+echo "====== dist/bundle.js (first 20 and last 20 lines) ======"
+head -20 dist/bundle.js 2>/dev/null
+echo "..."
+tail -20 dist/bundle.js 2>/dev/null
+
+echo
+echo "====== node and npm versions ======"
+node -v
+npm -v

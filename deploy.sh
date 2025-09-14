@@ -120,4 +120,4 @@ git commit -m "Deploy at $DATESTAMP"
 git push
 
 echo "[$DATESTAMP] === Deployment complete! ==="
-echo "App should be live at: http://your-server-ip/scene-designer/"
+echo "App should be live at: http://143.47.247.184/scene-designer/"
