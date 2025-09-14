@@ -2,7 +2,7 @@
  * settings.js (part 1 of 2)
  * -------------------------------------------------------------------
  * Settings Panel for Scene Designer (Golden Layout)
- * - Dynamic settings UI using Tweakpane (ESM) and Pickr (ESM) for color pickers.
+ * - Dynamic settings UI using Tweakpane (ESM) for all controls and color pickers.
  * - All settings are stored in AppState.settings via state.js.
  * - Persists settings asynchronously using localForage (IndexedDB/localStorage fallback).
  * - All settings metadata is defined in settingsRegistry.
@@ -17,7 +17,6 @@
 import { AppState, setSettings, setSetting, getSetting } from './state.js';
 import { log, setLogLevel, setLogDestination, setLogServerURL, setLogServerToken } from './log.js';
 import { enableConsoleInterception, disableConsoleInterception, isConsoleInterceptionEnabled } from './console-stream.js';
-import Pickr from '@simonwep/pickr';
 import { Pane } from 'tweakpane';
 import localforage from 'localforage';
 
@@ -59,14 +58,14 @@ export const settingsRegistry = [
   {
     key: "defaultStrokeColor",
     label: "Default Stroke Color",
-    type: "pickr",
-    default: "#000000"
+    type: "color",
+    default: "#000000ff" // Opaque black (with alpha channel)
   },
   {
     key: "defaultFillColor",
     label: "Default Fill Color",
-    type: "pickr",
-    default: "#00000000"
+    type: "color",
+    default: "#00000000" // Transparent
   },
   {
     key: "canvasMaxWidth",
@@ -278,9 +277,7 @@ function updateConsoleInterceptionFromSettings(settings) {
 export function buildSettingsPanel(rootElement, container) {
   log("DEBUG", "[settings] buildSettingsPanel: TOP OF FUNCTION", {
     PaneType: typeof Pane,
-    Pane,
-    PickrType: typeof Pickr,
-    Pickr
+    Pane
   });
 
   log("TRACE", "[settings] buildSettingsPanel entry", {
@@ -306,9 +303,8 @@ export function buildSettingsPanel(rootElement, container) {
       log("ERROR", "[settings] buildSettingsPanel: rootElement is not visible (may be hidden)");
     }
 
-    // Log Tweakpane and Pickr before usage for diagnostics
+    // Log Tweakpane before usage for diagnostics
     log("DEBUG", "[settings] Tweakpane import check (pre-panel)", { PaneType: typeof Pane, Pane });
-    log("DEBUG", "[settings] Pickr import check (pre-panel)", { PickrType: typeof Pickr, Pickr });
     log("DEBUG", "[settings] settingsRegistry length", { len: settingsRegistry.length });
 
     if (typeof Pane !== "function") {
@@ -378,9 +374,6 @@ export function buildSettingsPanel(rootElement, container) {
           return;
         }
 
-        // Pickr color pickers
-        const pickrInstances = {};
-
         // Helper: render a Tweakpane input for each setting
         settingsRegistry.forEach(reg => {
           // (Continued in part 2...)
@@ -422,42 +415,21 @@ export function buildSettingsPanel(rootElement, container) {
                 settingsPOJO[key] = ev.value;
                 setSettingAndSave(key, ev.value);
               });
-            } else if (reg.type === "pickr") {
-              log("DEBUG", `[settings] Rendering Pickr color picker for ${key}`);
-              // For Pickr, create a div container in the tweakpane
-              const pickrDiv = document.createElement("div");
-              pickrDiv.id = "pickr-" + key;
-              pickrDiv.style.display = "inline-block";
-              pickrDiv.style.verticalAlign = "middle";
-              pickrDiv.style.marginLeft = "1em";
-              const label = document.createElement("label");
-              label.textContent = reg.label;
-              label.style.marginRight = "0.7em";
-              const row = document.createElement("div");
-              row.style.margin = "0.4em 0";
-              row.appendChild(label);
-              row.appendChild(pickrDiv);
-              fieldsDiv.appendChild(row);
-
-              setTimeout(() => {
-                if (pickrInstances[key]) {
-                  pickrInstances[key].destroyAndRemove();
-                  delete pickrInstances[key];
-                }
-                pickrInstances[key] = Pickr.create({
-                  el: '#' + pickrDiv.id,
-                  theme: 'monolith',
-                  default: settingsPOJO[key],
-                  components: { preview: true, opacity: true, hue: true, interaction: { hex: true, rgba: true, input: true } }
-                });
-                pickrInstances[key].on('change', color => {
-                  const newColor = color.toHEXA().toString();
-                  settingsPOJO[key] = newColor;
-                  setSettingAndSave(key, newColor);
-                });
-                pickrInstances[key].setColor(settingsPOJO[key]);
-                log("DEBUG", `[settings] Pickr instance created for ${key}`);
-              }, 1);
+            } else if (reg.type === "color") {
+              log("DEBUG", `[settings] Tweakpane addBinding: color for ${key}`);
+              // Use Tweakpane's built-in color view for hex/rgba strings with alpha
+              pane.addBinding(settingsPOJO, key, {
+                label: reg.label,
+                view: 'color'
+              }).on('change', ev => {
+                // Always store as 8-digit hex (with alpha)
+                let val = ev.value;
+                // Tweakpane may output as #RRGGBB or #RRGGBBAA
+                // If only #RRGGBB, append 'ff' for full opacity
+                if (/^#[0-9a-f]{6}$/i.test(val)) val = val + "ff";
+                settingsPOJO[key] = val;
+                setSettingAndSave(key, val);
+              });
             } else if (reg.type === "select") {
               log("DEBUG", `[settings] Tweakpane addBinding: select for ${key}`);
               pane.addBinding(settingsPOJO, key, {
