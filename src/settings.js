@@ -2,9 +2,9 @@
  * settings.js
  * -----------------------------------------------------------
  * Settings Panel for Scene Designer (Golden Layout)
- * - Provides a dynamic settings UI (collapsible) with Pickr color pickers.
- * - Reads/writes all settings from AppState.settings via state.js.
- * - Persists settings in localStorage.
+ * - Dynamic settings UI using Tweakpane (ESM) and Pickr (ESM) for color pickers.
+ * - All settings are stored in AppState.settings via state.js.
+ * - Persists settings asynchronously using localForage (IndexedDB/localStorage fallback).
  * - All settings metadata is defined in settingsRegistry.
  * - Logging via log.js.
  * - Updates log.js config at runtime when log level/destination/server/token is changed.
@@ -15,6 +15,8 @@
 import { AppState, setSettings, setSetting, getSetting } from './state.js';
 import { log, setLogLevel, setLogDestination, setLogServerURL, setLogServerToken } from './log.js';
 import Pickr from '@simonwep/pickr';
+import Tweakpane from 'tweakpane';
+import localforage from 'localforage';
 
 // Settings registry: extend or modify as needed for new settings.
 export const settingsRegistry = [
@@ -144,10 +146,16 @@ export const settingsRegistry = [
   }
 ];
 
-// Load settings from localStorage (initialization)
-export function loadSettings() {
+// -- Persistence using localForage (async) --
+localforage.config({
+  name: 'scene-designer',
+  storeName: 'settings'
+});
+
+// Load settings from localForage (initialization)
+export async function loadSettings() {
   try {
-    const stored = JSON.parse(localStorage.getItem("sceneDesignerSettings") || "{}");
+    const stored = (await localforage.getItem("sceneDesignerSettings")) || {};
     let merged = {};
     for (const reg of settingsRegistry) {
       merged[reg.key] = (reg.key in stored) ? stored[reg.key] : reg.default;
@@ -160,10 +168,10 @@ export function loadSettings() {
   }
 }
 
-// Save settings to localStorage and update log config if relevant
-export function saveSettings() {
+// Save settings to localForage and update log config if relevant
+export async function saveSettings() {
   try {
-    localStorage.setItem("sceneDesignerSettings", JSON.stringify(AppState.settings));
+    await localforage.setItem("sceneDesignerSettings", AppState.settings);
     updateLogConfigFromSettings(AppState.settings);
     log("DEBUG", "[settings] Settings saved", AppState.settings);
   } catch (e) {
@@ -171,17 +179,17 @@ export function saveSettings() {
   }
 }
 
-// Patch setSetting/setSettings to persist to localStorage immediately and update log config
+// Patch setSetting/setSettings to persist to localForage immediately and update log config
 const _origSetSetting = setSetting;
 const _origSetSettings = setSettings;
-function setSettingAndSave(key, value) {
+async function setSettingAndSave(key, value) {
   _origSetSetting(key, value);
-  saveSettings();
+  await saveSettings();
   log("DEBUG", "[settings] setSettingAndSave", { key, value });
 }
-function setSettingsAndSave(settingsObj) {
+async function setSettingsAndSave(settingsObj) {
   _origSetSettings(settingsObj);
-  saveSettings();
+  await saveSettings();
   log("DEBUG", "[settings] setSettingsAndSave", settingsObj);
 }
 
@@ -194,135 +202,113 @@ function updateLogConfigFromSettings(settings) {
   if ("LOG_SERVER_TOKEN" in settings) setLogServerToken(settings.LOG_SERVER_TOKEN);
 }
 
-// Build the settings panel UI
+// Build the settings panel UI using Tweakpane (with Pickr for color fields)
 export function buildSettingsPanel(rootElement, container) {
   try {
     log("INFO", "[settings] buildSettingsPanel called", { rootElement, container });
-    loadSettings();
 
-    // Panel skeleton
-    rootElement.innerHTML = `
-      <div id="settings-panel-container" style="width:100%;height:100%;background:#e7f8eb;display:flex;flex-direction:column;overflow:auto;">
-        <div style="padding:10px 8px 4px 8px;font-weight:bold;font-size:1.2em;color:#0a6e2c;">
-          Settings
-          <button id="settings-save-btn" style="float:right;font-size:0.9em;">Save</button>
+    // Ensure settings are loaded
+    loadSettings().then(() => {
+      // Clear panel
+      rootElement.innerHTML = `
+        <div id="settings-panel-container" style="width:100%;height:100%;background:#e7f8eb;display:flex;flex-direction:column;overflow:auto;">
+          <div style="padding:10px 8px 4px 8px;font-weight:bold;font-size:1.2em;color:#0a6e2c;">
+            Settings
+            <button id="settings-save-btn" style="float:right;font-size:0.9em;">Save</button>
+          </div>
+          <div id="tweakpane-fields-div" style="flex:1 1 0;overflow:auto;padding:0 8px 8px 8px;"></div>
         </div>
-        <div id="settings-fields-div" style="flex:1 1 0;overflow:auto;padding:8px;"></div>
-      </div>
-    `;
+      `;
 
-    const fieldsDiv = rootElement.querySelector("#settings-fields-div");
-    const saveBtn = rootElement.querySelector("#settings-save-btn");
+      const fieldsDiv = rootElement.querySelector("#tweakpane-fields-div");
+      const saveBtn = rootElement.querySelector("#settings-save-btn");
 
-    // Keep references to Pickr instances to destroy them on re-render
-    const pickrInstances = {};
+      // Tweakpane instance
+      fieldsDiv.innerHTML = '';
+      const pane = new Tweakpane({
+        container: fieldsDiv,
+        title: 'Settings',
+        expanded: true
+      });
 
-    // Helper to generate setting field
-    function renderSettingField(reg) {
-      const field = document.createElement("div");
-      field.className = "settings-field";
-      field.style = "margin-bottom:10px;";
+      // Pickr color pickers
+      const pickrInstances = {};
 
-      const label = document.createElement("label");
-      label.textContent = reg.label;
-      label.style = "display:inline-block;width:200px;vertical-align:middle;";
-      label.setAttribute("for", "setting-" + reg.key);
-
-      let input;
-      if (reg.type === "boolean") {
-        input = document.createElement("input");
-        input.type = "checkbox";
-        input.checked = !!getSetting(reg.key);
-        input.id = "setting-" + reg.key;
-        input.addEventListener("change", () => {
-          setSettingAndSave(reg.key, !!input.checked);
-        });
-        field.appendChild(label);
-        field.appendChild(input);
-      } else if (reg.type === "number") {
-        input = document.createElement("input");
-        input.type = "number";
-        input.value = getSetting(reg.key);
-        input.min = reg.min;
-        input.max = reg.max;
-        input.step = reg.step || 1;
-        input.id = "setting-" + reg.key;
-        input.style = "width:80px;margin-left:8px;";
-        input.addEventListener("input", () => {
-          let val = Number(input.value);
-          if (isNaN(val)) val = reg.default;
-          setSettingAndSave(reg.key, val);
-        });
-        field.appendChild(label);
-        field.appendChild(input);
-      } else if (reg.type === "pickr") {
-        // Color picker using Pickr (ES module import)
-        const pickrDiv = document.createElement("div");
-        pickrDiv.className = "pickr";
-        pickrDiv.id = "setting-" + reg.key + "-pickr";
-        pickrDiv.style.display = "inline-block";
-        pickrDiv.style.marginLeft = "0.5em";
-        field.appendChild(label);
-        field.appendChild(pickrDiv);
-        setTimeout(() => {
-          if (pickrInstances[reg.key]) {
-            pickrInstances[reg.key].destroyAndRemove();
-            delete pickrInstances[reg.key];
-          }
-          pickrInstances[reg.key] = Pickr.create({
-            el: '#' + pickrDiv.id,
-            theme: 'monolith',
-            default: getSetting(reg.key),
-            components: { preview: true, opacity: true, hue: true, interaction: { hex: true, rgba: true, input: true } }
+      // Helper: render a Tweakpane input for each setting
+      settingsRegistry.forEach(reg => {
+        const key = reg.key;
+        if (reg.type === "boolean") {
+          pane.addInput(AppState.settings, key, {
+            label: reg.label,
+          }).on('change', ev => {
+            setSettingAndSave(key, ev.value);
           });
-          pickrInstances[reg.key].on('change', color => {
-            setSettingAndSave(reg.key, color.toHEXA().toString());
+        } else if (reg.type === "number") {
+          pane.addInput(AppState.settings, key, {
+            label: reg.label,
+            min: reg.min,
+            max: reg.max,
+            step: reg.step
+          }).on('change', ev => {
+            setSettingAndSave(key, ev.value);
           });
-          pickrInstances[reg.key].setColor(getSetting(reg.key));
-        }, 1);
-      } else if (reg.type === "select") {
-        input = document.createElement("select");
-        input.id = "setting-" + reg.key;
-        for (const opt of reg.options) {
-          const o = document.createElement("option");
-          o.value = opt.value;
-          o.textContent = opt.label;
-          input.appendChild(o);
+        } else if (reg.type === "pickr") {
+          // For Pickr, create a div container in the tweakpane
+          const pickrDiv = document.createElement("div");
+          pickrDiv.id = "pickr-" + key;
+          pickrDiv.style.display = "inline-block";
+          pickrDiv.style.verticalAlign = "middle";
+          pickrDiv.style.marginLeft = "1em";
+          const label = document.createElement("label");
+          label.textContent = reg.label;
+          label.style.marginRight = "0.7em";
+          const row = document.createElement("div");
+          row.style.margin = "0.4em 0";
+          row.appendChild(label);
+          row.appendChild(pickrDiv);
+          fieldsDiv.appendChild(row);
+
+          setTimeout(() => {
+            if (pickrInstances[key]) {
+              pickrInstances[key].destroyAndRemove();
+              delete pickrInstances[key];
+            }
+            pickrInstances[key] = Pickr.create({
+              el: '#' + pickrDiv.id,
+              theme: 'monolith',
+              default: AppState.settings[key],
+              components: { preview: true, opacity: true, hue: true, interaction: { hex: true, rgba: true, input: true } }
+            });
+            pickrInstances[key].on('change', color => {
+              setSettingAndSave(key, color.toHEXA().toString());
+            });
+            pickrInstances[key].setColor(AppState.settings[key]);
+          }, 1);
+        } else if (reg.type === "select") {
+          pane.addInput(AppState.settings, key, {
+            label: reg.label,
+            options: reg.options.reduce((acc, cur) => { acc[cur.value] = cur.label; return acc; }, {}),
+          }).on('change', ev => {
+            setSettingAndSave(key, ev.value);
+          });
+        } else if (reg.type === "text") {
+          pane.addInput(AppState.settings, key, {
+            label: reg.label,
+          }).on('change', ev => {
+            setSettingAndSave(key, ev.value);
+          });
         }
-        input.value = getSetting(reg.key);
-        input.addEventListener("change", () => {
-          setSettingAndSave(reg.key, input.value);
-        });
-        field.appendChild(label);
-        field.appendChild(input);
-      } else if (reg.type === "text") {
-        input = document.createElement("input");
-        input.type = "text";
-        input.value = getSetting(reg.key);
-        input.id = "setting-" + reg.key;
-        input.style = "width:200px;margin-left:8px;";
-        input.addEventListener("input", () => {
-          setSettingAndSave(reg.key, input.value);
-        });
-        field.appendChild(label);
-        field.appendChild(input);
-      }
-      fieldsDiv.appendChild(field);
-    }
+      });
 
-    // Render all settings fields
-    for (const reg of settingsRegistry) {
-      renderSettingField(reg);
-    }
+      // Save button
+      saveBtn.onclick = async () => {
+        await saveSettings();
+        log("INFO", "[settings] Settings saved by user");
+        alert("Settings saved!");
+      };
 
-    // Save button
-    saveBtn.onclick = () => {
-      saveSettings();
-      log("INFO", "[settings] Settings saved by user");
-      alert("Settings saved!");
-    };
-
-    log("INFO", "[settings] Settings panel rendered");
+      log("INFO", "[settings] Settings panel rendered (Tweakpane)");
+    });
   } catch (e) {
     log("ERROR", "[settings] buildSettingsPanel ERROR", e);
     alert("SettingsPanel ERROR: " + e.message);
@@ -331,6 +317,6 @@ export function buildSettingsPanel(rootElement, container) {
 }
 
 // Always patch setters at module load
-// (This ensures any other code using setSetting/setSettings gets persistent storage)
 export { setSettingAndSave as setSetting, setSettingsAndSave as setSettings };
+
 

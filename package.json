@@ -11,7 +11,10 @@
     "@simonwep/pickr": "^1.9.1",
     "golden-layout": "^2.6.0",
     "konva": "^10.0.2",
-    "loglevel": "^1.9.2"
+    "localforage": "^1.10.0",
+    "loglevel": "^1.9.2",
+    "tabulator-tables": "^6.3.1",
+    "tweakpane": "^4.0.5"
   },
   "devDependencies": {
     "css-loader": "^7.1.2",

@@ -2,19 +2,40 @@
  * sidebar.js
  * -----------------------------------------------------------
  * Shape Table/List Panel for Scene Designer (Golden Layout)
- * - Displays all shapes in a concise table.
+ * - Displays all shapes in a concise, interactive table using Tabulator (ESM).
  * - Lets user select a shape by row, see/edit label, see lock/color.
  * - Interacts with AppState for all data and selection.
  * - No globals; all state via AppState.
  * - Logging via log.js; updates via state.js.
  * - Logging policy: Use INFO for user actions, DEBUG for table updates, ERROR for UI problems.
+ * - ES module only: imports Tabulator from npm, no globals, no window.*.
  * -----------------------------------------------------------
  */
 
 import { AppState, setShapes, setSelectedShapes } from './state.js';
 import { log } from './log.js';
+import Tabulator from 'tabulator-tables';
 
-// Build the sidebar shape table panel
+// Internal reference to Tabulator instance
+let tabulatorInstance = null;
+
+// Helper: Format color swatch for Tabulator
+function colorSwatchCell(color) {
+  const c = color && typeof color === "function" ? color() : color;
+  return `<div style="background:${c || 'transparent'};border:1px solid #bbb;width:20px;height:20px;display:inline-block;border-radius:4px;"></div>`;
+}
+
+// Helper: Get shape attributes for table
+function getShapeAttrs(s) {
+  try {
+    if (!s || typeof s.getAttrs !== "function") return {};
+    return s.getAttrs();
+  } catch {
+    return {};
+  }
+}
+
+// Build the sidebar shape table panel using Tabulator
 export function buildSidebarPanel(rootElement, container) {
   try {
     log("INFO", "[sidebar] buildSidebarPanel called", { rootElement, container });
@@ -34,75 +55,102 @@ export function buildSidebarPanel(rootElement, container) {
     rootElement.querySelector("#sidebar-select-all").onclick = () => {
       setSelectedShapes(AppState.shapes.slice());
       log("INFO", "[sidebar] Select All clicked");
-      renderTable();
+      if (tabulatorInstance) tabulatorInstance.replaceData(makeTableData());
     };
 
-    // Render table of shapes
-    function renderTable() {
-      log("DEBUG", "[sidebar] renderTable called");
+    // Helper: Build data array for Tabulator
+    function makeTableData() {
       const shapes = AppState.shapes || [];
-      const selArr = AppState.selectedShapes || [];
-      const tableDiv = rootElement.querySelector("#sidebar-table-div");
-      if (!tableDiv) return;
-      let html = `<table class="sidebar-shape-table" style="width:100%;border-collapse:collapse;font-size:1em;">
-        <thead><tr>
-          <th style="width:2em;">#</th>
-          <th>Label</th>
-          <th>Type</th>
-          <th style="width:2em;">L</th>
-          <th style="width:2em;">F</th>
-          <th style="width:2em;">S</th>
-          <th style="width:3em;">X</th>
-          <th style="width:3em;">Y</th>
-          <th style="width:3em;">W/R</th>
-          <th style="width:3em;">H</th>
-        </tr></thead><tbody>`;
-
-      shapes.forEach((s, i) => {
-        const t = s._type || '';
-        const lbl = s._label || '';
+      return shapes.map((s, i) => {
+        const attrs = getShapeAttrs(s);
         let x = 0, y = 0, w = 0, h = 0;
-        try {
-          const attrs = s.getAttrs ? s.getAttrs() : {};
-          if (t === 'rect') { x = attrs.x; y = attrs.y; w = attrs.width; h = attrs.height; }
-          else if (t === 'circle') { x = attrs.x; y = attrs.y; w = attrs.radius; h = attrs.radius; }
-          else if (t === 'point') { x = attrs.x; y = attrs.y; w = "--"; h = "--"; }
-        } catch { /* fallback to 0 */ }
-        const isSelected = selArr.includes(s);
-        html += `<tr data-idx="${i}"${isSelected ? ' style="background:#d0e7ff;"' : ''}>
-          <td>${i + 1}</td>
-          <td><span class="sidebar-label" style="cursor:pointer;color:#2176ff;text-decoration:underline;">${lbl}</span></td>
-          <td>${t}</td>
-          <td style="text-align:center;">${s.locked ? '🔒' : ''}</td>
-          <td style="background:${s.fill ? (s.fill() || 'transparent') : 'transparent'};border:1px solid #ccc;"></td>
-          <td style="background:${s.stroke ? s.stroke() : 'transparent'};border:1px solid #ccc;"></td>
-          <td>${Math.round(x)}</td>
-          <td>${Math.round(y)}</td>
-          <td>${w}</td>
-          <td>${h}</td>
-        </tr>`;
-      });
-      html += "</tbody></table>";
-      tableDiv.innerHTML = html;
-
-      // Label click selects shape
-      tableDiv.querySelectorAll(".sidebar-label").forEach((el, idx) => {
-        el.onclick = function (e) {
-          setSelectedShapes([AppState.shapes[idx]]);
-          log("INFO", "[sidebar] Shape row clicked", { idx });
-          renderTable();
+        if (s._type === 'rect') { x = attrs.x; y = attrs.y; w = attrs.width; h = attrs.height; }
+        else if (s._type === 'circle') { x = attrs.x; y = attrs.y; w = attrs.radius; h = attrs.radius; }
+        else if (s._type === 'point') { x = attrs.x; y = attrs.y; w = "--"; h = "--"; }
+        return {
+          idx: i + 1,
+          label: s._label || '',
+          type: s._type || '',
+          locked: s.locked ? '🔒' : '',
+          fillColor: s.fill ? s.fill() : '',
+          strokeColor: s.stroke ? s.stroke() : '',
+          x: Math.round(x), y: Math.round(y), w, h,
+          _shape: s,
+          selected: AppState.selectedShapes.includes(s)
         };
       });
     }
 
-    // Initial render
-    renderTable();
+    // Tabulator columns
+    const columns = [
+      { title: "#", field: "idx", width: 45, hozAlign: "center" },
+      { title: "Label", field: "label", editor: "input", widthGrow: 2 },
+      { title: "Type", field: "type", width: 70 },
+      { title: "L", field: "locked", width: 36, hozAlign: "center" },
+      {
+        title: "F", field: "fillColor", width: 36, hozAlign: "center",
+        formatter: cell => colorSwatchCell(cell.getValue())
+      },
+      {
+        title: "S", field: "strokeColor", width: 36, hozAlign: "center",
+        formatter: cell => colorSwatchCell(cell.getValue())
+      },
+      { title: "X", field: "x", width: 50 },
+      { title: "Y", field: "y", width: 50 },
+      { title: "W/R", field: "w", width: 50 },
+      { title: "H", field: "h", width: 50 }
+    ];
 
-    // Subscribe to AppState
+    // Tabulator table
+    const tableDiv = rootElement.querySelector("#sidebar-table-div");
+    tableDiv.innerHTML = ""; // Clear if re-rendered
+
+    // Destroy old Tabulator instance if present
+    if (tabulatorInstance && typeof tabulatorInstance.destroy === "function") {
+      tabulatorInstance.destroy();
+      tabulatorInstance = null;
+    }
+
+    tabulatorInstance = new Tabulator(tableDiv, {
+      data: makeTableData(),
+      layout: "fitColumns",
+      columns: columns,
+      height: "100%",
+      selectable: true,
+      rowFormatter: function (row) {
+        // Highlight selected rows
+        const data = row.getData();
+        if (data.selected) {
+          row.getElement().style.background = "#d0e7ff";
+        } else {
+          row.getElement().style.background = "";
+        }
+      },
+      rowClick: function (e, row) {
+        const s = row.getData()._shape;
+        setSelectedShapes([s]);
+        log("INFO", "[sidebar] Shape row clicked", { idx: row.getData().idx - 1 });
+        tabulatorInstance.replaceData(makeTableData());
+      },
+      cellEdited: function (cell) {
+        // Inline label editing
+        const field = cell.getField();
+        const s = cell.getData()._shape;
+        if (field === "label" && s) {
+          s._label = cell.getValue();
+          log("DEBUG", "[sidebar] Label edited", { newLabel: cell.getValue(), shape: s });
+        }
+      }
+    });
+
+    // Subscribe to AppState to update table on shapes or selection change
     if (!rootElement._appStateUnsub) {
-      rootElement._appStateUnsub = AppState._subscribers = AppState._subscribers || [];
-      const update = () => renderTable();
+      const update = () => {
+        if (tabulatorInstance) tabulatorInstance.replaceData(makeTableData());
+      };
+      AppState._subscribers = AppState._subscribers || [];
       AppState._subscribers.push(update);
+      rootElement._appStateUnsub = update;
       // Clean up when panel is destroyed
       if (container && typeof container.on === "function") {
         container.on("destroy", () => {
@@ -112,11 +160,10 @@ export function buildSidebarPanel(rootElement, container) {
       }
     }
 
-    log("INFO", "[sidebar] Sidebar panel fully initialized");
+    log("INFO", "[sidebar] Sidebar panel fully initialized (Tabulator)");
   } catch (e) {
     log("ERROR", "[sidebar] buildSidebarPanel ERROR", e);
     alert("SidebarPanel ERROR: " + e.message);
     throw e;
   }
 }
-

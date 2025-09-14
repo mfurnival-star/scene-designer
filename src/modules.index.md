@@ -25,10 +25,10 @@ main.js
   Shape selection logic and mutators.
 
 - **sidebar.js**  
-  Shape table/list panel (Golden Layout).
+  Shape table/list panel (Golden Layout, Tabulator implementation as of latest revision).
 
 - **settings.js**  
-  Settings registry, persistence, and UI panel (GL).
+  Settings registry, persistence (via localForage), and UI panel (GL, Tweakpane+Pickr).
 
 - **layout.js**  
   Golden Layout bootstrapping and panel registration.
