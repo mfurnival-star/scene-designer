@@ -338,6 +338,9 @@ export function buildSettingsPanel(rootElement, container) {
           isPlain: Object.getPrototypeOf(settingsPOJO) === Object.prototype
         });
 
+        // Extra: log the settings POJO keys and values for future diagnostics
+        log("DEBUG", "[settings] settingsPOJO keys/values", Object.entries(settingsPOJO));
+
         // Clear panel
         rootElement.innerHTML = `
           <div id="settings-panel-container" style="width:100%;height:100%;background:#e7f8eb;display:flex;flex-direction:column;overflow:auto;">
@@ -388,6 +391,15 @@ export function buildSettingsPanel(rootElement, container) {
               value: settingsPOJO[key],
               hasKey: Object.prototype.hasOwnProperty.call(settingsPOJO, key),
               isPlain: Object.getPrototypeOf(settingsPOJO) === Object.prototype
+            });
+
+            // Log the current key/value/type for even more granularity
+            log("DEBUG", "[settings] addInput about to call", {
+              key,
+              value: settingsPOJO[key],
+              type: reg.type,
+              tweakpaneInstance: typeof pane,
+              tweakpanePOJO: settingsPOJO
             });
 
             if (reg.type === "boolean") {
@@ -464,7 +476,25 @@ export function buildSettingsPanel(rootElement, container) {
               });
             }
           } catch (e) {
-            log("ERROR", "[settings] Error rendering registry field", { key, reg, error: e });
+            log("ERROR", "[settings] Error rendering registry field", {
+              key,
+              reg,
+              error: e,
+              errorType: typeof e,
+              message: e?.message,
+              stack: e?.stack,
+              tweakpanePOJO: settingsPOJO,
+              tweakpanePane: pane,
+              tweakpanePaneKeys: Object.keys(pane || {}),
+              tweakpanePaneProto: pane && Object.getPrototypeOf(pane),
+              tweakpanePOJOProto: Object.getPrototypeOf(settingsPOJO),
+              tweakpanePOJOStr: JSON.stringify(settingsPOJO, null, 2)
+            });
+            alert(
+              "Tweakpane error for setting: " + key + "\n\n" +
+              (e && e.message ? e.message : e) +
+              (e && e.stack ? "\n\n" + e.stack : "")
+            );
           }
         });
 
@@ -489,7 +519,7 @@ export function buildSettingsPanel(rootElement, container) {
       });
   } catch (e) {
     log("ERROR", "[settings] buildSettingsPanel ERROR", e);
-    alert("SettingsPanel ERROR: " + e.message);
+    alert("SettingsPanel ERROR: " + e.message + (e && e.stack ? "\n\n" + e.stack : ""));
     log("TRACE", "[settings] buildSettingsPanel exit (error)");
     throw e;
   }
