@@ -205,13 +205,25 @@ async function setSettingsAndSave(settingsObj) {
   log("TRACE", "[settings] setSettingsAndSave exit");
 }
 
+// Map "OFF" to "silent" for loglevel (see log.js)
+function mapLogLevelForLoglevel(level) {
+  if (!level) return "error";
+  if (level === "OFF" || level === "off") return "silent";
+  return level;
+}
+
 function updateLogConfigFromSettings(settings) {
   log("TRACE", "[settings] updateLogConfigFromSettings entry", settings);
   if (!settings) {
     log("TRACE", "[settings] updateLogConfigFromSettings exit (no settings)");
     return;
   }
-  if ("DEBUG_LOG_LEVEL" in settings) setLogLevel(settings.DEBUG_LOG_LEVEL);
+  // Map OFF->silent for loglevel package
+  if ("DEBUG_LOG_LEVEL" in settings) {
+    let level = settings.DEBUG_LOG_LEVEL;
+    if (level === "OFF" || level === "off") level = "silent";
+    setLogLevel(level);
+  }
   if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
   if ("LOG_SERVER_URL" in settings) setLogServerURL(settings.LOG_SERVER_URL);
   if ("LOG_SERVER_TOKEN" in settings) setLogServerToken(settings.LOG_SERVER_TOKEN);

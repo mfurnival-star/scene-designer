@@ -18,6 +18,13 @@ export const LOG_LEVELS = {
   OFF: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
 };
 
+// Map "OFF" (our config/UI) to "silent" (loglevel's string)
+function mapLogLevel(level) {
+  if (!level) return "error";
+  if (level === "OFF" || level === "off") return "silent";
+  return level.toLowerCase ? level.toLowerCase() : level;
+}
+
 let curLogLevel = typeof window !== "undefined" && window._settings?.DEBUG_LOG_LEVEL
   ? window._settings.DEBUG_LOG_LEVEL
   : 'ERROR';
@@ -124,7 +131,7 @@ function safeLogArg(arg) {
 }
 
 // --- Set up loglevel ---
-loglevel.setLevel(curLogLevel.toLowerCase ? curLogLevel.toLowerCase() : curLogLevel); // e.g. 'debug', 'info', etc.
+loglevel.setLevel(mapLogLevel(curLogLevel)); // e.g. 'debug', 'info', etc.
 
 /**
  * Central log function (hardened: never throws on cyclic/non-serializable objects)
@@ -202,7 +209,8 @@ export function setLogLevel(level) {
   loglevel.trace("[log] setLogLevel entry", { level });
   if (level && level in LOG_LEVELS) {
     curLogLevel = level;
-    loglevel.setLevel(level.toLowerCase ? level.toLowerCase() : level);
+    const mappedLevel = mapLogLevel(level);
+    loglevel.setLevel(mappedLevel);
   }
   loglevel.trace("[log] setLogLevel exit", { curLogLevel });
 }
