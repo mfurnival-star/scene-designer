@@ -52,7 +52,6 @@ export function buildSidebarPanel(rootElement, container) {
       return;
     }
 
-    // Helper: Convert shape to row object
     function shapeToRow(shape, idx) {
       let { _label, _type, locked } = shape;
       let x = 0, y = 0, w = "", h = "";
@@ -84,12 +83,8 @@ export function buildSidebarPanel(rootElement, container) {
       };
     }
 
-    // Initial data
-    let tableData = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
-
-    // Tabulator setup
     let tabulator = new Tabulator(tableDiv, {
-      data: tableData,
+      data: [],
       layout: "fitColumns",
       movableColumns: false,
       height: "100%",
@@ -112,32 +107,36 @@ export function buildSidebarPanel(rootElement, container) {
       }
     });
 
-    // Subscribe to AppState for live updates
+    // Robust updateTable, only after table is built
     const updateTable = () => {
       log("TRACE", "[sidebar] AppState update triggered (Tabulator)");
       const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
-      tabulator.replaceData(data);
-      // Reselect row if one is selected in AppState
-      if (AppState.selectedShape) {
-        const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
-        if (selIdx >= 0) tabulator.selectRow(selIdx);
-      } else {
-        tabulator.deselectRow();
+      if (tabulator) {
+        tabulator.replaceData(data);
+        if (AppState.selectedShape) {
+          const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
+          if (selIdx >= 0) tabulator.selectRow(selIdx);
+        } else if (typeof tabulator.deselectRow === "function") {
+          // Robustly clear all selection (Tabulator v5+)
+          try { tabulator.deselectRow(true); } catch(e) {}
+        }
       }
     };
-    const unsub = subscribe(updateTable);
 
-    // Clean up on destroy
-    if (container && typeof container.on === "function") {
-      container.on("destroy", () => {
-        log("TRACE", "[sidebar] panel destroy event (Tabulator)");
-        unsub && unsub();
-        tabulator.destroy();
-      });
-    }
-
-    // Initial update
-    updateTable();
+    // Only update after table is fully built
+    tabulator.on("tableBuilt", () => {
+      updateTable();
+      // Subscribe after built to avoid early calls
+      var unsub = subscribe(updateTable);
+      // Clean up on destroy
+      if (container && typeof container.on === "function") {
+        container.on("destroy", () => {
+          log("TRACE", "[sidebar] panel destroy event (Tabulator)");
+          unsub && unsub();
+          tabulator.destroy();
+        });
+      }
+    });
 
     log("INFO", "[sidebar] Sidebar panel fully initialized (Tabulator shape table)");
   } catch (e) {
@@ -153,3 +152,4 @@ export function buildSidebarPanel(rootElement, container) {
     containerComponentName: container?.componentName
   });
 }
+
