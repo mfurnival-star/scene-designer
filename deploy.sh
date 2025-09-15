@@ -1,8 +1,11 @@
 #!/bin/bash
-# Scene Designer Deploy Script (robust deployment)
+# Scene Designer Deploy Script (robust: prod or dev)
 # ---------------------------------------------------------------------------
-# - Ensures the correct, injected dist/index.html is deployed.
-# - Verifies final deployed file matches what was generated.
+# Supports both prod deployment (full build + deploy) and dev server (npm run dev).
+# Usage:
+#   ./deploy.sh [prod|dev] [env overrides...]
+#   e.g. LOG_LEVEL=TRACE ./deploy.sh dev
+#        ./deploy.sh prod
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -13,51 +16,75 @@ DEPLOY_DIR="/var/www/scene-designer"
 INDEX_HTML="$BUILD_DIR/index.html"
 DATESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
-# ---- CENTRALIZED DEFAULTS ----
 DEFAULT_LOG_LEVEL="ERROR"
 DEFAULT_LOG_DEST="console"
 DEFAULT_LOG_SERVER_URL="http://143.47.247.184/logstream"
 DEFAULT_LOG_SERVER_TOKEN=""
 DEFAULT_INJECT_ERUDA=0
 
-# ---- Help/Usage ----
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  cat <<EOF
-Usage: [VAR=VALUE ...] ./deploy.sh
+MODE="${1:-prod}"
 
-Build, inject log config/Eruda, and deploy Scene Designer.
+if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then
+  cat <<EOF
+Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
+
+  prod     Build and deploy to nginx (default)
+  dev      Start npm dev server with proper log/debug config
 
 Environment variables (all optional, defaults shown):
 
-  LOG_LEVEL        Log level (ERROR, WARN, INFO, DEBUG, TRACE)
-                   [default: $DEFAULT_LOG_LEVEL]
-  LOG_DEST         Log destination (console, server, both)
-                   [default: $DEFAULT_LOG_DEST]
-  LOG_SERVER_URL   Log server URL (used if LOG_DEST is server/both)
-                   [default: $DEFAULT_LOG_SERVER_URL]
-  LOG_SERVER_TOKEN Bearer token for server (if needed)
-                   [default: $DEFAULT_LOG_SERVER_TOKEN]
-  INJECT_ERUDA     1 to add Eruda debug console to HTML, 0 otherwise
-                   [default: $DEFAULT_INJECT_ERUDA]
+  LOG_LEVEL        Log level (SILENT, ERROR, WARN, INFO, DEBUG, TRACE)   [$DEFAULT_LOG_LEVEL]
+  LOG_DEST         Log destination (console, server, both)               [$DEFAULT_LOG_DEST]
+  LOG_SERVER_URL   Log server URL                                        [$DEFAULT_LOG_SERVER_URL]
+  LOG_SERVER_TOKEN Bearer token for server (if needed)                   [$DEFAULT_LOG_SERVER_TOKEN]
+  INJECT_ERUDA     1 to add Eruda debug console, 0 otherwise             [$DEFAULT_INJECT_ERUDA]
 
 Examples:
-  LOG_LEVEL=TRACE LOG_DEST=both INJECT_ERUDA=1 ./deploy.sh
-  LOG_SERVER_URL="https://myhost/log" ./deploy.sh
-  ./deploy.sh --help
-
+  LOG_LEVEL=TRACE ./deploy.sh dev
+  LOG_LEVEL=SILENT ./deploy.sh prod
+  LOG_LEVEL=ERROR ./deploy.sh prod
 EOF
   exit 0
 fi
 
-# ---- Assign from env or use defaults ----
 LOG_LEVEL="${LOG_LEVEL:-$DEFAULT_LOG_LEVEL}"
 LOG_DEST="${LOG_DEST:-$DEFAULT_LOG_DEST}"
 LOG_SERVER_URL="${LOG_SERVER_URL:-$DEFAULT_LOG_SERVER_URL}"
 LOG_SERVER_TOKEN="${LOG_SERVER_TOKEN:-$DEFAULT_LOG_SERVER_TOKEN}"
 INJECT_ERUDA="${INJECT_ERUDA:-$DEFAULT_INJECT_ERUDA}"
 
+# Validate LOG_LEVEL (must be one of the allowed, case-insensitive)
+case "${LOG_LEVEL^^}" in
+  SILENT|ERROR|WARN|INFO|DEBUG|TRACE) ;;
+  *)
+    echo "ERROR: LOG_LEVEL must be one of: SILENT, ERROR, WARN, INFO, DEBUG, TRACE"
+    exit 1
+    ;;
+esac
+
 cd "$PROJECT_DIR"
 
+if [[ "$MODE" == "dev" ]]; then
+  echo "[$DATESTAMP] === Starting DEV SERVER (npm run dev) with DEBUG_LOG_LEVEL=$LOG_LEVEL ==="
+  export DEBUG_LOG_LEVEL="$LOG_LEVEL"
+  export LOG_OUTPUT_DEST="$LOG_DEST"
+  export LOG_SERVER_URL="$LOG_SERVER_URL"
+  export LOG_SERVER_TOKEN="$LOG_SERVER_TOKEN"
+  export INJECT_ERUDA="$INJECT_ERUDA"
+  # Optionally inject these into a .env file for Vite/webpack
+  cat > .env.local <<EOF
+VITE_DEBUG_LOG_LEVEL=$LOG_LEVEL
+VITE_LOG_OUTPUT_DEST=$LOG_DEST
+VITE_LOG_SERVER_URL=$LOG_SERVER_URL
+VITE_LOG_SERVER_TOKEN=$LOG_SERVER_TOKEN
+VITE_INJECT_ERUDA=$INJECT_ERUDA
+EOF
+  echo "  (env written to .env.local)"
+  npm run dev
+  exit 0
+fi
+
+# Otherwise, normal prod build + deploy
 echo "[$DATESTAMP] === Building project ==="
 npm run build
 
@@ -68,7 +95,6 @@ if [ ! -f "$INDEX_HTML" ]; then
 fi
 
 echo "[$DATESTAMP] === Injecting log config into $INDEX_HTML ==="
-# Remove any previous injected settings block
 sed -i '/<!-- BEGIN LOG SETTINGS -->/,/<!-- END LOG SETTINGS -->/d' "$INDEX_HTML"
 
 awk -v log_level="$LOG_LEVEL" \
@@ -100,11 +126,7 @@ echo "[$DATESTAMP] === Verifying injected log config in $INDEX_HTML ==="
 grep 'DEBUG_LOG_LEVEL\|LOG_OUTPUT_DEST\|externalLogServerURL\|externalLogServerToken' "$INDEX_HTML" || true
 
 echo "[$DATESTAMP] === Deploying to $DEPLOY_DIR ==="
-
-# --- Force remove the old deployed index.html to avoid stale file ---
 sudo rm -f "$DEPLOY_DIR/index.html"
-
-# --- Now rsync the new dist/ (including injected index.html) ---
 sudo mkdir -p "$DEPLOY_DIR"
 sudo rsync -av --delete "$BUILD_DIR/" "$DEPLOY_DIR/"
 
@@ -121,3 +143,4 @@ git push
 
 echo "[$DATESTAMP] === Deployment complete! ==="
 echo "App should be live at: http://143.47.247.184/scene-designer/"
+

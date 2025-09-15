@@ -80,12 +80,11 @@ export function configureLogging({ level, dest, serverURL, token }) {
 
 /**
  * Normalize log level string to UPPERCASE and only allow valid levels.
- * Only "SILENT" disables logging. "OFF" is mapped to "SILENT".
+ * Only "SILENT" disables logging. "OFF" is not recognized at all.
  */
 function normalizeLevel(level) {
   if (!level) return "INFO";
   const l = String(level).toUpperCase();
-  if (l === "OFF") return "SILENT";
   if (l in LOG_LEVELS) return l;
   // Default fallback
   return "INFO";

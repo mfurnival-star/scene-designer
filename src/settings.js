@@ -12,6 +12,7 @@
  * - Logging policy: Use INFO for panel/user actions, DEBUG for settings changes, ERROR for problems.
  * - TRACE-level entry/exit logging for all functions.
  * - Log level normalization and validation is enforced on save/load.
+ * - OFF is no longer recognized or mapped; only SILENT disables logs.
  * -------------------------------------------------------------------
  */
 
@@ -179,10 +180,9 @@ function mergeInitialSettingsFromWindow(stored) {
   if (typeof window !== "undefined" && window._externalLogServerToken) {
     winSettings.LOG_SERVER_TOKEN = window._externalLogServerToken;
   }
-  // Normalize log level to UPPERCASE and map "OFF" to "SILENT"
+  // Normalize log level to UPPERCASE; OFF is not recognized at all
   if ("DEBUG_LOG_LEVEL" in winSettings) {
     let v = String(winSettings.DEBUG_LOG_LEVEL).toUpperCase();
-    if (v === "OFF") v = "SILENT";
     if (!LOG_LEVEL_VALUES.includes(v)) v = "SILENT";
     winSettings.DEBUG_LOG_LEVEL = v;
   }
@@ -198,7 +198,6 @@ function mergeInitialSettingsFromWindow(stored) {
 function normalizeLogLevel(val) {
   if (typeof val !== "string") return "SILENT";
   let v = val.toUpperCase();
-  if (v === "OFF") v = "SILENT";
   if (!LOG_LEVEL_VALUES.includes(v)) v = "SILENT";
   return v;
 }
@@ -212,7 +211,7 @@ export async function loadSettings() {
     let merged = {};
     for (const reg of settingsRegistry) {
       let val = (reg.key in stored) ? stored[reg.key] : reg.default;
-      // Always normalize log level to UPPERCASE and map "OFF" to "SILENT"
+      // Always normalize log level to UPPERCASE; OFF is not mapped
       if (reg.key === "DEBUG_LOG_LEVEL" && typeof val === "string") {
         val = normalizeLogLevel(val);
       }
