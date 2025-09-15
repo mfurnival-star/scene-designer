@@ -26,7 +26,7 @@ function usage() {
 Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
 
   prod     Build and deploy to nginx (default)
-  dev      Just git add/commit/push, then start dev server (npm run dev)
+  dev      Just git add/commit/push, inject Eruda and log level into index.html, then start dev server (npm run dev)
 
 Environment variables:
 
@@ -141,5 +141,10 @@ if [[ "$MODE" == "prod" ]]; then
   inject_force_log_level
   deploy_to_prod
 else
+  # DEV MODE: ensure dist/index.html is available and inject scripts
+  prepare_index_html
+  inject_eruda
+  inject_force_log_level
   start_dev_server
 fi
+
