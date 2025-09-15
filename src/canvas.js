@@ -8,12 +8,14 @@
  * - All state and selection is sanitized after every mutation to avoid stale references.
  * - No global/window code; all state flows via AppState.
  * - Logging: Uses log.js; logs at INFO for user/major events, DEBUG for internal state changes, TRACE for entry/exit of all functions.
+ * - Transformer logic for shape anchors and resizing is now delegated to transformer.js.
  * -----------------------------------------------------------
  */
 
 import Konva from 'konva';
 import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes, subscribe } from './state.js';
 import { log } from './log.js';
+import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
 
 // --- Internal State ---
 let konvaInitialized = false;
@@ -128,32 +130,7 @@ function attachShapeEvents(shape) {
     updateSelectionHighlight();
   });
 
-  shape.on('transformstart.shape', () => {
-    log("DEBUG", "[canvas] transformstart.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
-    if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
-    sanitizeSelection();
-    if (shape._type === "circle") {
-      shape.setAttr("scaleY", shape.scaleX());
-    }
-  });
-
-  shape.on('transformend.shape', () => {
-    log("DEBUG", "[canvas] transformend.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
-    if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
-    sanitizeSelection();
-    if (shape._type === "circle") {
-      const scale = shape.scaleX();
-      shape.radius(shape.radius() * scale);
-      shape.scale({ x: 1, y: 1 });
-    } else if (shape._type === "rect") {
-      const scaleX = shape.scaleX(), scaleY = shape.scaleY();
-      shape.width(shape.width() * scaleX);
-      shape.height(shape.height() * scaleY);
-      shape.scale({ x: 1, y: 1 });
-    }
-    updateSelectionHighlight();
-    AppState.konvaLayer.batchDraw();
-  });
+  // No transformer logic here: handled in transformer.js
   log("TRACE", "[canvas] attachShapeEvents exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
@@ -209,6 +186,7 @@ function clampGroupDragDelta(dx, dy, origPositions) {
 
 /**
  * Selection Highlight Logic
+ * - Now uses transformer.js for single selection/anchors.
  */
 function updateSelectionHighlight() {
   log("TRACE", "[canvas] updateSelectionHighlight entry");
@@ -216,21 +194,14 @@ function updateSelectionHighlight() {
   // Remove any old bounding box
   if (groupBoundingBox) { groupBoundingBox.destroy(); groupBoundingBox = null; }
   sanitizeSelection();
+
   if (AppState.selectedShapes.length === 1 && !AppState.selectedShapes[0].locked) {
-    if (AppState.transformer) AppState.transformer.destroy();
-    const tr = new Konva.Transformer({
-      nodes: [AppState.selectedShapes[0]],
-      enabledAnchors: AppState.selectedShapes[0]._type === "point" ? [] :
-        AppState.selectedShapes[0]._type === "circle"
-          ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
-          : ['top-left', 'top-center', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right'],
-      rotateEnabled: AppState.selectedShapes[0]._type !== "point"
-    });
-    AppState.transformer = tr;
-    layer.add(tr);
+    // Delegate transformer logic to transformer.js
+    updateTransformer();
     layer.draw();
   } else if (AppState.selectedShapes.length > 1) {
-    if (AppState.transformer) { AppState.transformer.destroy(); AppState.transformer = null; }
+    // Remove transformer for multi-select
+    detachTransformer();
     const sel = AppState.selectedShapes;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const s of sel) {
@@ -253,7 +224,7 @@ function updateSelectionHighlight() {
     layer.add(groupBoundingBox);
     layer.draw();
   } else {
-    if (AppState.transformer) { AppState.transformer.destroy(); AppState.transformer = null; }
+    detachTransformer();
     layer.draw();
   }
   log("TRACE", "[canvas] updateSelectionHighlight exit");

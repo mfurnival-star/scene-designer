@@ -12,6 +12,7 @@ errorlog.js
 main.js
 toolbar.js
 shapes.js
+transformer.js
 ```
 
 ---
@@ -58,6 +59,15 @@ shapes.js
   - Exports `makePointShape(x, y)`, `makeRectShape(x, y, w, h)`, `makeCircleShape(x, y, r)` (future).  
   - Centralizes all Konva shape construction, selection logic, and property/event attachment.  
   - Used by toolbar, canvas, sidebar, and all shape-creation features.
+
+- **transformer.js**  
+  Shape transformer/resize logic for Konva shapes:
+  - Centralized attach/detach/configure of Konva.Transformers for all shape types.
+  - Rectangle: 8 anchors (corners + sides), resize freely.
+  - Circle: 4 anchors (corners only), aspect ratio enforced (circle stays circle).
+  - Point: no anchors/transform (not resizeable).
+  - Invoked by canvas.js and consumes AppState, selection.
+  - All logging via log.js.
 
 ---
 **Instructions:**  
