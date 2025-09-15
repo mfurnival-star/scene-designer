@@ -12,13 +12,64 @@
  */
 
 import Konva from 'konva';
-import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes } from './state.js';
+import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes, subscribe } from './state.js';
 import { log } from './log.js';
 
 // --- Internal State ---
 let konvaInitialized = false;
 let bgKonvaImage = null;
 let groupBoundingBox = null;
+
+// --- Helper: set or clear the Konva background image on canvas
+function updateBackgroundImage() {
+  log("TRACE", "[canvas] updateBackgroundImage entry");
+  const layer = AppState.konvaLayer;
+  if (!layer) {
+    log("WARN", "[canvas] updateBackgroundImage: no konvaLayer yet");
+    return;
+  }
+  if (bgKonvaImage) {
+    bgKonvaImage.destroy();
+    bgKonvaImage = null;
+    layer.draw();
+  }
+  if (AppState.imageObj) {
+    // Fit image to stage dimensions, respecting aspect ratio (basic logic only)
+    const stage = AppState.konvaStage;
+    if (!stage) {
+      log("WARN", "[canvas] updateBackgroundImage: no konvaStage");
+      return;
+    }
+    let w = AppState.imageObj.naturalWidth || AppState.imageObj.width;
+    let h = AppState.imageObj.naturalHeight || AppState.imageObj.height;
+    // Fit to stage size (if defined), else use image size
+    let targetW = stage.width ? stage.width() : w;
+    let targetH = stage.height ? stage.height() : h;
+    // Simple fit mode
+    const scale = Math.min(targetW / w, targetH / h, 1);
+    const drawW = Math.round(w * scale);
+    const drawH = Math.round(h * scale);
+
+    bgKonvaImage = new Konva.Image({
+      image: AppState.imageObj,
+      x: 0,
+      y: 0,
+      width: drawW,
+      height: drawH,
+      listening: false
+    });
+    layer.add(bgKonvaImage);
+    bgKonvaImage.moveToBottom();
+    layer.draw();
+    log("DEBUG", "[canvas] updateBackgroundImage: background set", {
+      imgW: w, imgH: h, stageW: targetW, stageH: targetH, drawW, drawH
+    });
+  } else {
+    log("DEBUG", "[canvas] updateBackgroundImage: no imageObj, background cleared");
+    // Nothing to do, already cleared above
+  }
+  log("TRACE", "[canvas] updateBackgroundImage exit");
+}
 
 /**
  * Central selection filtering (no stale references)
@@ -146,7 +197,7 @@ function clampGroupDragDelta(dx, dy, origPositions) {
       bx2 = bx + shape.width(); by2 = by + shape.height();
     } else {
       bx = obj.x + dx - shape.radius(); by = obj.y + dy - shape.radius();
-      bx2 = obj.x + dx + shape.radius(); by2 = obj.y + dy + shape.radius();
+      bx2 = obj.x + dx + shape.radius(); by2 = obj.y + dx + shape.radius();
     }
     minX = Math.min(minX, bx); minY = Math.min(minY, by);
     maxX = Math.max(maxX, bx2); maxY = Math.max(maxY, by2);
@@ -268,6 +319,28 @@ export function buildCanvasPanel(rootElement, container) {
       serverImageSelectType: typeof serverImageSelect
     });
 
+    // --- Konva Stage/Layer Setup ---
+    const stageDiv = rootElement.querySelector('#konva-stage-div');
+    if (!stageDiv) {
+      log("ERROR", "[canvas] konva-stage-div not found in DOM");
+      return;
+    }
+    // Destroy previous stage if any
+    if (AppState.konvaStage && typeof AppState.konvaStage.destroy === "function") {
+      AppState.konvaStage.destroy();
+    }
+    const width = stageDiv.clientWidth || 600;
+    const height = stageDiv.clientHeight || 400;
+    const stage = new Konva.Stage({
+      container: stageDiv,
+      width,
+      height
+    });
+    const layer = new Konva.Layer();
+    stage.add(layer);
+    AppState.konvaStage = stage;
+    AppState.konvaLayer = layer;
+
     // --- Image Upload (from device) ---
     if (imageUpload) {
       imageUpload.addEventListener('change', function(e) {
@@ -283,7 +356,6 @@ export function buildCanvasPanel(rootElement, container) {
           imgObj.onload = function() {
             log("DEBUG", "[canvas] imageUpload: Image object loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
             setImage(url, imgObj);
-            // TODO: assign to Konva background if needed
             if (serverImageSelect) serverImageSelect.value = "";
           };
           imgObj.onerror = function(e) {
@@ -322,6 +394,18 @@ export function buildCanvasPanel(rootElement, container) {
       });
     } else {
       log("ERROR", "[canvas] serverImageSelect element not found in DOM");
+    }
+
+    // --- AppState subscription: update background image on setImage ---
+    subscribe((state, details) => {
+      if (details && details.type === "image") {
+        updateBackgroundImage();
+      }
+    });
+
+    // On panel build, show current background if image is present
+    if (AppState.imageObj) {
+      updateBackgroundImage();
     }
 
     // ...[Rest of UI hook-up, Konva setup, and shape logic as in your robust version. All functions should have entry/exit TRACE logs.]
