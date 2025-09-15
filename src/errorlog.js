@@ -1,117 +1,168 @@
 /**
  * errorlog.js
  * -----------------------------------------------------------
- * Error Log Panel & Log Sink for Scene Designer (Golden Layout)
- * - Implements Error Log panel for live log viewing in-app.
- * - Can be dynamically shown/hidden via settings.
- * - Provides a pluggable log sink that streams logs to the panel at any level.
- * - Exports:
- *    - buildErrorLogPanel(rootElement, container)
- *    - registerErrorLogSink()
- * - Dependencies: Only ES modules, never window/global.
- * - Logging: Uses log.js, but **NO** top-level logs at module load (see engineering policy).
+ * Error Log Panel (Golden Layout) for Scene Designer
+ * - Displays all log messages routed via log.js at all levels.
+ * - ES module only, no window/global code.
+ * - Supports click/tap-to-copy: clicking anywhere in the panel copies all visible log text to clipboard.
+ * - Works on iPhone/iOS, Android, desktop browsers (Clipboard API and fallback).
+ * - Logs copy events at INFO, errors at ERROR.
+ * - Exports: buildErrorLogPanel, registerErrorLogSink.
  * -----------------------------------------------------------
  */
 
-import { log, registerLogSink } from './log.js';
-
-/** Internal log message buffer (capped for perf) */
-const PANEL_MAX_LOGS = 300;
-let panelLogBuffer = [];
-
-/** Reference to the current DOM panel, if any */
-let panelElement = null;
+import { log, LOG_LEVELS, safeStringify, registerLogSink } from "./log.js";
 
 /**
- * Build the Error Log panel (GL component factory).
- * @param {HTMLElement} rootElement
- * @param {Object} container (Golden Layout container)
+ * Build the Error Log Panel
+ * @param {HTMLElement} rootElement - The Golden Layout container element.
+ * @param {Object} container - Golden Layout container (unused, for future).
  */
 export function buildErrorLogPanel(rootElement, container) {
-  log("TRACE", "[errorlog] buildErrorLogPanel entry", { rootElement, container });
-  panelElement = rootElement;
-  panelElement.innerHTML = `
-    <div id="error-log-panel" style="width:100%;height:100%;overflow:auto;font-family:monospace;padding:6px;background:#18181a;color:#fff;font-size:1em;">
-      <div id="error-log-panel-messages"></div>
+  log("TRACE", "[errorlog] buildErrorLogPanel entry", {
+    rootElementType: rootElement?.tagName,
+    containerTitle: container?.title,
+    containerComponentName: container?.componentName
+  });
+
+  // Main panel container HTML
+  rootElement.innerHTML = `
+    <div id="error-log-panel-container" style="width:100%;height:100%;background:#222;color:#fff;font-family:monospace;font-size:0.98em;overflow:auto;position:relative;">
+      <div id="error-log-content" style="width:100%;height:100%;overflow:auto;padding:8px 8px 32px 8px;user-select:text;-webkit-user-select:text;cursor:pointer;">
+        <div style="color:#aaa;font-size:1em;padding-bottom:4px;">Error log – click or tap to copy all logs</div>
+        <div id="error-log-lines"></div>
+        <div id="error-log-copied-msg" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:4px 12px;border-radius:8px;opacity:0;transition:opacity 0.18s;font-size:1em;pointer-events:none;z-index:99;"></div>
+      </div>
     </div>
   `;
-  const messagesDiv = panelElement.querySelector("#error-log-panel-messages");
-  if (!messagesDiv) {
-    log("ERROR", "[errorlog] Could not find messages container in Error Log panel!");
-    return;
-  }
-  // Render buffer
-  renderLogBuffer(messagesDiv);
+  const contentDiv = rootElement.querySelector("#error-log-content");
+  const linesDiv = rootElement.querySelector("#error-log-lines");
+  const copiedMsgDiv = rootElement.querySelector("#error-log-copied-msg");
 
-  // Optionally attach clear button or controls here in future
-  log("INFO", "[errorlog] Error Log panel initialized");
-  log("TRACE", "[errorlog] buildErrorLogPanel exit");
+  // --- Click/tap-to-copy logic, cross-platform (iPhone/Android/desktop) ---
+  function copyErrorLogToClipboard() {
+    if (!linesDiv) return;
+    let text = "";
+    // Collect all visible log lines (strip HTML tags)
+    linesDiv.querySelectorAll(".error-log-line").forEach(line => {
+      text += line.textContent + "\n";
+    });
+    if (!text.trim()) return;
+
+    // Clipboard API (navigator.clipboard) if available
+    function showCopiedMsg(msg) {
+      if (!copiedMsgDiv) return;
+      copiedMsgDiv.textContent = msg;
+      copiedMsgDiv.style.opacity = "1";
+      setTimeout(() => { copiedMsgDiv.style.opacity = "0"; }, 1200);
+    }
+
+    // Modern clipboard API
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      navigator.clipboard.writeText(text).then(() => {
+        log("INFO", "[errorlog] Log panel copied to clipboard (Clipboard API)");
+        showCopiedMsg("Copied to clipboard!");
+      }).catch(err => {
+        log("ERROR", "[errorlog] Clipboard API copy failed", err);
+        showCopiedMsg("Copy failed.");
+      });
+    } else {
+      // Fallback for iOS/Safari: temporary textarea, select, copy
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+
+        let success = false;
+        try {
+          success = document.execCommand("copy");
+        } catch (err) {
+          log("ERROR", "[errorlog] execCommand copy exception", err);
+        }
+        document.body.removeChild(textarea);
+        if (success) {
+          log("INFO", "[errorlog] Log panel copied to clipboard (textarea fallback)");
+          showCopiedMsg("Copied to clipboard!");
+        } else {
+          log("ERROR", "[errorlog] Log panel copy failed (textarea fallback)");
+          showCopiedMsg("Copy failed.");
+        }
+      } catch (err) {
+        log("ERROR", "[errorlog] Log panel copy failed (textarea fallback exception)", err);
+        showCopiedMsg("Copy failed.");
+      }
+    }
+  }
+
+  // Attach click/touch event (user gesture required for clipboard)
+  if (contentDiv) {
+    contentDiv.addEventListener("click", copyErrorLogToClipboard);
+    contentDiv.addEventListener("touchend", function (e) {
+      // Prevent both click and touchend from firing on iOS
+      e.preventDefault();
+      copyErrorLogToClipboard();
+    });
+  }
+
+  // --- Panel log sink: render lines ---
+  let maxLines = 120;
+  let logLines = [];
+
+  function renderLines() {
+    if (!linesDiv) return;
+    linesDiv.innerHTML = "";
+    logLines.slice(-maxLines).forEach(({ level, text }) => {
+      const div = document.createElement("div");
+      div.className = "error-log-line";
+      div.textContent = text;
+      if (level === LOG_LEVELS.ERROR) div.style.color = "#ff6c6c";
+      else if (level === LOG_LEVELS.WARN) div.style.color = "#ffd273";
+      else if (level === LOG_LEVELS.INFO) div.style.color = "#5bd6ff";
+      else if (level === LOG_LEVELS.DEBUG) div.style.color = "#b9ffb6";
+      else if (level === LOG_LEVELS.TRACE) div.style.color = "#aaa";
+      else div.style.color = "#fff";
+      linesDiv.appendChild(div);
+    });
+    // Scroll to bottom after new log
+    linesDiv.scrollTop = linesDiv.scrollHeight;
+  }
+
+  // Log sink function for log.js
+  function errorLogSink(levelNum, ...args) {
+    // Format timestamp and log level
+    const ts = (new Date()).toLocaleTimeString();
+    const levelName = ["SILENT", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"][levelNum] || "INFO";
+    const msg = args.map(a => safeStringify(a)).join(" ");
+    logLines.push({ level: levelNum, text: `[${ts}] [${levelName}] ${msg}` });
+    if (logLines.length > maxLines) logLines = logLines.slice(-maxLines);
+    renderLines();
+  }
+
+  // Register as a log sink with log.js
+  registerLogSink(errorLogSink);
+
+  log("INFO", "[errorlog] Error Log panel initialized (click/tap to copy enabled)");
+
+  log("TRACE", "[errorlog] buildErrorLogPanel exit", {
+    rootElementType: rootElement?.tagName,
+    containerTitle: container?.title,
+    containerComponentName: container?.componentName
+  });
 }
 
 /**
- * Register this panel as a log sink.
- * After registration, all log messages will be streamed here in addition to other sinks.
+ * Register the Error Log Panel as a log sink.
+ * (Called by layout.js after panel creation. Can be called multiple times safely.)
  */
 export function registerErrorLogSink() {
-  registerLogSink(errorLogSink);
+  log("TRACE", "[errorlog] registerErrorLogSink entry");
+  // No-op: errorLogSink already registered in buildErrorLogPanel
+  log("TRACE", "[errorlog] registerErrorLogSink exit");
 }
 
-// Log sink function (levelNum, ...args)
-function errorLogSink(levelNum, ...args) {
-  // Format message for display
-  const now = new Date();
-  const msg = {
-    ts: now.toLocaleTimeString(),
-    level: levelNum,
-    levelName: logLevelName(levelNum),
-    html: formatLogMessage(levelNum, args)
-  };
-  panelLogBuffer.push(msg);
-  if (panelLogBuffer.length > PANEL_MAX_LOGS) panelLogBuffer.shift();
-
-  if (panelElement) {
-    const messagesDiv = panelElement.querySelector("#error-log-panel-messages");
-    if (messagesDiv) {
-      renderLogBuffer(messagesDiv);
-    }
-  }
-}
-
-// Format log message as HTML
-function formatLogMessage(levelNum, args) {
-  const level = logLevelName(levelNum);
-  let color = "#fff";
-  if (levelNum === 1) color = "#ff4b4b";
-  else if (levelNum === 2) color = "#ffc83d";
-  else if (levelNum === 3) color = "#87e0ff";
-  else if (levelNum === 4) color = "#aaffab";
-  else if (levelNum === 5) color = "#aaa";
-  return `<span style="color:${color};font-weight:bold;">[${level}]</span> `
-    + args.map(a => escapeHtml(typeof a === "string" ? a : JSON.stringify(a, null, 1))).join(" ");
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function renderLogBuffer(messagesDiv) {
-  messagesDiv.innerHTML = panelLogBuffer.map(msg =>
-    `<div style="margin-bottom:2px;"><span style="color:#666;">${msg.ts}</span> ${msg.html}</div>`
-  ).join("");
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
-
-function logLevelName(num) {
-  switch (num) {
-    case 0: return "SILENT";
-    case 1: return "ERROR";
-    case 2: return "WARN";
-    case 3: return "INFO";
-    case 4: return "DEBUG";
-    case 5: return "TRACE";
-  }
-  return "INFO";
-}
