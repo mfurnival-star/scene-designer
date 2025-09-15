@@ -1,27 +1,66 @@
 /**
  * toolbar.js
- * -------------------------------------------------------------------
- * Scene Designer – Modular Toolbar Panel (ESM ONLY)
- * - Builds and manages the main toolbar UI for annotation and canvas actions.
- * - Toolbar UI scale is controlled by the `toolbarUIScale` setting (from settings.js).
- * - Listens for live setting changes and updates the scale accordingly.
- * - Toolbar contains only: image upload, shape dropdown, add shape button.
- * - No legacy/extra controls, all elements enabled.
- * - No global/window code; all state flows via AppState.
- * - Logging: Uses log.js; logs at INFO for major events, DEBUG for UI changes, TRACE for entry/exit.
- * - Exports: buildCanvasToolbarPanel
- * - Dependencies: log.js, state.js, settings.js
- * -------------------------------------------------------------------
+ * -----------------------------------------------------------
+ * Scene Designer – Modular Toolbar UI Element Factory (ESM only)
+ * - Exports helpers for creating toolbar UI elements (button, dropdown).
+ * - Exports buildCanvasToolbarPanel for use as Golden Layout panel (CanvasToolbarPanel).
+ * - Handles device image upload and server image select, wiring both to setImage().
+ * - Device-uploaded image filename is NOT displayed in the UI; just a button triggers the file dialog.
+ * - All ES module imports/exports, no window/global use.
+ * - Toolbar scaling is controlled by the `toolbarUIScale` setting and updates live.
+ * - Dependencies: log.js, state.js, settings.js.
+ * -----------------------------------------------------------
  */
 
-import { getSetting, subscribe } from './state.js';
 import { log } from './log.js';
+import { setImage, getSetting, subscribe } from './state.js';
+
+// --- UI ELEMENT HELPERS ---
+
+export function createToolbarButton({ id, label, icon = "", tooltip = "", onClick }) {
+  log("TRACE", "[toolbar] createToolbarButton entry", { id, label });
+  const btn = document.createElement('button');
+  if (id) btn.id = id;
+  btn.type = 'button';
+  btn.className = 'sd-toolbar-btn';
+  btn.innerHTML = icon ? `${icon} ${label}` : label;
+  if (tooltip) btn.title = tooltip;
+  if (typeof onClick === "function") {
+    btn.addEventListener('click', onClick);
+  }
+  log("TRACE", "[toolbar] createToolbarButton exit", { id, label });
+  return btn;
+}
+
+export function createToolbarDropdown({ id, options = [], value = "", tooltip = "", onChange }) {
+  log("TRACE", "[toolbar] createToolbarDropdown entry", { id, options });
+  const select = document.createElement('select');
+  if (id) select.id = id;
+  select.className = 'sd-toolbar-dropdown';
+  if (tooltip) select.title = tooltip;
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    select.appendChild(option);
+  });
+  if (value) select.value = value;
+  if (typeof onChange === "function") {
+    select.addEventListener('change', e => onChange(e.target.value, e));
+  }
+  log("TRACE", "[toolbar] createToolbarDropdown exit", { id, options });
+  return select;
+}
+
+// --- PANEL FACTORY ---
 
 /**
- * Build the Canvas Toolbar Panel for Golden Layout.
- * Applies UI scale from settings and listens for changes.
+ * Golden Layout panel factory for CanvasToolbarPanel.
+ * - Uses a plain "Upload Image" button, not a file input, for device uploads.
+ * - Device-uploaded image filename is NOT displayed.
+ * - Applies toolbar scaling from settings and listens for changes.
  * @param {HTMLElement} rootElement
- * @param {Object} container - Golden Layout container (optional)
+ * @param {Object} container - Golden Layout container
  */
 export function buildCanvasToolbarPanel(rootElement, container) {
   log("TRACE", "[toolbar] buildCanvasToolbarPanel entry", {
@@ -31,68 +70,199 @@ export function buildCanvasToolbarPanel(rootElement, container) {
   });
 
   try {
-    log("INFO", "[toolbar] buildCanvasToolbarPanel called", {
-      rootElementType: rootElement?.tagName,
-      containerTitle: container?.title,
-      containerComponentName: container?.componentName
-    });
+    rootElement.innerHTML = ""; // Clear panel
+    // Main toolbar container
+    const bar = document.createElement('div');
+    bar.className = 'sd-toolbar-main';
+    bar.style.display = 'flex';
+    bar.style.flexWrap = 'wrap';
+    bar.style.alignItems = 'center';
+    bar.style.padding = '6px 8px 4px 8px';
+    bar.style.background = '#f7f7fa';
+    bar.style.borderBottom = '1px solid #bbb';
+    rootElement.appendChild(bar);
 
-    // --- Minimal Toolbar HTML: image upload, shape dropdown, add button ---
-    rootElement.innerHTML = `
-      <div id="canvas-toolbar-main" class="sd-toolbar-main" style="display:flex;align-items:center;gap:12px;padding:6px 8px 4px 8px;background:#f7f7fa;border-bottom:1px solid #bbb;">
-        <input type="file" id="canvas-image-upload" accept="image/*" style="display:inline-block;">
-        <span style="margin-left:0;">Shape:</span>
-        <select id="shape-type-select" style="margin-left:0;">
-          <option value="point">Point</option>
-          <option value="rect">Rectangle</option>
-          <option value="circle">Circle</option>
-        </select>
-        <button id="add-shape-btn" style="margin-left:0;">Add</button>
-      </div>
-    `;
-
-    // --- Apply UI scale from settings ---
-    const bar = rootElement.querySelector('#canvas-toolbar-main');
-    if (bar) {
-      const scale = Number(getSetting("toolbarUIScale")) || 1;
+    // --- Apply toolbar scaling from settings ---
+    const applyScale = (scaleVal) => {
+      const scale = Number(scaleVal) || 1;
       bar.style.transform = `scale(${scale})`;
       bar.style.transformOrigin = 'top left';
-      log("DEBUG", "[toolbar] Applied initial toolbarUIScale", scale);
-
-      // --- Listen for toolbarUIScale setting changes for live updates ---
-      const unsub = subscribe((state, details) => {
-        if (details && details.type === "setting" && details.key === "toolbarUIScale") {
-          const newScale = Number(details.value) || 1;
-          bar.style.transform = `scale(${newScale})`;
-          bar.style.transformOrigin = 'top left';
-          log("DEBUG", "[toolbar] Updated toolbarUIScale (live)", newScale);
-        }
-      });
-
-      // Cleanup: Unsubscribe on panel destroy
-      if (container && typeof container.on === "function") {
-        container.on('destroy', () => {
-          unsub && unsub();
-          log("DEBUG", "[toolbar] Unsubscribed from toolbarUIScale changes on destroy");
-        });
+      log("DEBUG", "[toolbar] Applied toolbarUIScale", scale);
+    };
+    // Initial scale
+    applyScale(getSetting("toolbarUIScale"));
+    // Listen for live updates
+    const unsub = subscribe((state, details) => {
+      if (details && details.type === "setting" && details.key === "toolbarUIScale") {
+        applyScale(details.value);
       }
-    } else {
-      log("ERROR", "[toolbar] #canvas-toolbar-main not found in DOM");
+    });
+    // Cleanup on destroy
+    if (container && typeof container.on === "function") {
+      container.on("destroy", () => {
+        unsub && unsub();
+        log("TRACE", "[toolbar] CanvasToolbarPanel destroy event (unsubscribed)");
+      });
     }
 
-    // --- (Optional: wire up events here in future) ---
+    // --- Device image upload as button ---
+    const uploadBtn = createToolbarButton({
+      id: 'toolbar-upload-btn',
+      label: "Upload Image",
+      tooltip: "Upload image from your device",
+      onClick: () => {
+        hiddenFileInput.value = ''; // reset file input so same file can be re-uploaded
+        hiddenFileInput.click();
+      }
+    });
+    bar.appendChild(uploadBtn);
 
-    log("INFO", "[toolbar] CanvasToolbarPanel initialized (UI scale applied, minimal controls only)");
+    // Hidden file input (real input, not visible)
+    const hiddenFileInput = document.createElement('input');
+    hiddenFileInput.type = 'file';
+    hiddenFileInput.accept = 'image/*';
+    hiddenFileInput.style.display = 'none';
+    hiddenFileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) {
+        log("DEBUG", "[toolbar] Image upload: no file selected");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const url = ev.target.result;
+        const imgObj = new window.Image();
+        imgObj.onload = function() {
+          log("INFO", "[toolbar] Image upload: Image loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
+          setImage(url, imgObj);
+          serverSelect.value = "";
+        };
+        imgObj.onerror = function(e) {
+          log("ERROR", "[toolbar] Image upload: Image failed to load", e);
+          setImage(null, null);
+        };
+        imgObj.src = url;
+      };
+      reader.readAsDataURL(file);
+    });
+    bar.appendChild(hiddenFileInput);
+
+    // --- Server image select ---
+    const serverImages = [
+      { label: "[Server image]", value: "" },
+      { label: "sample1.png", value: "sample1.png" },
+      { label: "sample2.png", value: "sample2.png" }
+      // Add more as needed
+    ];
+    const serverSelect = createToolbarDropdown({
+      id: "toolbar-server-image-select",
+      options: serverImages,
+      value: "",
+      tooltip: "Select server image",
+      onChange: v => {
+        if (!v) {
+          setImage(null, null);
+          return;
+        }
+        const url = './images/' + v;
+        const imgObj = new window.Image();
+        imgObj.onload = function() {
+          log("INFO", "[toolbar] Server image: Image loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
+          setImage(url, imgObj);
+          hiddenFileInput.value = "";
+        };
+        imgObj.onerror = function(e) {
+          log("ERROR", "[toolbar] Server image: Image failed to load", e);
+          setImage(null, null);
+        };
+        imgObj.src = url;
+      }
+    });
+    serverSelect.style.marginRight = "12px";
+    bar.appendChild(serverSelect);
+
+    // --- Shape type dropdown ---
+    const shapeDropdown = createToolbarDropdown({
+      id: "toolbar-shape-type",
+      options: [
+        { label: "Point", value: "point" },
+        { label: "Rectangle", value: "rect" },
+        { label: "Circle", value: "circle" }
+      ],
+      value: "point",
+      tooltip: "Select shape type",
+      onChange: v => log("INFO", "[toolbar] Shape type selected", v)
+    });
+    shapeDropdown.style.marginRight = "6px";
+    bar.appendChild(shapeDropdown);
+
+    // --- Add shape button ---
+    const addBtn = createToolbarButton({
+      id: "toolbar-add-btn",
+      label: "Add",
+      tooltip: "Add shape",
+      onClick: () => log("INFO", "[toolbar] Add button clicked (not yet wired to addShape)")
+    });
+    bar.appendChild(addBtn);
+
+    log("INFO", "[toolbar] CanvasToolbarPanel UI rendered (Upload button, server select, shape dropdown, add)");
+
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
-    alert("CanvasToolbarPanel ERROR: " + e.message);
-    log("TRACE", "[toolbar] buildCanvasToolbarPanel exit (error)");
+    rootElement.innerHTML = `<div style="color:red;padding:2em;">ToolbarPanel ERROR: ${e.message}</div>`;
     throw e;
   }
-
   log("TRACE", "[toolbar] buildCanvasToolbarPanel exit", {
     rootElementType: rootElement?.tagName,
     containerTitle: container?.title,
     containerComponentName: container?.componentName
   });
 }
+
+// --- Toolbar CSS inject ---
+if (typeof document !== "undefined" && !document.getElementById('sd-toolbar-style')) {
+  const style = document.createElement('style');
+  style.id = 'sd-toolbar-style';
+  style.textContent = `
+    .sd-toolbar-btn {
+      margin: 0 4px;
+      padding: 4px 10px;
+      border: 1px solid #bbb;
+      background: #f3f6fb;
+      color: #133070;
+      font-size: 1em;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .sd-toolbar-btn:hover, .sd-toolbar-btn:focus {
+      background: #e3e8f2;
+      border-color: #2176ff;
+      color: #2176ff;
+      outline: none;
+    }
+    .sd-toolbar-dropdown {
+      margin: 0 4px;
+      padding: 3px 7px;
+      font-size: 1em;
+      border-radius: 3px;
+      border: 1px solid #bbb;
+      background: #fcfcff;
+    }
+    .sd-toolbar-file {
+      margin: 0 4px;
+      padding: 1px 0px;
+      font-size: 1em;
+      border-radius: 3px;
+      border: 1px solid #bbb;
+      background: #fcfcff;
+    }
+    .sd-toolbar-main {
+      width: 100%;
+      min-height: 32px;
+      box-sizing: border-box;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
