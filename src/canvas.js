@@ -268,6 +268,7 @@ export function buildCanvasPanel(rootElement, container) {
       serverImageSelectType: typeof serverImageSelect
     });
 
+    // --- Image Upload (from device) ---
     if (imageUpload) {
       imageUpload.addEventListener('change', function(e) {
         log("TRACE", "[canvas] imageUpload changed", e);
@@ -276,15 +277,28 @@ export function buildCanvasPanel(rootElement, container) {
         const reader = new FileReader();
         reader.onload = function(ev) {
           log("TRACE", "[canvas] FileReader onload", { resultLen: ev.target.result.length });
-          setImage(ev.target.result, null);
-          // TODO: assign to Konva background if needed
-          if (serverImageSelect) serverImageSelect.value = "";
+          const url = ev.target.result;
+          // Create an Image object, wait for it to load, then call setImage(url, imgObj)
+          const imgObj = new window.Image();
+          imgObj.onload = function() {
+            log("DEBUG", "[canvas] imageUpload: Image object loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
+            setImage(url, imgObj);
+            // TODO: assign to Konva background if needed
+            if (serverImageSelect) serverImageSelect.value = "";
+          };
+          imgObj.onerror = function(e) {
+            log("ERROR", "[canvas] imageUpload: Image object failed to load", e);
+            setImage(null, null);
+          };
+          imgObj.src = url;
         };
         reader.readAsDataURL(file);
       });
     } else {
       log("ERROR", "[canvas] imageUpload element not found in DOM");
     }
+
+    // --- Server Image Select ---
     if (serverImageSelect) {
       serverImageSelect.addEventListener('change', function(e) {
         log("TRACE", "[canvas] serverImageSelect changed", e);
@@ -293,9 +307,18 @@ export function buildCanvasPanel(rootElement, container) {
           setImage(null, null);
           return;
         }
-        // TODO: replace with actual image loading logic
-        setImage('./images/' + filename, null);
-        if (imageUpload) imageUpload.value = "";
+        const url = './images/' + filename;
+        const imgObj = new window.Image();
+        imgObj.onload = function() {
+          log("DEBUG", "[canvas] serverImageSelect: Image object loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
+          setImage(url, imgObj);
+          if (imageUpload) imageUpload.value = "";
+        };
+        imgObj.onerror = function(e) {
+          log("ERROR", "[canvas] serverImageSelect: Image object failed to load", e);
+          setImage(null, null);
+        };
+        imgObj.src = url;
       });
     } else {
       log("ERROR", "[canvas] serverImageSelect element not found in DOM");
