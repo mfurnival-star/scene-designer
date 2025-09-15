@@ -7,7 +7,6 @@ const __dirname = path.dirname(__filename);
 
 export default {
   entry: './src/layout.js',
-  //entry: './tweakpane-test.js',
   output: {
     filename: 'bundle.js',
     path: path.resolve(__dirname, 'dist'),
@@ -17,13 +16,12 @@ export default {
   devServer: {
     static: './dist',
     hot: true,
-    port: 3000,
-    open: true
+    port: 8080,        // standardized port
+    host: '0.0.0.0',   // listen on all network interfaces
+    open: false        // prevent opening browser on VM
   },
   cache: {
-    type: 'filesystem',
-    // Optional: custom cache directory, e.g.
-    // cacheDirectory: path.resolve(__dirname, '.webpack_cache')
+    type: 'filesystem'
   },
   module: {
     rules: [
@@ -37,3 +35,4 @@ export default {
     extensions: ['.js']
   }
 };
+

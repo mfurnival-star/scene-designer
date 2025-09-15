@@ -16,7 +16,7 @@
  */
 
 export const LOG_LEVELS = {
-  silent: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
+  SILENT: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
 };
 
 let curLogLevel = "INFO";
@@ -31,7 +31,6 @@ const logSinks = [];
  * Register a log sink (fn(level, ...args) or {sinkLog(level, ...args)})
  */
 export function registerLogSink(sink) {
-  // Do not log() here (bootstrapping order).
   if (typeof sink === "function" || (sink && typeof sink.sinkLog === "function")) {
     logSinks.push(sink);
   }
@@ -39,7 +38,7 @@ export function registerLogSink(sink) {
 
 /**
  * Set the log level at runtime.
- * @param {"silent"|"ERROR"|"WARN"|"INFO"|"DEBUG"|"TRACE"} level
+ * @param {"SILENT"|"ERROR"|"WARN"|"INFO"|"DEBUG"|"TRACE"} level
  */
 export function setLogLevel(level) {
   curLogLevel = normalizeLevel(level);
@@ -80,15 +79,14 @@ export function configureLogging({ level, dest, serverURL, token }) {
 }
 
 /**
- * Normalize log level string.
+ * Normalize log level string to UPPERCASE and only allow valid levels.
+ * Only "SILENT" disables logging. "OFF" is mapped to "SILENT".
  */
 function normalizeLevel(level) {
   if (!level) return "INFO";
   const l = String(level).toUpperCase();
-  if (l === "OFF") return "silent";
-  if (l === "SILENT") return "silent";
+  if (l === "OFF") return "SILENT";
   if (l in LOG_LEVELS) return l;
-  if (LOG_LEVELS.hasOwnProperty(l)) return l;
   // Default fallback
   return "INFO";
 }
@@ -173,7 +171,7 @@ export function log(level, ...args) {
   if (logDest === "console" || logDest === "both") {
     const lvl = String(level).toUpperCase();
     const safeArgs = args.map(safeLogArg);
-    // Map to console methods (TRACE->debug, everything else as per)
+    // Map to console methods
     if (typeof console !== "undefined") {
       if (lvl === "ERROR" && console.error) console.error("[log]", level, ...safeArgs);
       else if (lvl === "WARN" && console.warn) console.warn("[log]", level, ...safeArgs);
@@ -193,7 +191,6 @@ export function log(level, ...args) {
       if (typeof sink === "function") sink(level, ...args);
       else if (sink && typeof sink.sinkLog === "function") sink.sinkLog(level, ...args);
     } catch (e) {
-      // Never allow a log sink to throw
       if (typeof console !== "undefined" && console.warn) {
         console.warn("[log]", "Log sink error", e);
       }
@@ -243,3 +240,4 @@ if (typeof window !== "undefined") {
   window.setLogServerToken = setLogServerToken;
   window.LOG_LEVELS = LOG_LEVELS;
 }
+

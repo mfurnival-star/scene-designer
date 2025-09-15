@@ -11,6 +11,7 @@
  * - Now includes setting for enabling/disabling full console interception (for mobile/dev).
  * - Logging policy: Use INFO for panel/user actions, DEBUG for settings changes, ERROR for problems.
  * - TRACE-level entry/exit logging for all functions.
+ * - Log level normalization and validation is enforced on save/load.
  * -------------------------------------------------------------------
  */
 
@@ -20,6 +21,17 @@ import { enableConsoleInterception, disableConsoleInterception, isConsoleInterce
 import { Pane } from 'tweakpane';
 import localforage from 'localforage';
 import { setErrorLogPanelVisible } from './layout.js';
+
+// --- Log Level Options (UPPERCASE, no OFF, use SILENT for off) ---
+const LOG_LEVEL_OPTIONS = [
+  { value: "SILENT", label: "Silent" },
+  { value: "ERROR", label: "Error" },
+  { value: "WARN", label: "Warning" },
+  { value: "INFO", label: "Info" },
+  { value: "DEBUG", label: "Debug" },
+  { value: "TRACE", label: "Trace (very verbose)" }
+];
+const LOG_LEVEL_VALUES = LOG_LEVEL_OPTIONS.map(opt => opt.value);
 
 // --- Settings Registry ---
 export const settingsRegistry = [
@@ -108,15 +120,8 @@ export const settingsRegistry = [
     key: "DEBUG_LOG_LEVEL",
     label: "Debug: Log Level",
     type: "select",
-    options: [
-      { value: "OFF", label: "Off" },
-      { value: "ERROR", label: "Error" },
-      { value: "WARN", label: "Warning" },
-      { value: "INFO", label: "Info" },
-      { value: "DEBUG", label: "Debug" },
-      { value: "TRACE", label: "Trace (very verbose)" }
-    ],
-    default: "OFF"
+    options: LOG_LEVEL_OPTIONS,
+    default: "SILENT"
   },
   {
     key: "LOG_OUTPUT_DEST",
@@ -162,6 +167,7 @@ localforage.config({
 });
 
 // --- Merge in window._settings and window._externalLogServerURL on first load ---
+// Only use window._settings if storage is empty for that key.
 function mergeInitialSettingsFromWindow(stored) {
   let winSettings = {};
   if (typeof window !== "undefined" && window._settings && typeof window._settings === "object") {
@@ -173,17 +179,44 @@ function mergeInitialSettingsFromWindow(stored) {
   if (typeof window !== "undefined" && window._externalLogServerToken) {
     winSettings.LOG_SERVER_TOKEN = window._externalLogServerToken;
   }
-  return { ...stored, ...winSettings };
+  // Normalize log level to UPPERCASE and map "OFF" to "SILENT"
+  if ("DEBUG_LOG_LEVEL" in winSettings) {
+    let v = String(winSettings.DEBUG_LOG_LEVEL).toUpperCase();
+    if (v === "OFF") v = "SILENT";
+    if (!LOG_LEVEL_VALUES.includes(v)) v = "SILENT";
+    winSettings.DEBUG_LOG_LEVEL = v;
+  }
+  if ("LOG_OUTPUT_DEST" in winSettings) {
+    winSettings.LOG_OUTPUT_DEST = String(winSettings.LOG_OUTPUT_DEST);
+  }
+  // Only use winSettings for keys not yet in stored
+  const merged = { ...winSettings, ...stored };
+  return merged;
+}
+
+// --- Normalize and validate log level ---
+function normalizeLogLevel(val) {
+  if (typeof val !== "string") return "SILENT";
+  let v = val.toUpperCase();
+  if (v === "OFF") v = "SILENT";
+  if (!LOG_LEVEL_VALUES.includes(v)) v = "SILENT";
+  return v;
 }
 
 export async function loadSettings() {
   log("TRACE", "[settings] loadSettings entry");
   try {
     let stored = (await localforage.getItem("sceneDesignerSettings")) || {};
+    // Use window._settings only for keys not present in storage
     stored = mergeInitialSettingsFromWindow(stored);
     let merged = {};
     for (const reg of settingsRegistry) {
-      merged[reg.key] = (reg.key in stored) ? stored[reg.key] : reg.default;
+      let val = (reg.key in stored) ? stored[reg.key] : reg.default;
+      // Always normalize log level to UPPERCASE and map "OFF" to "SILENT"
+      if (reg.key === "DEBUG_LOG_LEVEL" && typeof val === "string") {
+        val = normalizeLogLevel(val);
+      }
+      merged[reg.key] = val;
     }
     setSettings(merged);
     updateLogConfigFromSettings(merged);
@@ -201,6 +234,10 @@ export async function loadSettings() {
 export async function saveSettings() {
   log("TRACE", "[settings] saveSettings entry");
   try {
+    // Normalize log level before saving
+    if (AppState.settings.DEBUG_LOG_LEVEL) {
+      AppState.settings.DEBUG_LOG_LEVEL = normalizeLogLevel(AppState.settings.DEBUG_LOG_LEVEL);
+    }
     await localforage.setItem("sceneDesignerSettings", AppState.settings);
     updateLogConfigFromSettings(AppState.settings);
     updateConsoleInterceptionFromSettings(AppState.settings);
@@ -218,6 +255,10 @@ const _origSetSetting = setSetting;
 const _origSetSettings = setSettings;
 export async function setSettingAndSave(key, value) {
   log("TRACE", "[settings] setSettingAndSave entry", { key, value });
+  // Always normalize log level
+  if (key === "DEBUG_LOG_LEVEL" && typeof value === "string") {
+    value = normalizeLogLevel(value);
+  }
   const prev = getSetting(key);
   _origSetSetting(key, value);
   await saveSettings();
@@ -230,6 +271,9 @@ export async function setSettingAndSave(key, value) {
 }
 export async function setSettingsAndSave(settingsObj) {
   log("TRACE", "[settings] setSettingsAndSave entry", settingsObj);
+  if ("DEBUG_LOG_LEVEL" in settingsObj && typeof settingsObj.DEBUG_LOG_LEVEL === "string") {
+    settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevel(settingsObj.DEBUG_LOG_LEVEL);
+  }
   _origSetSettings(settingsObj);
   await saveSettings();
   if (Object.prototype.hasOwnProperty.call(settingsObj, "showErrorLogPanel")) {
@@ -247,7 +291,9 @@ function updateLogConfigFromSettings(settings) {
   }
   if ("DEBUG_LOG_LEVEL" in settings) {
     let level = settings.DEBUG_LOG_LEVEL;
-    if (level === "OFF" || level === "off") level = "silent";
+    if (typeof level === "string") {
+      level = normalizeLogLevel(level);
+    }
     setLogLevel(level);
   }
   if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
@@ -331,18 +377,14 @@ export function buildSettingsPanel(rootElement, container) {
 
         log("DEBUG", "[settings] settingsPOJO keys/values", Object.entries(settingsPOJO));
 
+        // UI: Only the settings fields, no header/title or save button, and white background
         rootElement.innerHTML = `
-          <div id="settings-panel-container" style="width:100%;height:100%;background:#e7f8eb;display:flex;flex-direction:column;overflow:auto;">
-            <div style="padding:10px 8px 4px 8px;font-weight:bold;font-size:1.2em;color:#0a6e2c;">
-              Settings
-              <button id="settings-save-btn" style="float:right;font-size:0.9em;">Save</button>
-            </div>
+          <div id="settings-panel-container" style="width:100%;height:100%;background:#fff;display:flex;flex-direction:column;overflow:auto;">
             <div id="tweakpane-fields-div" style="flex:1 1 0;overflow:auto;padding:0 8px 8px 8px;"></div>
           </div>
         `;
 
         const fieldsDiv = rootElement.querySelector("#tweakpane-fields-div");
-        const saveBtn = rootElement.querySelector("#settings-save-btn");
 
         if (!fieldsDiv) {
           log("ERROR", "[settings] tweakpane-fields-div not found in DOM");
@@ -356,7 +398,6 @@ export function buildSettingsPanel(rootElement, container) {
           log("DEBUG", "[settings] Instantiating Tweakpane...", { PaneType: typeof Pane, Pane });
           pane = new Pane({
             container: fieldsDiv,
-            title: 'Settings',
             expanded: true
           });
           log("DEBUG", "[settings] Tweakpane instance created", { paneType: typeof pane, pane });
@@ -406,8 +447,13 @@ export function buildSettingsPanel(rootElement, container) {
                 label: reg.label,
                 options: reg.options.reduce((acc, cur) => { acc[cur.value] = cur.label; return acc; }, {}),
               }).on('change', ev => {
-                settingsPOJO[key] = ev.value;
-                setSettingAndSave(key, ev.value);
+                let v = ev.value;
+                // Always normalize log level
+                if (key === "DEBUG_LOG_LEVEL" && typeof v === "string") {
+                  v = normalizeLogLevel(v);
+                }
+                settingsPOJO[key] = v;
+                setSettingAndSave(key, v);
               });
             } else if (reg.type === "text") {
               log("DEBUG", `[settings] Tweakpane addBinding: text for ${key}`);
@@ -435,17 +481,7 @@ export function buildSettingsPanel(rootElement, container) {
           }
         });
 
-        if (saveBtn) {
-          saveBtn.onclick = async () => {
-            await saveSettings();
-            log("INFO", "[settings] Settings saved by user");
-            alert("Settings saved!");
-          };
-        } else {
-          log("WARN", "[settings] Save button not found");
-        }
-
-        log("INFO", "[settings] Settings panel rendered (Tweakpane)");
+        log("INFO", "[settings] Settings panel rendered (Tweakpane, no inner header)");
         log("TRACE", "[settings] buildSettingsPanel exit (rendered)");
       })
       .catch((e) => {
