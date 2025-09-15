@@ -34,8 +34,8 @@ const LOG_LEVEL_OPTIONS = [
 ];
 const LOG_LEVEL_VALUES = LOG_LEVEL_OPTIONS.map(opt => opt.value);
 
-// --- Settings Registry ---
 export const settingsRegistry = [
+  // ... as before ...
   {
     key: "multiDragBox",
     label: "Show Multi-Drag Box",
@@ -167,8 +167,6 @@ localforage.config({
   storeName: 'settings'
 });
 
-// --- Merge in window._settings and window._externalLogServerURL on first load ---
-// Only use window._settings if storage is empty for that key.
 function mergeInitialSettingsFromWindow(stored) {
   let winSettings = {};
   if (typeof window !== "undefined" && window._settings && typeof window._settings === "object") {
@@ -180,7 +178,6 @@ function mergeInitialSettingsFromWindow(stored) {
   if (typeof window !== "undefined" && window._externalLogServerToken) {
     winSettings.LOG_SERVER_TOKEN = window._externalLogServerToken;
   }
-  // Normalize log level to UPPERCASE; OFF is not recognized at all
   if ("DEBUG_LOG_LEVEL" in winSettings) {
     let v = String(winSettings.DEBUG_LOG_LEVEL).toUpperCase();
     if (!LOG_LEVEL_VALUES.includes(v)) v = "SILENT";
@@ -189,12 +186,15 @@ function mergeInitialSettingsFromWindow(stored) {
   if ("LOG_OUTPUT_DEST" in winSettings) {
     winSettings.LOG_OUTPUT_DEST = String(winSettings.LOG_OUTPUT_DEST);
   }
-  // Only use winSettings for keys not yet in stored
+  // Only use winSettings for keys NOT YET defined in stored (stored always wins)
   const merged = { ...winSettings, ...stored };
+  for (const k in stored) merged[k] = stored[k];
+  log("DEBUG", "[settings] [merge] winSettings:", winSettings);
+  log("DEBUG", "[settings] [merge] stored:", stored);
+  log("DEBUG", "[settings] [merge] merged result:", merged);
   return merged;
 }
 
-// --- Normalize and validate log level ---
 function normalizeLogLevel(val) {
   if (typeof val !== "string") return "SILENT";
   let v = val.toUpperCase();
@@ -206,23 +206,25 @@ export async function loadSettings() {
   log("TRACE", "[settings] loadSettings entry");
   try {
     let stored = (await localforage.getItem("sceneDesignerSettings")) || {};
-    // Use window._settings only for keys not present in storage
-    stored = mergeInitialSettingsFromWindow(stored);
-    let merged = {};
+    log("DEBUG", "[settings] loadSettings: raw stored from localforage:", stored);
+    log("DEBUG", "[settings] loadSettings: window._settings in HTML:", typeof window !== "undefined" ? window._settings : undefined);
+    let merged = mergeInitialSettingsFromWindow(stored);
+    log("DEBUG", "[settings] loadSettings: after mergeInitialSettingsFromWindow:", merged);
+    let settingsObj = {};
     for (const reg of settingsRegistry) {
-      let val = (reg.key in stored) ? stored[reg.key] : reg.default;
-      // Always normalize log level to UPPERCASE; OFF is not mapped
+      let val = (reg.key in merged) ? merged[reg.key] : reg.default;
       if (reg.key === "DEBUG_LOG_LEVEL" && typeof val === "string") {
         val = normalizeLogLevel(val);
       }
-      merged[reg.key] = val;
+      settingsObj[reg.key] = val;
     }
-    setSettings(merged);
-    updateLogConfigFromSettings(merged);
-    updateConsoleInterceptionFromSettings(merged);
-    log("DEBUG", "[settings] Settings loaded", merged);
+    log("DEBUG", "[settings] loadSettings: final settingsObj before setSettings:", settingsObj);
+    setSettings(settingsObj);
+    updateLogConfigFromSettings(settingsObj);
+    updateConsoleInterceptionFromSettings(settingsObj);
+    log("DEBUG", "[settings] Settings loaded and applied", settingsObj);
     log("TRACE", "[settings] loadSettings exit");
-    return merged;
+    return settingsObj;
   } catch (e) {
     log("ERROR", "[settings] loadSettings error", e);
     log("TRACE", "[settings] loadSettings exit (error)");
@@ -233,10 +235,10 @@ export async function loadSettings() {
 export async function saveSettings() {
   log("TRACE", "[settings] saveSettings entry");
   try {
-    // Normalize log level before saving
     if (AppState.settings.DEBUG_LOG_LEVEL) {
       AppState.settings.DEBUG_LOG_LEVEL = normalizeLogLevel(AppState.settings.DEBUG_LOG_LEVEL);
     }
+    log("DEBUG", "[settings] saveSettings: about to persist", AppState.settings);
     await localforage.setItem("sceneDesignerSettings", AppState.settings);
     updateLogConfigFromSettings(AppState.settings);
     updateConsoleInterceptionFromSettings(AppState.settings);
@@ -254,12 +256,12 @@ const _origSetSetting = setSetting;
 const _origSetSettings = setSettings;
 export async function setSettingAndSave(key, value) {
   log("TRACE", "[settings] setSettingAndSave entry", { key, value });
-  // Always normalize log level
   if (key === "DEBUG_LOG_LEVEL" && typeof value === "string") {
     value = normalizeLogLevel(value);
   }
   const prev = getSetting(key);
   _origSetSetting(key, value);
+  log("DEBUG", "[settings] setSettingAndSave: after setSetting", AppState.settings);
   await saveSettings();
   if (key === "showErrorLogPanel" && value !== prev) {
     log("INFO", "[settings] Show Error Log Panel toggled", { value });
@@ -274,6 +276,7 @@ export async function setSettingsAndSave(settingsObj) {
     settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevel(settingsObj.DEBUG_LOG_LEVEL);
   }
   _origSetSettings(settingsObj);
+  log("DEBUG", "[settings] setSettingsAndSave: after setSettings", AppState.settings);
   await saveSettings();
   if (Object.prototype.hasOwnProperty.call(settingsObj, "showErrorLogPanel")) {
     setErrorLogPanelVisible(settingsObj.showErrorLogPanel);
@@ -356,138 +359,130 @@ export function buildSettingsPanel(rootElement, container) {
       return;
     }
 
-    loadSettings()
-      .then(() => {
-        log("TRACE", "[settings] buildSettingsPanel after loadSettings (resolved)", {
-          AppStateSettings: AppState.settings
+    // --- CRITICAL: Always reload settings from AppState before building panel ---
+    // This ensures that the latest, persisted settings are reflected in the UI, not a stale object.
+    const buildPanel = () => {
+      const settingsPOJO = {};
+      for (const reg of settingsRegistry) {
+        settingsPOJO[reg.key] = AppState.settings[reg.key];
+      }
+      log("DEBUG", "[settings] buildSettingsPanel: settingsPOJO for Tweakpane", settingsPOJO);
+
+      rootElement.innerHTML = `
+        <div id="settings-panel-container" style="width:100%;height:100%;background:#fff;display:flex;flex-direction:column;overflow:auto;">
+          <div id="tweakpane-fields-div" style="flex:1 1 0;overflow:auto;padding:0 8px 8px 8px;"></div>
+        </div>
+      `;
+
+      const fieldsDiv = rootElement.querySelector("#tweakpane-fields-div");
+
+      if (!fieldsDiv) {
+        log("ERROR", "[settings] tweakpane-fields-div not found in DOM");
+        rootElement.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed to render (missing tweakpane-fields-div)</div>`;
+        log("TRACE", "[settings] buildSettingsPanel exit (missing fieldsDiv)");
+        return;
+      }
+
+      let pane;
+      try {
+        log("DEBUG", "[settings] Instantiating Tweakpane...", { PaneType: typeof Pane, Pane });
+        pane = new Pane({
+          container: fieldsDiv,
+          expanded: true
         });
+        log("DEBUG", "[settings] Tweakpane instance created", { paneType: typeof pane, pane });
+      } catch (e) {
+        log("ERROR", "[settings] Tweakpane instantiation failed", e);
+        fieldsDiv.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed: Tweakpane error (${e.message})</div>`;
+        log("TRACE", "[settings] buildSettingsPanel exit (Tweakpane failed)");
+        return;
+      }
 
-        const settingsPOJO = {};
-        for (const reg of settingsRegistry) {
-          if (!(reg.key in AppState.settings)) {
-            AppState.settings[reg.key] = reg.default;
-          }
-          settingsPOJO[reg.key] = AppState.settings[reg.key];
-        }
-        log("DEBUG", "[settings] settingsPOJO plain object check", {
-          proto: Object.getPrototypeOf(settingsPOJO),
-          isPlain: Object.getPrototypeOf(settingsPOJO) === Object.prototype
-        });
-
-        log("DEBUG", "[settings] settingsPOJO keys/values", Object.entries(settingsPOJO));
-
-        // UI: Only the settings fields, no header/title or save button, and white background
-        rootElement.innerHTML = `
-          <div id="settings-panel-container" style="width:100%;height:100%;background:#fff;display:flex;flex-direction:column;overflow:auto;">
-            <div id="tweakpane-fields-div" style="flex:1 1 0;overflow:auto;padding:0 8px 8px 8px;"></div>
-          </div>
-        `;
-
-        const fieldsDiv = rootElement.querySelector("#tweakpane-fields-div");
-
-        if (!fieldsDiv) {
-          log("ERROR", "[settings] tweakpane-fields-div not found in DOM");
-          rootElement.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed to render (missing tweakpane-fields-div)</div>`;
-          log("TRACE", "[settings] buildSettingsPanel exit (missing fieldsDiv)");
-          return;
-        }
-
-        let pane;
+      settingsRegistry.forEach(reg => {
+        const key = reg.key;
         try {
-          log("DEBUG", "[settings] Instantiating Tweakpane...", { PaneType: typeof Pane, Pane });
-          pane = new Pane({
-            container: fieldsDiv,
-            expanded: true
-          });
-          log("DEBUG", "[settings] Tweakpane instance created", { paneType: typeof pane, pane });
-        } catch (e) {
-          log("ERROR", "[settings] Tweakpane instantiation failed", e);
-          fieldsDiv.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed: Tweakpane error (${e.message})</div>`;
-          log("TRACE", "[settings] buildSettingsPanel exit (Tweakpane failed)");
-          return;
-        }
-
-        settingsRegistry.forEach(reg => {
-          const key = reg.key;
-          try {
-            if (reg.type === "boolean") {
-              log("DEBUG", `[settings] Tweakpane addBinding: boolean for ${key}`);
-              pane.addBinding(settingsPOJO, key, {
-                label: reg.label,
-              }).on('change', ev => {
-                settingsPOJO[key] = ev.value;
-                setSettingAndSave(key, ev.value);
-              });
-            } else if (reg.type === "number") {
-              log("DEBUG", `[settings] Tweakpane addBinding: number for ${key}`);
-              pane.addBinding(settingsPOJO, key, {
-                label: reg.label,
-                min: reg.min,
-                max: reg.max,
-                step: reg.step
-              }).on('change', ev => {
-                settingsPOJO[key] = ev.value;
-                setSettingAndSave(key, ev.value);
-              });
-            } else if (reg.type === "color") {
-              log("DEBUG", `[settings] Tweakpane addBinding: color for ${key}`);
-              pane.addBinding(settingsPOJO, key, {
-                label: reg.label,
-                view: 'color'
-              }).on('change', ev => {
-                let val = ev.value;
-                if (/^#[0-9a-f]{6}$/i.test(val)) val = val + "ff";
-                settingsPOJO[key] = val;
-                setSettingAndSave(key, val);
-              });
-            } else if (reg.type === "select") {
-              log("DEBUG", `[settings] Tweakpane addBinding: select for ${key}`);
-              pane.addBinding(settingsPOJO, key, {
-                label: reg.label,
-                options: reg.options.reduce((acc, cur) => { acc[cur.value] = cur.label; return acc; }, {}),
-              }).on('change', ev => {
-                let v = ev.value;
-                // Always normalize log level
-                if (key === "DEBUG_LOG_LEVEL" && typeof v === "string") {
-                  v = normalizeLogLevel(v);
-                }
-                settingsPOJO[key] = v;
-                setSettingAndSave(key, v);
-              });
-            } else if (reg.type === "text") {
-              log("DEBUG", `[settings] Tweakpane addBinding: text for ${key}`);
-              pane.addBinding(settingsPOJO, key, {
-                label: reg.label,
-              }).on('change', ev => {
-                settingsPOJO[key] = ev.value;
-                setSettingAndSave(key, ev.value);
-              });
-            }
-          } catch (e) {
-            log("ERROR", "[settings] Error rendering registry field", {
-              key,
-              reg,
-              error: e,
-              errorType: typeof e,
-              message: e?.message,
-              stack: e?.stack
+          if (reg.type === "boolean") {
+            log("DEBUG", `[settings] Tweakpane addBinding: boolean for ${key}`);
+            pane.addBinding(settingsPOJO, key, {
+              label: reg.label,
+            }).on('change', ev => {
+              settingsPOJO[key] = ev.value;
+              setSettingAndSave(key, ev.value);
             });
-            alert(
-              "Tweakpane error for setting: " + key + "\n\n" +
-              (e && e.message ? e.message : e) +
-              (e && e.stack ? "\n\n" + e.stack : "")
-            );
+          } else if (reg.type === "number") {
+            log("DEBUG", `[settings] Tweakpane addBinding: number for ${key}`);
+            pane.addBinding(settingsPOJO, key, {
+              label: reg.label,
+              min: reg.min,
+              max: reg.max,
+              step: reg.step
+            }).on('change', ev => {
+              settingsPOJO[key] = ev.value;
+              setSettingAndSave(key, ev.value);
+            });
+          } else if (reg.type === "color") {
+            log("DEBUG", `[settings] Tweakpane addBinding: color for ${key}`);
+            pane.addBinding(settingsPOJO, key, {
+              label: reg.label,
+              view: 'color'
+            }).on('change', ev => {
+              let val = ev.value;
+              if (/^#[0-9a-f]{6}$/i.test(val)) val = val + "ff";
+              settingsPOJO[key] = val;
+              setSettingAndSave(key, val);
+            });
+          } else if (reg.type === "select") {
+            log("DEBUG", `[settings] Tweakpane addBinding: select for ${key}`);
+            pane.addBinding(settingsPOJO, key, {
+              label: reg.label,
+              options: reg.options.reduce((acc, cur) => { acc[cur.value] = cur.label; return acc; }, {}),
+            }).on('change', ev => {
+              let v = ev.value;
+              if (key === "DEBUG_LOG_LEVEL" && typeof v === "string") {
+                v = normalizeLogLevel(v);
+              }
+              settingsPOJO[key] = v;
+              setSettingAndSave(key, v);
+            });
+          } else if (reg.type === "text") {
+            log("DEBUG", `[settings] Tweakpane addBinding: text for ${key}`);
+            pane.addBinding(settingsPOJO, key, {
+              label: reg.label,
+            }).on('change', ev => {
+              settingsPOJO[key] = ev.value;
+              setSettingAndSave(key, ev.value);
+            });
           }
-        });
-
-        log("INFO", "[settings] Settings panel rendered (Tweakpane, no inner header)");
-        log("TRACE", "[settings] buildSettingsPanel exit (rendered)");
-      })
-      .catch((e) => {
-        log("ERROR", "[settings] Error in loadSettings().then for buildSettingsPanel", e);
-        rootElement.innerHTML = `<div style="color:red;padding:2em;">Settings failed to load: ${e.message}</div>`;
-        log("TRACE", "[settings] buildSettingsPanel exit (loadSettings error)");
+        } catch (e) {
+          log("ERROR", "[settings] Error rendering registry field", {
+            key,
+            reg,
+            error: e,
+            errorType: typeof e,
+            message: e?.message,
+            stack: e?.stack
+          });
+          alert(
+            "Tweakpane error for setting: " + key + "\n\n" +
+            (e && e.message ? e.message : e) +
+            (e && e.stack ? "\n\n" + e.stack : "")
+          );
+        }
       });
+
+      log("INFO", "[settings] Settings panel rendered (Tweakpane, no inner header)");
+      log("TRACE", "[settings] buildSettingsPanel exit (rendered)");
+    };
+
+    // --- Always reload the persisted settings before building the panel ---
+    loadSettings().then(() => {
+      log("DEBUG", "[settings] buildSettingsPanel: AppState.settings after loadSettings", AppState.settings);
+      buildPanel();
+    }).catch((e) => {
+      log("ERROR", "[settings] Error in loadSettings().then for buildSettingsPanel", e);
+      rootElement.innerHTML = `<div style="color:red;padding:2em;">Settings failed to load: ${e.message}</div>`;
+      log("TRACE", "[settings] buildSettingsPanel exit (loadSettings error)");
+    });
   } catch (e) {
     log("ERROR", "[settings] buildSettingsPanel ERROR", e);
     alert("SettingsPanel ERROR: " + e.message + (e && e.stack ? "\n\n" + e.stack : ""));
