@@ -17,12 +17,10 @@ import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes
 import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
 
-// --- Internal State ---
 let konvaInitialized = false;
 let bgKonvaImage = null;
 let groupBoundingBox = null;
 
-// --- Helper: set or clear the Konva background image on canvas
 function updateBackgroundImage() {
   log("TRACE", "[canvas] updateBackgroundImage entry");
   const layer = AppState.konvaLayer;
@@ -36,7 +34,6 @@ function updateBackgroundImage() {
     layer.draw();
   }
   if (AppState.imageObj) {
-    // Render at actual image size, update stage size to match
     const stage = AppState.konvaStage;
     if (!stage) {
       log("WARN", "[canvas] updateBackgroundImage: no konvaStage");
@@ -44,7 +41,6 @@ function updateBackgroundImage() {
     }
     let w = AppState.imageObj.naturalWidth || AppState.imageObj.width;
     let h = AppState.imageObj.naturalHeight || AppState.imageObj.height;
-    // Set stage/canvas to image native size (no scaling)
     stage.width(w);
     stage.height(h);
 
@@ -64,14 +60,10 @@ function updateBackgroundImage() {
     });
   } else {
     log("DEBUG", "[canvas] updateBackgroundImage: no imageObj, background cleared");
-    // Nothing to do, already cleared above
   }
   log("TRACE", "[canvas] updateBackgroundImage exit");
 }
 
-/**
- * Central selection filtering (no stale references)
- */
 function sanitizeSelection() {
   log("TRACE", "[canvas] sanitizeSelection entry");
   if (!AppState.konvaLayer) {
@@ -89,9 +81,6 @@ function sanitizeSelection() {
   log("TRACE", "[canvas] sanitizeSelection exit");
 }
 
-/**
- * Remove all Konva event handlers from shape
- */
 function removeAllShapeHandlers(shape) {
   log("TRACE", "[canvas] removeAllShapeHandlers entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   if (shape && typeof shape.off === "function") {
@@ -100,9 +89,6 @@ function removeAllShapeHandlers(shape) {
   log("TRACE", "[canvas] removeAllShapeHandlers exit");
 }
 
-/**
- * Attach all required handlers to shape
- */
 function attachShapeEvents(shape) {
   log("TRACE", "[canvas] attachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   removeAllShapeHandlers(shape);
@@ -130,13 +116,9 @@ function attachShapeEvents(shape) {
     updateSelectionHighlight();
   });
 
-  // No transformer logic here: handled in transformer.js
   log("TRACE", "[canvas] attachShapeEvents exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
-/**
- * Clamp logic for shape and group drag
- */
 function clampShapeToStage(shape) {
   log("TRACE", "[canvas] clampShapeToStage entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   const stage = AppState.konvaStage;
@@ -159,7 +141,7 @@ function clampShapeToStage(shape) {
 }
 
 function clampGroupDragDelta(dx, dy, origPositions) {
-  log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy }); // Don't log origPositions, could be circular
+  log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy });
   const stage = AppState.konvaStage;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   origPositions.forEach(obj => {
@@ -184,23 +166,16 @@ function clampGroupDragDelta(dx, dy, origPositions) {
   return [adjDx, adjDy];
 }
 
-/**
- * Selection Highlight Logic
- * - Now uses transformer.js for single selection/anchors.
- */
 function updateSelectionHighlight() {
   log("TRACE", "[canvas] updateSelectionHighlight entry");
   const layer = AppState.konvaLayer;
-  // Remove any old bounding box
   if (groupBoundingBox) { groupBoundingBox.destroy(); groupBoundingBox = null; }
   sanitizeSelection();
 
   if (AppState.selectedShapes.length === 1 && !AppState.selectedShapes[0].locked) {
-    // Delegate transformer logic to transformer.js
     updateTransformer();
     layer.draw();
   } else if (AppState.selectedShapes.length > 1) {
-    // Remove transformer for multi-select
     detachTransformer();
     const sel = AppState.selectedShapes;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -230,11 +205,6 @@ function updateSelectionHighlight() {
   log("TRACE", "[canvas] updateSelectionHighlight exit");
 }
 
-/**
- * Main Panel Build
- * - Now with scrollable Konva stage area.
- * - Legacy UI elements are kept as placeholders but emit no events (for reminders only).
- */
 export function buildCanvasPanel(rootElement, container) {
   log("TRACE", "[canvas] buildCanvasPanel entry", {
     rootElementType: rootElement?.tagName,
@@ -245,7 +215,7 @@ export function buildCanvasPanel(rootElement, container) {
     log("INFO", "[canvas] buildCanvasPanel called", {
       rootElementType: rootElement?.tagName,
       containerTitle: container?.title,
-      containerComponentName: container?.componentName
+      componentName: container?.componentName
     });
 
     rootElement.innerHTML = `
@@ -282,7 +252,6 @@ export function buildCanvasPanel(rootElement, container) {
       </div>
     `;
 
-    // --- Make the canvas scrollable if larger than viewport ---
     const scrollContainer = rootElement.querySelector('#konva-stage-scroll-container');
     if (scrollContainer) {
       scrollContainer.style.overflow = "auto";
@@ -290,17 +259,14 @@ export function buildCanvasPanel(rootElement, container) {
       scrollContainer.style.height = "calc(100% - 44px)";
     }
 
-    // --- Konva Stage/Layer Setup ---
     const stageDiv = rootElement.querySelector('#konva-stage-div');
     if (!stageDiv) {
       log("ERROR", "[canvas] konva-stage-div not found in DOM");
       return;
     }
-    // Destroy previous stage if any
     if (AppState.konvaStage && typeof AppState.konvaStage.destroy === "function") {
       AppState.konvaStage.destroy();
     }
-    // Default size, will be updated upon image load
     const width = stageDiv.clientWidth || 600;
     const height = stageDiv.clientHeight || 400;
     const stage = new Konva.Stage({
@@ -313,24 +279,26 @@ export function buildCanvasPanel(rootElement, container) {
     AppState.konvaStage = stage;
     AppState.konvaLayer = layer;
 
-    // --- Image Upload (from device) ---
-    // (Disabled for now, toolbar handles image upload.)
-    // --- Server Image Select ---
-    // (Disabled for now, toolbar handles server select.)
-
-    // --- AppState subscription: update background image on setImage ---
     subscribe((state, details) => {
       if (details && details.type === "image") {
         updateBackgroundImage();
-        // Adjust scroll container size to match canvas
         if (scrollContainer && stage) {
           stageDiv.style.width = stage.width() + "px";
           stageDiv.style.height = stage.height() + "px";
         }
       }
+      // --- NEW: Listen for shape additions and ensure all shapes are always added to Konva layer ---
+      if (details && details.type === "addShape" && details.shape) {
+        // Only add shape if not already present in layer
+        if (AppState.konvaLayer && !AppState.konvaLayer.findOne(node => node === details.shape)) {
+          AppState.konvaLayer.add(details.shape);
+          AppState.konvaLayer.draw();
+          log("INFO", `[canvas] Shape added to Konva layer`, details.shape);
+        }
+      }
+      // Optionally: handle shape removal logic here if needed (not strictly required for add bug)
     });
 
-    // On panel build, show current background if image is present
     if (AppState.imageObj) {
       updateBackgroundImage();
       if (scrollContainer && stage) {
@@ -338,10 +306,6 @@ export function buildCanvasPanel(rootElement, container) {
         stageDiv.style.height = stage.height() + "px";
       }
     }
-
-    // --- Legacy UI elements as placeholders (disabled) ---
-    // All inputs and buttons in the toolbar are now disabled and emit no events,
-    // serving only as reminders for future refactor/feature migration.
 
     log("INFO", "[canvas] Canvas panel fully initialized (scrollable, legacy UI elements disabled)");
   } catch (e) {
@@ -353,7 +317,6 @@ export function buildCanvasPanel(rootElement, container) {
   log("TRACE", "[canvas] buildCanvasPanel exit", {
     rootElementType: rootElement?.tagName,
     containerTitle: container?.title,
-    containerComponentName: container?.componentName
+    componentName: container?.componentName
   });
 }
-
