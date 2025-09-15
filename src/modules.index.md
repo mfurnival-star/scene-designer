@@ -10,6 +10,7 @@ settings.js
 layout.js
 errorlog.js
 main.js
+toolbar.js
 ```
 
 ---
@@ -48,6 +49,11 @@ main.js
 - **main.js**  
   App entry point (if NOT using Golden Layout).
 
+- **toolbar.js**  
+  Modular toolbar UI element factory (button, dropdown, color swatch, text input), ESM only.
+
 ---
 **Instructions:**  
 Keep this file updated per SCENE_DESIGNER_MANIFESTO.md.
+
+
