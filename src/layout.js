@@ -22,6 +22,7 @@ import { buildSettingsPanel, loadSettings } from './settings.js';
 import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
 import { AppState, getSetting, setSetting, subscribe } from './state.js';
 import { log } from './log.js';
+import { setSettingAndSave } from './settings.js'; // Correct, no unnecessary aliasing
 
 log("INFO", "[layout] layout.js module loaded and ready!");
 
@@ -285,6 +286,17 @@ document.addEventListener("DOMContentLoaded", () => {
         componentName: container?.componentName
       });
       buildErrorLogPanel(container.element, container);
+
+      // Listen for panel close/destroy and update the setting (so that Settings UI stays in sync)
+      if (typeof container.on === "function") {
+        container.on('destroy', () => {
+          log("INFO", "[layout] ErrorLogPanel destroy event – updating setting to false");
+          // Only update if setting is still true (avoid infinite loop)
+          if (getSetting("showErrorLogPanel")) {
+            setSettingAndSave("showErrorLogPanel", false);
+          }
+        });
+      }
       log("TRACE", "[layout] ErrorLogPanel factory exit");
     });
 
@@ -313,4 +325,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Export control functions for settings.js
 export { isErrorLogPanelOpen };
+
 

@@ -34,7 +34,23 @@ These instructions are binding for all development, code review, and delivery in
 
 ---
 
-## 4. **Logging and Documentation**
+## 4. **File Size Policy and Splitting**
+
+- No single file should exceed approximately 350 lines.
+- If a file does, it must be split into logical ES module parts (e.g. `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).
+- Each part should be ≤350 lines if possible.
+- When splitting:
+    - Prefer splitting by logical concern (core, UI, data, helpers, etc).
+    - Each part must begin with a summary comment.
+    - Update all imports/exports to use new modules.
+    - Update `src/modules.index.md` to list all new files.
+    - Document the split in the PR/commit summary.
+- This policy is mandatory for all new code and for any refactoring of large files.
+- Do not split arbitrarily—each file must remain logically cohesive and independently testable.
+
+---
+
+## 5. **Logging and Documentation**
 
 - Use the shared logger (`log()`) from `log.js` with proper log levels and tags.
     - `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE` (TRACE is very verbose; rarely used).
@@ -44,7 +60,7 @@ These instructions are binding for all development, code review, and delivery in
 
 ---
 
-## 5. **Example (Good/Bad)**
+## 6. **Example (Good/Bad)**
 
 ```js
 // Good
@@ -60,3 +76,4 @@ import { foo } from "./notExportedHere.js";  // ❌ Not allowed if not exported
 ---
 
 Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
+

@@ -1,5 +1,5 @@
 /**
- * settings.js (part 1 of 2)
+ * settings.js
  * -------------------------------------------------------------------
  * Settings Panel for Scene Designer (Golden Layout)
  * - Dynamic settings UI using Tweakpane (ESM) for all controls and color pickers.
@@ -19,7 +19,7 @@ import { log, setLogLevel, setLogDestination, setLogServerURL, setLogServerToken
 import { enableConsoleInterception, disableConsoleInterception, isConsoleInterceptionEnabled } from './console-stream.js';
 import { Pane } from 'tweakpane';
 import localforage from 'localforage';
-import { setErrorLogPanelVisible } from './layout.js'; // NEW: control Error Log panel
+import { setErrorLogPanelVisible } from './layout.js';
 
 // --- Settings Registry ---
 export const settingsRegistry = [
@@ -60,13 +60,13 @@ export const settingsRegistry = [
     key: "defaultStrokeColor",
     label: "Default Stroke Color",
     type: "color",
-    default: "#000000ff" // Opaque black (with alpha channel)
+    default: "#000000ff"
   },
   {
     key: "defaultFillColor",
     label: "Default Fill Color",
     type: "color",
-    default: "#00000000" // Transparent
+    default: "#00000000"
   },
   {
     key: "canvasMaxWidth",
@@ -167,7 +167,6 @@ function mergeInitialSettingsFromWindow(stored) {
   if (typeof window !== "undefined" && window._settings && typeof window._settings === "object") {
     winSettings = { ...window._settings };
   }
-  // For legacy _externalLogServerURL/_externalLogServerToken
   if (typeof window !== "undefined" && window._externalLogServerURL) {
     winSettings.LOG_SERVER_URL = window._externalLogServerURL;
   }
@@ -181,7 +180,6 @@ export async function loadSettings() {
   log("TRACE", "[settings] loadSettings entry");
   try {
     let stored = (await localforage.getItem("sceneDesignerSettings")) || {};
-    // On first load, merge in any window-injected settings (for deploy-time config)
     stored = mergeInitialSettingsFromWindow(stored);
     let merged = {};
     for (const reg of settingsRegistry) {
@@ -218,40 +216,27 @@ export async function saveSettings() {
 // Patch setSetting/setSettings to persist to localForage immediately and update log config
 const _origSetSetting = setSetting;
 const _origSetSettings = setSettings;
-async function setSettingAndSave(key, value) {
+export async function setSettingAndSave(key, value) {
   log("TRACE", "[settings] setSettingAndSave entry", { key, value });
   const prev = getSetting(key);
   _origSetSetting(key, value);
   await saveSettings();
-
-  // NEW: If toggling showErrorLogPanel, trigger layout to open/close the panel
   if (key === "showErrorLogPanel" && value !== prev) {
     log("INFO", "[settings] Show Error Log Panel toggled", { value });
     setErrorLogPanelVisible(value);
   }
-
   log("DEBUG", "[settings] setSettingAndSave", { key, value });
   log("TRACE", "[settings] setSettingAndSave exit");
 }
-async function setSettingsAndSave(settingsObj) {
+export async function setSettingsAndSave(settingsObj) {
   log("TRACE", "[settings] setSettingsAndSave entry", settingsObj);
   _origSetSettings(settingsObj);
   await saveSettings();
-  // Also handle initial showErrorLogPanel state on bulk set
-  if (
-    Object.prototype.hasOwnProperty.call(settingsObj, "showErrorLogPanel")
-  ) {
+  if (Object.prototype.hasOwnProperty.call(settingsObj, "showErrorLogPanel")) {
     setErrorLogPanelVisible(settingsObj.showErrorLogPanel);
   }
   log("DEBUG", "[settings] setSettingsAndSave", settingsObj);
   log("TRACE", "[settings] setSettingsAndSave exit");
-}
-
-// Map "OFF" to "silent" for loglevel (see log.js)
-function mapLogLevelForLoglevel(level) {
-  if (!level) return "error";
-  if (level === "OFF" || level === "off") return "silent";
-  return level;
 }
 
 function updateLogConfigFromSettings(settings) {
@@ -260,7 +245,6 @@ function updateLogConfigFromSettings(settings) {
     log("TRACE", "[settings] updateLogConfigFromSettings exit (no settings)");
     return;
   }
-  // Map OFF->silent for loglevel package
   if ("DEBUG_LOG_LEVEL" in settings) {
     let level = settings.DEBUG_LOG_LEVEL;
     if (level === "OFF" || level === "off") level = "silent";
@@ -308,7 +292,6 @@ export function buildSettingsPanel(rootElement, container) {
       containerComponentName: container?.componentName
     });
 
-    // Check if rootElement exists and is visible
     if (!rootElement) {
       log("ERROR", "[settings] buildSettingsPanel: rootElement is null or undefined");
       alert("Settings panel root element not found! (No content will be shown)");
@@ -318,7 +301,6 @@ export function buildSettingsPanel(rootElement, container) {
       log("ERROR", "[settings] buildSettingsPanel: rootElement is not visible (may be hidden)");
     }
 
-    // Log Tweakpane before usage for diagnostics
     log("DEBUG", "[settings] Tweakpane import check (pre-panel)", { PaneType: typeof Pane, Pane });
     log("DEBUG", "[settings] settingsRegistry length", { len: settingsRegistry.length });
 
@@ -335,10 +317,8 @@ export function buildSettingsPanel(rootElement, container) {
           AppStateSettings: AppState.settings
         });
 
-        // --- DIAGNOSTIC: Ensure all keys are initialized and create a POJO for Tweakpane ---
         const settingsPOJO = {};
         for (const reg of settingsRegistry) {
-          // Always ensure the key exists on AppState.settings
           if (!(reg.key in AppState.settings)) {
             AppState.settings[reg.key] = reg.default;
           }
@@ -349,10 +329,8 @@ export function buildSettingsPanel(rootElement, container) {
           isPlain: Object.getPrototypeOf(settingsPOJO) === Object.prototype
         });
 
-        // Extra: log the settings POJO keys and values for future diagnostics
         log("DEBUG", "[settings] settingsPOJO keys/values", Object.entries(settingsPOJO));
 
-        // Clear panel
         rootElement.innerHTML = `
           <div id="settings-panel-container" style="width:100%;height:100%;background:#e7f8eb;display:flex;flex-direction:column;overflow:auto;">
             <div style="padding:10px 8px 4px 8px;font-weight:bold;font-size:1.2em;color:#0a6e2c;">
@@ -389,28 +367,9 @@ export function buildSettingsPanel(rootElement, container) {
           return;
         }
 
-        // Helper: render a Tweakpane input for each setting
         settingsRegistry.forEach(reg => {
-          // (Continued in part 2...)
           const key = reg.key;
           try {
-            // Diagnostic: log plainness and key existence
-            log("DEBUG", "[settings] addBinding plainness", {
-              key,
-              value: settingsPOJO[key],
-              hasKey: Object.prototype.hasOwnProperty.call(settingsPOJO, key),
-              isPlain: Object.getPrototypeOf(settingsPOJO) === Object.prototype
-            });
-
-            // Log the current key/value/type for even more granularity
-            log("DEBUG", "[settings] addBinding about to call", {
-              key,
-              value: settingsPOJO[key],
-              type: reg.type,
-              tweakpaneInstance: typeof pane,
-              tweakpanePOJO: settingsPOJO
-            });
-
             if (reg.type === "boolean") {
               log("DEBUG", `[settings] Tweakpane addBinding: boolean for ${key}`);
               pane.addBinding(settingsPOJO, key, {
@@ -432,15 +391,11 @@ export function buildSettingsPanel(rootElement, container) {
               });
             } else if (reg.type === "color") {
               log("DEBUG", `[settings] Tweakpane addBinding: color for ${key}`);
-              // Use Tweakpane's built-in color view for hex/rgba strings with alpha
               pane.addBinding(settingsPOJO, key, {
                 label: reg.label,
                 view: 'color'
               }).on('change', ev => {
-                // Always store as 8-digit hex (with alpha)
                 let val = ev.value;
-                // Tweakpane may output as #RRGGBB or #RRGGBBAA
-                // If only #RRGGBB, append 'ff' for full opacity
                 if (/^#[0-9a-f]{6}$/i.test(val)) val = val + "ff";
                 settingsPOJO[key] = val;
                 setSettingAndSave(key, val);
@@ -470,13 +425,7 @@ export function buildSettingsPanel(rootElement, container) {
               error: e,
               errorType: typeof e,
               message: e?.message,
-              stack: e?.stack,
-              tweakpanePOJO: settingsPOJO,
-              tweakpanePane: pane,
-              tweakpanePaneKeys: Object.keys(pane || {}),
-              tweakpanePaneProto: pane && Object.getPrototypeOf(pane),
-              tweakpanePOJOProto: Object.getPrototypeOf(settingsPOJO),
-              tweakpanePOJOStr: JSON.stringify(settingsPOJO, null, 2)
+              stack: e?.stack
             });
             alert(
               "Tweakpane error for setting: " + key + "\n\n" +
@@ -486,7 +435,6 @@ export function buildSettingsPanel(rootElement, container) {
           }
         });
 
-        // Save button
         if (saveBtn) {
           saveBtn.onclick = async () => {
             await saveSettings();
@@ -512,7 +460,4 @@ export function buildSettingsPanel(rootElement, container) {
     throw e;
   }
 }
-
-// Always patch setters at module load
-export { setSettingAndSave as setSetting, setSettingsAndSave as setSettings };
 

@@ -41,7 +41,23 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 4. Logging Policy (MANDATORY)
+## 4. File Size and Splitting Policy
+
+- **No single file should exceed approximately 350 lines.**
+- **If a file grows beyond 350 lines, it must be split into logically separated ES module files (e.g., `settings.part1.js`, `settings.part2.js`, or `settings-core.js`, `settings-ui.js`).**
+- **Each part should be ≤350 lines if possible.**
+- **When splitting:**
+    - Prefer splitting by logical concern (core logic, UI/panel, data, helpers, etc).
+    - Each split file must have a clear summary comment at the top.
+    - Update all imports/exports to use the new module parts.
+    - Update `src/modules.index.md` to reflect all new files.
+    - Document the split in the commit or pull request summary.
+- **File splitting is mandatory for all new code and for any refactoring where a file exceeds this size.**
+- **Do not split arbitrarily—ensure each file remains logically cohesive and independently testable.**
+
+---
+
+## 5. Logging Policy (MANDATORY)
 
 - **All modules must use the shared logger, `log()`, with standardized log levels:**
     - `ERROR` – Unexpected or fatal failures
@@ -57,7 +73,7 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 5. Documentation & API Contract
+## 6. Documentation & API Contract
 
 - **Every module/file starts with a JSDoc-style or Markdown comment summarizing:**
     - Its responsibilities
@@ -68,7 +84,7 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 6. File and Module Structure
+## 7. File and Module Structure
 
 - All logic is organized into ES module files under `src/`.
 - Each module:
@@ -81,7 +97,7 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 7. Example: ES Module Import/Export Pattern
+## 8. Example: ES Module Import/Export Pattern
 
 ```js
 // Good:
@@ -96,7 +112,7 @@ import { something } from "./notExportedHere.js"; // ❌ Not allowed if not actu
 
 ---
 
-## 8. Review Checklist
+## 9. Review Checklist
 
 - [ ] All code delivered as full files.
 - [ ] All dependencies imported as ES modules (no window/global usage).
@@ -105,10 +121,11 @@ import { something } from "./notExportedHere.js"; // ❌ Not allowed if not actu
 - [ ] Updated `src/modules.index.md` if modules changed.
 - [ ] Logging and documentation policies followed.
 - [ ] Delivery workflow (list, one-by-one, next file named, explicit "all done") followed.
+- [ ] **No single file exceeds 350 lines; split as per policy if needed.**
 
 ---
 
-## 9. Example Delivery Workflow
+## 10. Example Delivery Workflow
 
 1. List all files that require changes for ES module or logging compliance.
 2. Deliver each file, in full, one at a time.
@@ -119,4 +136,3 @@ import { something } from "./notExportedHere.js"; // ❌ Not allowed if not actu
 ---
 
 _This contract is enforceable for all code, review, and documentation in Scene Designer._
-
