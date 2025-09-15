@@ -1,88 +1,25 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Element Factory (ESM only)
- * - Exports helpers for creating toolbar UI elements (button, dropdown).
- * - Exports buildCanvasToolbarPanel for use as Golden Layout panel (CanvasToolbarPanel).
- * - Handles device image upload and server image select, wiring both to setImage().
- * - Device-uploaded image filename is NOT displayed in the UI; just a button triggers the file dialog.
- * - Adds shape (point, rectangle) at position controlled by shapeStartXPercent/shapeStartYPercent (as % of image/canvas).
- * - All ES module imports/exports, no window/global use.
- * - Toolbar scaling is controlled by the `toolbarUIScale` setting and updates live.
- * - Dependencies: log.js, state.js, shapes.js.
+ * Scene Designer – Toolbar Logic/Panel (ESM only)
+ * - Modular toolbar factory for all shape creation, duplication, deletion, lock, and quick actions.
+ * - All shape creation passes Konva shape objects, NOT .attrs, to state.js (addShape).
+ * - Ensures all shapes have _type, _label, locked, and event handlers attached.
+ * - No window/global code; all imports/exports are ES module only.
+ * - Logging via log.js.
+ * - Adheres to Engineering Manifesto and file delivery policy.
  * -----------------------------------------------------------
  */
 
+import { AppState, addShape, removeShape, setSelectedShapes } from './state.js';
 import { log } from './log.js';
-import { setImage, getSetting, subscribe, addShape, AppState } from './state.js';
-import { makePointShape, makeRectShape } from './shapes.js';
-
-// --- UI ELEMENT HELPERS ---
-
-export function createToolbarButton({ id, label, icon = "", tooltip = "", onClick }) {
-  log("TRACE", "[toolbar] createToolbarButton entry", { id, label });
-  const btn = document.createElement('button');
-  if (id) btn.id = id;
-  btn.type = 'button';
-  btn.className = 'sd-toolbar-btn';
-  btn.innerHTML = icon ? `${icon} ${label}` : label;
-  if (tooltip) btn.title = tooltip;
-  if (typeof onClick === "function") {
-    btn.addEventListener('click', onClick);
-  }
-  log("TRACE", "[toolbar] createToolbarButton exit", { id, label });
-  return btn;
-}
-
-export function createToolbarDropdown({ id, options = [], value = "", tooltip = "", onChange }) {
-  log("TRACE", "[toolbar] createToolbarDropdown entry", { id, options });
-  const select = document.createElement('select');
-  if (id) select.id = id;
-  select.className = 'sd-toolbar-dropdown';
-  if (tooltip) select.title = tooltip;
-  options.forEach(opt => {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.label;
-    select.appendChild(option);
-  });
-  if (value) select.value = value;
-  if (typeof onChange === "function") {
-    select.addEventListener('change', e => onChange(e.target.value, e));
-  }
-  log("TRACE", "[toolbar] createToolbarDropdown exit", { id, options });
-  return select;
-}
-
-// --- Helper: Get shape start X/Y in px as percent of image/canvas size ---
-function getShapeStartXY() {
-  const xPct = Number(getSetting('shapeStartXPercent')) || 50;
-  const yPct = Number(getSetting('shapeStartYPercent')) || 50;
-  let w = 0, h = 0;
-  if (AppState.konvaStage) {
-    w = AppState.konvaStage.width();
-    h = AppState.konvaStage.height();
-  } else if (AppState.imageObj) {
-    w = AppState.imageObj.naturalWidth || AppState.imageObj.width || 600;
-    h = AppState.imageObj.naturalHeight || AppState.imageObj.height || 400;
-  } else {
-    w = 600;
-    h = 400;
-  }
-  const x = Math.round((xPct / 100) * w);
-  const y = Math.round((yPct / 100) * h);
-  log("DEBUG", "[toolbar] Calculated shape start XY", { x, y, xPct, yPct, w, h });
-  return { x, y };
-}
-
-// --- PANEL FACTORY ---
+import { makeRectShape, makeCircleShape, makePointShape } from './shapes.js';
+import { setSelectedShape, setSelectedShapes as setSelection } from './selection.js';
 
 /**
- * Golden Layout panel factory for CanvasToolbarPanel.
- * - Applies toolbar scaling from settings and listens for changes.
- * - Adds "Add Point" and "Add Rectangle" functionality (calls shapes.js factories).
+ * Build the Canvas Toolbar Panel (ESM only, no global DOM mutation)
  * @param {HTMLElement} rootElement
- * @param {Object} container - Golden Layout container
+ * @param {Object} container
  */
 export function buildCanvasToolbarPanel(rootElement, container) {
   log("TRACE", "[toolbar] buildCanvasToolbarPanel entry", {
@@ -91,223 +28,136 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     containerComponentName: container?.componentName
   });
 
-  try {
-    rootElement.innerHTML = ""; // Clear panel
-    // Main toolbar container
-    const bar = document.createElement('div');
-    bar.className = 'sd-toolbar-main';
-    bar.style.display = 'flex';
-    bar.style.flexWrap = 'wrap';
-    bar.style.alignItems = 'center';
-    bar.style.padding = '6px 8px 4px 8px';
-    // REMOVE border and background for minimal look
-    bar.style.borderBottom = 'none';
-    bar.style.background = 'none';
-    rootElement.appendChild(bar);
-
-    // --- Apply toolbar scaling from settings ---
-    const applyScale = (scaleVal) => {
-      const scale = Number(scaleVal) || 1;
-      bar.style.transform = `scale(${scale})`;
-      bar.style.transformOrigin = 'top left';
-      log("DEBUG", "[toolbar] Applied toolbarUIScale", scale);
-    };
-    // Initial scale
-    applyScale(getSetting("toolbarUIScale"));
-    // Listen for live updates
-    const unsub = subscribe((state, details) => {
-      if (details && details.type === "setting" && details.key === "toolbarUIScale") {
-        applyScale(details.value);
-      }
-    });
-    // Cleanup on destroy
-    if (container && typeof container.on === "function") {
-      container.on("destroy", () => {
-        unsub && unsub();
-        log("TRACE", "[toolbar] CanvasToolbarPanel destroy event (unsubscribed)");
-      });
-    }
-
-    // --- Device image upload as button ---
-    const uploadBtn = createToolbarButton({
-      id: 'toolbar-upload-btn',
-      label: "Upload Image",
-      tooltip: "Upload image from your device",
-      onClick: () => {
-        hiddenFileInput.value = ''; // reset file input so same file can be re-uploaded
-        hiddenFileInput.click();
-      }
-    });
-    bar.appendChild(uploadBtn);
-
-    // Hidden file input (real input, not visible)
-    const hiddenFileInput = document.createElement('input');
-    hiddenFileInput.type = 'file';
-    hiddenFileInput.accept = 'image/*';
-    hiddenFileInput.style.display = 'none';
-    hiddenFileInput.addEventListener('change', (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) {
-        log("DEBUG", "[toolbar] Image upload: no file selected");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = function(ev) {
-        const url = ev.target.result;
-        const imgObj = new window.Image();
-        imgObj.onload = function() {
-          log("INFO", "[toolbar] Image upload: Image loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
-          setImage(url, imgObj);
-          serverSelect.value = "";
-        };
-        imgObj.onerror = function(e) {
-          log("ERROR", "[toolbar] Image upload: Image failed to load", e);
-          setImage(null, null);
-        };
-        imgObj.src = url;
-      };
-      reader.readAsDataURL(file);
-    });
-    bar.appendChild(hiddenFileInput);
-
-    // --- Server image select ---
-    const serverImages = [
-      { label: "[Server image]", value: "" },
-      { label: "sample1.png", value: "sample1.png" },
-      { label: "sample2.png", value: "sample2.png" }
-      // Add more as needed
-    ];
-    const serverSelect = createToolbarDropdown({
-      id: "toolbar-server-image-select",
-      options: serverImages,
-      value: "",
-      tooltip: "Select server image",
-      onChange: v => {
-        if (!v) {
-          setImage(null, null);
-          return;
-        }
-        const url = './images/' + v;
-        const imgObj = new window.Image();
-        imgObj.onload = function() {
-          log("INFO", "[toolbar] Server image: Image loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
-          setImage(url, imgObj);
-          hiddenFileInput.value = "";
-        };
-        imgObj.onerror = function(e) {
-          log("ERROR", "[toolbar] Server image: Image failed to load", e);
-          setImage(null, null);
-        };
-        imgObj.src = url;
-      }
-    });
-    serverSelect.style.marginRight = "12px";
-    bar.appendChild(serverSelect);
-
-    // --- Shape type dropdown (now supports rectangle) ---
-    const shapeDropdown = createToolbarDropdown({
-      id: "toolbar-shape-type",
-      options: [
-        { label: "Point", value: "point" },
-        { label: "Rectangle", value: "rect" },
-        { label: "Circle", value: "circle" }
-      ],
-      value: "point",
-      tooltip: "Select shape type"
-    });
-    shapeDropdown.style.marginRight = "6px";
-    bar.appendChild(shapeDropdown);
-
-    // --- Add shape button ---
-    const addBtn = createToolbarButton({
-      id: "toolbar-add-btn",
-      label: "Add",
-      tooltip: "Add shape",
-      onClick: () => {
-        const shapeType = shapeDropdown.value;
-        const { x, y } = getShapeStartXY();
-        if (shapeType === "point") {
-          // Use shapes.js factory for visible, interactive point
-          const group = makePointShape(x, y);
-          if (AppState.konvaLayer) {
-            AppState.konvaLayer.add(group);
-            AppState.konvaLayer.draw();
-          }
-          addShape(group);
-          log("INFO", "[toolbar] Added point shape via shapes.js", group);
-        } else if (shapeType === "rect") {
-          // Use shapes.js factory for rectangle
-          const rect = makeRectShape(x, y);
-          if (AppState.konvaLayer) {
-            AppState.konvaLayer.add(rect);
-            AppState.konvaLayer.draw();
-          }
-          addShape(rect);
-          log("INFO", "[toolbar] Added rectangle shape via shapes.js", rect);
-        } else {
-          log("WARN", "[toolbar] Only Point/Rectangle shape add is implemented yet.");
-        }
-      }
-    });
-    bar.appendChild(addBtn);
-
-    log("INFO", "[toolbar] CanvasToolbarPanel UI rendered (Upload button, server select, shape dropdown, add w/point/rect support)");
-
-  } catch (e) {
-    log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
-    rootElement.innerHTML = `<div style="color:red;padding:2em;">ToolbarPanel ERROR: ${e.message}</div>`;
-    throw e;
-  }
-  log("TRACE", "[toolbar] buildCanvasToolbarPanel exit");
-}
-
-// --- Toolbar CSS inject ---
-if (typeof document !== "undefined" && !document.getElementById('sd-toolbar-style')) {
-  const style = document.createElement('style');
-  style.id = 'sd-toolbar-style';
-  style.textContent = `
-    .sd-toolbar-btn {
-      margin: 0 4px;
-      padding: 4px 10px;
-      border: 1px solid #bbb;
-      background: #f3f6fb;
-      color: #133070;
-      font-size: 1em;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .sd-toolbar-btn:hover, .sd-toolbar-btn:focus {
-      background: #e3e8f2;
-      border-color: #2176ff;
-      color: #2176ff;
-      outline: none;
-    }
-    .sd-toolbar-dropdown {
-      margin: 0 4px;
-      padding: 3px 7px;
-      font-size: 1em;
-      border-radius: 3px;
-      border: 1px solid #bbb;
-      background: #fcfcff;
-    }
-    .sd-toolbar-file {
-      margin: 0 4px;
-      padding: 1px 0px;
-      font-size: 1em;
-      border-radius: 3px;
-      border: 1px solid #bbb;
-      background: #fcfcff;
-    }
-    /* .sd-toolbar-main: no border or background */
-    .sd-toolbar-main {
-      width: 100%;
-      min-height: 32px;
-      box-sizing: border-box;
-      border-bottom: none !important;
-      background: none !important;
-    }
+  // Render toolbar panel UI
+  rootElement.innerHTML = `
+    <div id="canvas-toolbar-panel-container" style="width:100%;height:100%;background:#f7f7fa;display:flex;flex-direction:row;align-items:center;overflow-x:auto;padding:4px 8px;">
+      <select id="toolbar-shape-type" style="margin-right:8px;">
+        <option value="point">Point</option>
+        <option value="rect">Rectangle</option>
+        <option value="circle">Circle</option>
+      </select>
+      <button id="toolbar-add-shape">Add</button>
+      <button id="toolbar-delete-shape" style="margin-left:8px;">Delete</button>
+      <button id="toolbar-duplicate-shape" style="margin-left:8px;">Duplicate</button>
+      <button id="toolbar-lock-shape" style="margin-left:8px;">Lock</button>
+      <button id="toolbar-unlock-shape" style="margin-left:4px;">Unlock</button>
+      <span style="margin-left:18px;font-size:0.98em;color:#888;">Toolbar (Scene Designer)</span>
+    </div>
   `;
-  document.head.appendChild(style);
-}
 
+  const shapeTypeSelect = rootElement.querySelector('#toolbar-shape-type');
+  const addBtn = rootElement.querySelector('#toolbar-add-shape');
+  const delBtn = rootElement.querySelector('#toolbar-delete-shape');
+  const dupBtn = rootElement.querySelector('#toolbar-duplicate-shape');
+  const lockBtn = rootElement.querySelector('#toolbar-lock-shape');
+  const unlockBtn = rootElement.querySelector('#toolbar-unlock-shape');
+
+  // --- Add Shape ---
+  addBtn.addEventListener('click', () => {
+    const type = shapeTypeSelect.value;
+    let shape;
+    // Use default start position from settings if available, else center
+    let x = (AppState.konvaStage ? AppState.konvaStage.width() : 600) / 2;
+    let y = (AppState.konvaStage ? AppState.konvaStage.height() : 400) / 2;
+    if (AppState.settings && typeof AppState.settings.shapeStartXPercent === 'number') {
+      x = (AppState.konvaStage ? AppState.konvaStage.width() : 600) * AppState.settings.shapeStartXPercent / 100;
+    }
+    if (AppState.settings && typeof AppState.settings.shapeStartYPercent === 'number') {
+      y = (AppState.konvaStage ? AppState.konvaStage.height() : 400) * AppState.settings.shapeStartYPercent / 100;
+    }
+    if (type === "rect") {
+      const w = AppState.settings?.defaultRectWidth || 50;
+      const h = AppState.settings?.defaultRectHeight || 30;
+      shape = makeRectShape(x, y, w, h);
+    } else if (type === "circle") {
+      const r = AppState.settings?.defaultCircleRadius || 15;
+      shape = makeCircleShape(x, y, r);
+    } else if (type === "point") {
+      shape = makePointShape(x, y);
+    }
+    if (!shape) {
+      log("ERROR", "[toolbar] Failed to create shape", { type, x, y });
+      return;
+    }
+    addShape(shape);
+    setSelectedShapes([shape]);
+    // Add shape to Konva layer and draw (required for all shapes!)
+    if (AppState.konvaLayer) {
+      AppState.konvaLayer.add(shape);
+      AppState.konvaLayer.draw();
+      log("INFO", `[toolbar] Added ${type} shape to Konva layer`, shape);
+    } else {
+      log("ERROR", "[toolbar] No konvaLayer found, shape not added to canvas", shape);
+    }
+    log("INFO", `[toolbar] Added ${type} shape via shapes.js`, shape);
+  });
+
+  // --- Delete Selected Shape(s) ---
+  delBtn.addEventListener('click', () => {
+    if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
+    const unlocked = AppState.selectedShapes.filter(s => !s.locked);
+    unlocked.forEach(s => {
+      removeShape(s);
+      // Remove from Konva layer, destroy
+      if (AppState.konvaLayer && typeof s.destroy === "function") {
+        s.destroy();
+        AppState.konvaLayer.draw();
+      }
+      log("INFO", "[toolbar] Deleted shape", s);
+    });
+    setSelectedShapes([]);
+  });
+
+  // --- Duplicate Selected Shape(s) ---
+  dupBtn.addEventListener('click', () => {
+    if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
+    const offset = 18;
+    let newShapes = [];
+    AppState.selectedShapes.forEach(orig => {
+      let clone;
+      const type = orig._type;
+      if (type === "rect") {
+        clone = makeRectShape(orig.x() + offset, orig.y() + offset, orig.width(), orig.height());
+      } else if (type === "circle") {
+        clone = makeCircleShape(orig.x() + offset, orig.y() + offset, orig.radius());
+      } else if (type === "point") {
+        clone = makePointShape(orig.x() + offset, orig.y() + offset);
+      }
+      if (!clone) return;
+      clone._label = orig._label + "-copy";
+      clone.locked = orig.locked;
+      addShape(clone);
+      newShapes.push(clone);
+      // Add to Konva layer
+      if (AppState.konvaLayer) {
+        AppState.konvaLayer.add(clone);
+        AppState.konvaLayer.draw();
+      }
+      log("INFO", "[toolbar] Duplicated shape", { original: orig, clone });
+    });
+    setSelectedShapes(newShapes);
+  });
+
+  // --- Lock Selected Shapes ---
+  lockBtn.addEventListener('click', () => {
+    if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
+    AppState.selectedShapes.forEach(s => { s.locked = true; s.draggable(false); });
+    setSelectedShapes(AppState.selectedShapes);
+    log("INFO", "[toolbar] Locked selected shapes", AppState.selectedShapes);
+  });
+
+  // --- Unlock Selected Shapes ---
+  unlockBtn.addEventListener('click', () => {
+    if (!AppState.selectedShapes || AppState.selectedShapes.length === 0) return;
+    AppState.selectedShapes.forEach(s => { s.locked = false; s.draggable(true); });
+    setSelectedShapes(AppState.selectedShapes);
+    log("INFO", "[toolbar] Unlocked selected shapes", AppState.selectedShapes);
+  });
+
+  log("INFO", "[toolbar] CanvasToolbarPanel fully initialized (ES module toolbar)");
+  log("TRACE", "[toolbar] buildCanvasToolbarPanel exit", {
+    rootElementType: rootElement?.tagName,
+    containerTitle: container?.title,
+    containerComponentName: container?.componentName
+  });
+}
