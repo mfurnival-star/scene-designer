@@ -5,8 +5,9 @@
  * - Exports helpers for creating toolbar UI elements (button, dropdown).
  * - Exports buildCanvasToolbarPanel for use as Golden Layout panel (CanvasToolbarPanel).
  * - Handles device image upload and server image select, wiring both to setImage().
- * - No global/window usage.
- * - Dependencies: log.js, state.js (for setImage), all as ES modules.
+ * - Device-uploaded image filename is NOT displayed in the UI.
+ * - All ES module imports/exports, no window/global use.
+ * - Dependencies: log.js, state.js.
  * -----------------------------------------------------------
  */
 
@@ -55,6 +56,7 @@ export function createToolbarDropdown({ id, options = [], value = "", tooltip = 
 /**
  * Golden Layout panel factory for CanvasToolbarPanel.
  * - Wires up image upload (device), server select, shape dropdown, and add button.
+ * - Does NOT show filename of device-uploaded image in the UI.
  * @param {HTMLElement} rootElement
  * @param {Object} container - Golden Layout container
  */
@@ -78,7 +80,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     bar.style.borderBottom = '1px solid #bbb';
     rootElement.appendChild(bar);
 
-    // --- Device image upload ---
+    // --- Device image upload (no filename display) ---
     const uploadLabel = document.createElement('label');
     uploadLabel.textContent = "Image: ";
     uploadLabel.setAttribute('for', 'toolbar-image-upload');
@@ -93,6 +95,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     uploadInput.style.display = 'inline-block';
     uploadInput.style.marginRight = "8px";
     uploadInput.title = "Upload image from your device";
+    // -- No filename display anywhere --
     uploadInput.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) {
