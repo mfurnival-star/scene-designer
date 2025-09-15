@@ -1,18 +1,15 @@
 /**
  * settings.js
  * -------------------------------------------------------------------
- * Settings Panel for Scene Designer (Golden Layout)
- * - Dynamic settings UI using Tweakpane (ESM) for all controls and color pickers.
- * - All settings are stored in AppState.settings via state.js.
- * - Persists settings asynchronously using localForage (IndexedDB/localStorage fallback).
- * - All settings metadata is defined in settingsRegistry.
- * - Logging via log.js.
- * - Updates log.js config at runtime when log level/destination/server/token is changed.
- * - Now includes setting for enabling/disabling full console interception (for mobile/dev).
- * - Logging policy: Use INFO for panel/user actions, DEBUG for settings changes, ERROR for problems.
- * - TRACE-level entry/exit logging for all functions.
- * - Log level normalization and validation is enforced on save/load.
- * - OFF is no longer recognized or mapped; only SILENT disables logs.
+ * Scene Designer – Settings Core/Panel (ESM ONLY, NO LEGACY HTML INJECTION)
+ * - Robust settings system with force mode, no window._settings or other legacy globals.
+ * - All config values from localForage (persistent browser storage) unless force mode is enabled.
+ * - "Force mode": inject settings at deploy/debug time via SCENE_DESIGNER_FORCE/SCENE_DESIGNER_FORCE_SETTINGS in HTML.
+ * - If force mode is enabled, SCENE_DESIGNER_FORCE_SETTINGS always overrides storage for those keys.
+ * - All settings defaults come from settingsRegistry.
+ * - Logs all loads, saves, and force actions via log.js.
+ * - All imports/exports are ES module only, no window/global access.
+ * - Adheres to Engineering Manifesto and file policies.
  * -------------------------------------------------------------------
  */
 
@@ -35,70 +32,14 @@ const LOG_LEVEL_OPTIONS = [
 const LOG_LEVEL_VALUES = LOG_LEVEL_OPTIONS.map(opt => opt.value);
 
 export const settingsRegistry = [
-  // ... as before ...
-  {
-    key: "multiDragBox",
-    label: "Show Multi-Drag Box",
-    type: "boolean",
-    default: true
-  },
-  {
-    key: "defaultRectWidth",
-    label: "Default Rectangle Width",
-    type: "number",
-    default: 50,
-    min: 10,
-    max: 300,
-    step: 1
-  },
-  {
-    key: "defaultRectHeight",
-    label: "Default Rectangle Height",
-    type: "number",
-    default: 30,
-    min: 10,
-    max: 200,
-    step: 1
-  },
-  {
-    key: "defaultCircleRadius",
-    label: "Default Circle Radius",
-    type: "number",
-    default: 15,
-    min: 4,
-    max: 100,
-    step: 1
-  },
-  {
-    key: "defaultStrokeColor",
-    label: "Default Stroke Color",
-    type: "color",
-    default: "#000000ff"
-  },
-  {
-    key: "defaultFillColor",
-    label: "Default Fill Color",
-    type: "color",
-    default: "#00000000"
-  },
-  {
-    key: "canvasMaxWidth",
-    label: "Canvas Max Width (px)",
-    type: "number",
-    default: 430,
-    min: 100,
-    max: 4000,
-    step: 10
-  },
-  {
-    key: "canvasMaxHeight",
-    label: "Canvas Max Height (px)",
-    type: "number",
-    default: 9999,
-    min: 100,
-    max: 4000,
-    step: 10
-  },
+  { key: "multiDragBox", label: "Show Multi-Drag Box", type: "boolean", default: true },
+  { key: "defaultRectWidth", label: "Default Rectangle Width", type: "number", default: 50, min: 10, max: 300, step: 1 },
+  { key: "defaultRectHeight", label: "Default Rectangle Height", type: "number", default: 30, min: 10, max: 200, step: 1 },
+  { key: "defaultCircleRadius", label: "Default Circle Radius", type: "number", default: 15, min: 4, max: 100, step: 1 },
+  { key: "defaultStrokeColor", label: "Default Stroke Color", type: "color", default: "#000000ff" },
+  { key: "defaultFillColor", label: "Default Fill Color", type: "color", default: "#00000000" },
+  { key: "canvasMaxWidth", label: "Canvas Max Width (px)", type: "number", default: 430, min: 100, max: 4000, step: 10 },
+  { key: "canvasMaxHeight", label: "Canvas Max Height (px)", type: "number", default: 9999, min: 100, max: 4000, step: 10 },
   {
     key: "canvasScaleMode",
     label: "Image Scale Mode",
@@ -111,19 +52,8 @@ export const settingsRegistry = [
     ],
     default: "fit"
   },
-  {
-    key: "canvasResponsive",
-    label: "Responsive: Resize on Window Change",
-    type: "boolean",
-    default: true
-  },
-  {
-    key: "DEBUG_LOG_LEVEL",
-    label: "Debug: Log Level",
-    type: "select",
-    options: LOG_LEVEL_OPTIONS,
-    default: "SILENT"
-  },
+  { key: "canvasResponsive", label: "Responsive: Resize on Window Change", type: "boolean", default: true },
+  { key: "DEBUG_LOG_LEVEL", label: "Debug: Log Level", type: "select", options: LOG_LEVEL_OPTIONS, default: "SILENT" },
   {
     key: "LOG_OUTPUT_DEST",
     label: "Log Output Destination",
@@ -135,30 +65,10 @@ export const settingsRegistry = [
     ],
     default: "console"
   },
-  {
-    key: "LOG_SERVER_URL",
-    label: "Log Server URL",
-    type: "text",
-    default: ""
-  },
-  {
-    key: "LOG_SERVER_TOKEN",
-    label: "Log Server Token",
-    type: "text",
-    default: ""
-  },
-  {
-    key: "INTERCEPT_CONSOLE",
-    label: "Intercept All Console Logs (for Mobile/Dev)",
-    type: "boolean",
-    default: false
-  },
-  {
-    key: "showErrorLogPanel",
-    label: "Show Error Log Panel",
-    type: "boolean",
-    default: true
-  }
+  { key: "LOG_SERVER_URL", label: "Log Server URL", type: "text", default: "" },
+  { key: "LOG_SERVER_TOKEN", label: "Log Server Token", type: "text", default: "" },
+  { key: "INTERCEPT_CONSOLE", label: "Intercept All Console Logs (for Mobile/Dev)", type: "boolean", default: false },
+  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true }
 ];
 
 // --- Persistence using localForage (async) ---
@@ -167,30 +77,41 @@ localforage.config({
   storeName: 'settings'
 });
 
-function mergeInitialSettingsFromWindow(stored) {
-  let winSettings = {};
-  if (typeof window !== "undefined" && window._settings && typeof window._settings === "object") {
-    winSettings = { ...window._settings };
+/**
+ * Merge settings using new force mode ONLY (no legacy HTML injection).
+ * - If SCENE_DESIGNER_FORCE and SCENE_DESIGNER_FORCE_SETTINGS are present, use those keys as forced values.
+ * - Otherwise, use storage, then registry defaults.
+ * - No window._settings, no legacy variables.
+ */
+function mergeSettingsWithForce(stored) {
+  const forceMode = typeof window !== "undefined" &&
+    window.SCENE_DESIGNER_FORCE === true &&
+    window.SCENE_DESIGNER_FORCE_SETTINGS &&
+    typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
+
+  // Build merged object in registry key order
+  const merged = {};
+  for (const reg of settingsRegistry) {
+    let val;
+    if (forceMode && reg.key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
+      val = window.SCENE_DESIGNER_FORCE_SETTINGS[reg.key];
+      log("INFO", `[settings] FORCE MODE: Overriding ${reg.key} with forced value`, val);
+    } else if (reg.key in stored) {
+      val = stored[reg.key];
+    } else {
+      val = reg.default;
+    }
+    // Special: Normalize log level
+    if (reg.key === "DEBUG_LOG_LEVEL" && typeof val === "string") {
+      val = normalizeLogLevel(val);
+    }
+    merged[reg.key] = val;
   }
-  if (typeof window !== "undefined" && window._externalLogServerURL) {
-    winSettings.LOG_SERVER_URL = window._externalLogServerURL;
+
+  if (forceMode) {
+    log("INFO", "[settings] FORCE MODE ACTIVE: SCENE_DESIGNER_FORCE_SETTINGS applied", window.SCENE_DESIGNER_FORCE_SETTINGS);
   }
-  if (typeof window !== "undefined" && window._externalLogServerToken) {
-    winSettings.LOG_SERVER_TOKEN = window._externalLogServerToken;
-  }
-  if ("DEBUG_LOG_LEVEL" in winSettings) {
-    let v = String(winSettings.DEBUG_LOG_LEVEL).toUpperCase();
-    if (!LOG_LEVEL_VALUES.includes(v)) v = "SILENT";
-    winSettings.DEBUG_LOG_LEVEL = v;
-  }
-  if ("LOG_OUTPUT_DEST" in winSettings) {
-    winSettings.LOG_OUTPUT_DEST = String(winSettings.LOG_OUTPUT_DEST);
-  }
-  // Only use winSettings for keys NOT YET defined in stored (stored always wins)
-  const merged = { ...winSettings, ...stored };
-  for (const k in stored) merged[k] = stored[k];
-  log("DEBUG", "[settings] [merge] winSettings:", winSettings);
-  log("DEBUG", "[settings] [merge] stored:", stored);
+  log("DEBUG", "[settings] [merge] storage:", stored);
   log("DEBUG", "[settings] [merge] merged result:", merged);
   return merged;
 }
@@ -202,29 +123,22 @@ function normalizeLogLevel(val) {
   return v;
 }
 
+/**
+ * Load settings from storage (with force mode if present).
+ * - Always uses localForage as primary store unless force mode is active for a key.
+ */
 export async function loadSettings() {
   log("TRACE", "[settings] loadSettings entry");
   try {
     let stored = (await localforage.getItem("sceneDesignerSettings")) || {};
     log("DEBUG", "[settings] loadSettings: raw stored from localforage:", stored);
-    log("DEBUG", "[settings] loadSettings: window._settings in HTML:", typeof window !== "undefined" ? window._settings : undefined);
-    let merged = mergeInitialSettingsFromWindow(stored);
-    log("DEBUG", "[settings] loadSettings: after mergeInitialSettingsFromWindow:", merged);
-    let settingsObj = {};
-    for (const reg of settingsRegistry) {
-      let val = (reg.key in merged) ? merged[reg.key] : reg.default;
-      if (reg.key === "DEBUG_LOG_LEVEL" && typeof val === "string") {
-        val = normalizeLogLevel(val);
-      }
-      settingsObj[reg.key] = val;
-    }
-    log("DEBUG", "[settings] loadSettings: final settingsObj before setSettings:", settingsObj);
-    setSettings(settingsObj);
-    updateLogConfigFromSettings(settingsObj);
-    updateConsoleInterceptionFromSettings(settingsObj);
-    log("DEBUG", "[settings] Settings loaded and applied", settingsObj);
+    let merged = mergeSettingsWithForce(stored);
+    setSettings(merged);
+    updateLogConfigFromSettings(merged);
+    updateConsoleInterceptionFromSettings(merged);
+    log("DEBUG", "[settings] Settings loaded and applied", merged);
     log("TRACE", "[settings] loadSettings exit");
-    return settingsObj;
+    return merged;
   } catch (e) {
     log("ERROR", "[settings] loadSettings error", e);
     log("TRACE", "[settings] loadSettings exit (error)");
@@ -235,14 +149,26 @@ export async function loadSettings() {
 export async function saveSettings() {
   log("TRACE", "[settings] saveSettings entry");
   try {
-    if (AppState.settings.DEBUG_LOG_LEVEL) {
-      AppState.settings.DEBUG_LOG_LEVEL = normalizeLogLevel(AppState.settings.DEBUG_LOG_LEVEL);
+    // Never save forced values to storage
+    const forceMode = typeof window !== "undefined" &&
+      window.SCENE_DESIGNER_FORCE === true &&
+      window.SCENE_DESIGNER_FORCE_SETTINGS &&
+      typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
+
+    let toSave = {};
+    for (const reg of settingsRegistry) {
+      // Don't persist forced keys (they are always overridden)
+      if (forceMode && reg.key in window.SCENE_DESIGNER_FORCE_SETTINGS) continue;
+      toSave[reg.key] = AppState.settings[reg.key];
     }
-    log("DEBUG", "[settings] saveSettings: about to persist", AppState.settings);
-    await localforage.setItem("sceneDesignerSettings", AppState.settings);
+    if (AppState.settings.DEBUG_LOG_LEVEL) {
+      toSave.DEBUG_LOG_LEVEL = normalizeLogLevel(AppState.settings.DEBUG_LOG_LEVEL);
+    }
+    log("DEBUG", "[settings] saveSettings: about to persist", toSave);
+    await localforage.setItem("sceneDesignerSettings", toSave);
     updateLogConfigFromSettings(AppState.settings);
     updateConsoleInterceptionFromSettings(AppState.settings);
-    log("DEBUG", "[settings] Settings saved", AppState.settings);
+    log("DEBUG", "[settings] Settings saved", toSave);
     log("TRACE", "[settings] saveSettings exit");
   } catch (e) {
     log("ERROR", "[settings] saveSettings error", e);
@@ -256,6 +182,18 @@ const _origSetSetting = setSetting;
 const _origSetSettings = setSettings;
 export async function setSettingAndSave(key, value) {
   log("TRACE", "[settings] setSettingAndSave entry", { key, value });
+
+  // Do not allow saving forced keys
+  const forceMode = typeof window !== "undefined" &&
+    window.SCENE_DESIGNER_FORCE === true &&
+    window.SCENE_DESIGNER_FORCE_SETTINGS &&
+    typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
+  if (forceMode && key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
+    log("WARN", `[settings] setSettingAndSave: Attempted to save forced setting '${key}'; ignored.`);
+    setLogLevel(window.SCENE_DESIGNER_FORCE_SETTINGS.DEBUG_LOG_LEVEL || "SILENT");
+    return;
+  }
+
   if (key === "DEBUG_LOG_LEVEL" && typeof value === "string") {
     value = normalizeLogLevel(value);
     setLogLevel(value); // <--- IMMEDIATE reconfiguration!
@@ -274,6 +212,21 @@ export async function setSettingAndSave(key, value) {
 }
 export async function setSettingsAndSave(settingsObj) {
   log("TRACE", "[settings] setSettingsAndSave entry", settingsObj);
+
+  // Do not allow saving forced keys
+  const forceMode = typeof window !== "undefined" &&
+    window.SCENE_DESIGNER_FORCE === true &&
+    window.SCENE_DESIGNER_FORCE_SETTINGS &&
+    typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
+  if (forceMode) {
+    for (const key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
+      if (key in settingsObj) {
+        log("WARN", `[settings] setSettingsAndSave: Attempted to save forced setting '${key}'; ignored.`);
+        delete settingsObj[key];
+      }
+    }
+  }
+
   if ("DEBUG_LOG_LEVEL" in settingsObj && typeof settingsObj.DEBUG_LOG_LEVEL === "string") {
     settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevel(settingsObj.DEBUG_LOG_LEVEL);
     setLogLevel(settingsObj.DEBUG_LOG_LEVEL); // <--- IMMEDIATE reconfiguration!
