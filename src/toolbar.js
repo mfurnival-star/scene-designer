@@ -6,7 +6,7 @@
  * - Exports buildCanvasToolbarPanel for use as Golden Layout panel (CanvasToolbarPanel).
  * - Handles device image upload and server image select, wiring both to setImage().
  * - Device-uploaded image filename is NOT displayed in the UI; just a button triggers the file dialog.
- * - Adds shape (point, rectangle) at position controlled by shapeStartXPercent/shapeStartYPercent (as % of image/canvas).
+ * - Adds shape (point, rectangle, circle) at position controlled by shapeStartXPercent/shapeStartYPercent (as % of image/canvas).
  * - All ES module imports/exports, no window/global use.
  * - Toolbar scaling is controlled by the `toolbarUIScale` setting and updates live.
  * - Dependencies: log.js, state.js, shapes.js.
@@ -15,7 +15,7 @@
 
 import { log } from './log.js';
 import { setImage, getSetting, subscribe, addShape, AppState } from './state.js';
-import { makePointShape, makeRectShape } from './shapes.js';
+import { makePointShape, makeRectShape, makeCircleShape } from './shapes.js';
 
 // --- UI ELEMENT HELPERS ---
 
@@ -80,7 +80,7 @@ function getShapeStartXY() {
 /**
  * Golden Layout panel factory for CanvasToolbarPanel.
  * - Applies toolbar scaling from settings and listens for changes.
- * - Adds "Add Point" and "Add Rectangle" functionality (calls shapes.js factories).
+ * - Adds "Add Point", "Add Rectangle", "Add Circle" functionality (calls shapes.js factories).
  * @param {HTMLElement} rootElement
  * @param {Object} container - Golden Layout container
  */
@@ -204,7 +204,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     serverSelect.style.marginRight = "12px";
     bar.appendChild(serverSelect);
 
-    // --- Shape type dropdown (now supports rectangle) ---
+    // --- Shape type dropdown (now supports circle) ---
     const shapeDropdown = createToolbarDropdown({
       id: "toolbar-shape-type",
       options: [
@@ -244,14 +244,23 @@ export function buildCanvasToolbarPanel(rootElement, container) {
           }
           addShape(rect);
           log("INFO", "[toolbar] Added rectangle shape via shapes.js", rect);
+        } else if (shapeType === "circle") {
+          // Use shapes.js factory for circle
+          const circle = makeCircleShape(x, y);
+          if (AppState.konvaLayer) {
+            AppState.konvaLayer.add(circle);
+            AppState.konvaLayer.draw();
+          }
+          addShape(circle);
+          log("INFO", "[toolbar] Added circle shape via shapes.js", circle);
         } else {
-          log("WARN", "[toolbar] Only Point/Rectangle shape add is implemented yet.");
+          log("WARN", "[toolbar] Only Point/Rectangle/Circle shape add is implemented.");
         }
       }
     });
     bar.appendChild(addBtn);
 
-    log("INFO", "[toolbar] CanvasToolbarPanel UI rendered (Upload button, server select, shape dropdown, add w/point/rect support)");
+    log("INFO", "[toolbar] CanvasToolbarPanel UI rendered (Upload button, server select, shape dropdown, add w/point/rect/circle support)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
@@ -310,4 +319,3 @@ if (typeof document !== "undefined" && !document.getElementById('sd-toolbar-styl
   `;
   document.head.appendChild(style);
 }
-

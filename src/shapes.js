@@ -181,4 +181,60 @@ export function makeRectShape(x, y, w, h) {
   return rect;
 }
 
-// Future: makeCircleShape(x, y, r) to be added here.
+/**
+ * Factory: Create a circle shape (Konva.Circle) with selection, locking, and default radius/stroke/fill.
+ * @param {number} x - X position (center)
+ * @param {number} y - Y position (center)
+ * @param {number} [r] - Radius (from settings if not provided)
+ * @returns {Konva.Circle}
+ */
+export function makeCircleShape(x, y, r) {
+  log("TRACE", "[shapes] makeCircleShape entry", { x, y, r });
+
+  const radius = Number(r) || Number(getSetting("defaultCircleRadius")) || 15;
+  const stroke = getSetting("defaultStrokeColor") || "#000";
+  const fill = getSetting("defaultFillColor") || "#0000";
+
+  const circle = new Konva.Circle({
+    x: x,
+    y: y,
+    radius: radius,
+    stroke,
+    strokeWidth: 1,
+    fill,
+    draggable: true
+  });
+
+  circle._type = "circle";
+  circle._label = "Circle" + (AppState.shapes.filter(s => s._type === 'circle').length + 1);
+  circle.locked = false;
+
+  // Selection/highlight logic for transformer
+  circle.showSelection = function (isSelected) {
+    // No custom highlight, use transformer anchors
+  };
+
+  // Color sampling hook (center pixel)
+  circle.getSampleCoords = function () {
+    return {
+      x: Math.round(circle.x()),
+      y: Math.round(circle.y())
+    };
+  };
+
+  // Cursor feedback
+  circle.on('mouseenter', () => {
+    if (AppState.konvaStage && AppState.konvaStage.container())
+      AppState.konvaStage.container().style.cursor = 'move';
+  });
+  circle.on('mouseleave', () => {
+    if (AppState.konvaStage && AppState.konvaStage.container())
+      AppState.konvaStage.container().style.cursor = '';
+  });
+
+  attachSelectionHandlers(circle);
+
+  log("TRACE", "[shapes] makeCircleShape exit", circle);
+  return circle;
+}
+
