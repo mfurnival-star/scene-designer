@@ -258,6 +258,8 @@ export async function setSettingAndSave(key, value) {
   log("TRACE", "[settings] setSettingAndSave entry", { key, value });
   if (key === "DEBUG_LOG_LEVEL" && typeof value === "string") {
     value = normalizeLogLevel(value);
+    setLogLevel(value); // <--- IMMEDIATE reconfiguration!
+    log("DEBUG", "[settings] setSettingAndSave: setLogLevel called immediately", value);
   }
   const prev = getSetting(key);
   _origSetSetting(key, value);
@@ -274,6 +276,8 @@ export async function setSettingsAndSave(settingsObj) {
   log("TRACE", "[settings] setSettingsAndSave entry", settingsObj);
   if ("DEBUG_LOG_LEVEL" in settingsObj && typeof settingsObj.DEBUG_LOG_LEVEL === "string") {
     settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevel(settingsObj.DEBUG_LOG_LEVEL);
+    setLogLevel(settingsObj.DEBUG_LOG_LEVEL); // <--- IMMEDIATE reconfiguration!
+    log("DEBUG", "[settings] setSettingsAndSave: setLogLevel called immediately", settingsObj.DEBUG_LOG_LEVEL);
   }
   _origSetSettings(settingsObj);
   log("DEBUG", "[settings] setSettingsAndSave: after setSettings", AppState.settings);
@@ -440,6 +444,8 @@ export function buildSettingsPanel(rootElement, container) {
               let v = ev.value;
               if (key === "DEBUG_LOG_LEVEL" && typeof v === "string") {
                 v = normalizeLogLevel(v);
+                setLogLevel(v); // <--- IMMEDIATE reconfiguration for select as well
+                log("DEBUG", "[settings] Tweakpane onChange: setLogLevel called immediately", v);
               }
               settingsPOJO[key] = v;
               setSettingAndSave(key, v);
@@ -490,4 +496,3 @@ export function buildSettingsPanel(rootElement, container) {
     throw e;
   }
 }
-
