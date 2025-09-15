@@ -64,12 +64,20 @@ export const settingsRegistry = [
     default: "fit"
   },
   { key: "canvasResponsive", label: "Responsive: Resize on Window Change", type: "boolean", default: true },
+  // --- The real debug log level select ---
   {
     key: "DEBUG_LOG_LEVEL",
     label: "Debug: Log Level (DIAGNOSTIC)",
     type: "select",
     options: LOG_LEVELS.map(l => ({ value: l.num, label: l.label })),
     default: 0 // SILENT
+  },
+  // --- Diagnostic: store the raw value passed from Tweakpane for log level select ---
+  {
+    key: "DEBUG_LOG_LEVEL_RAW",
+    label: "[DIAG] Debug Log Level RAW Value",
+    type: "text",
+    default: ""
   },
   {
     key: "LOG_OUTPUT_DEST",
@@ -222,6 +230,8 @@ export async function setSettingAndSave(key, value) {
   let valToSet = value;
   if (key === "DEBUG_LOG_LEVEL") {
     log("TRACE", "[settings] setSettingAndSave DEBUG_LOG_LEVEL incoming", value, typeof value);
+    // Store the raw value for diagnostics
+    _origSetSetting("DEBUG_LOG_LEVEL_RAW", value);
     valToSet = normalizeLogLevelNum(value);
     log("TRACE", "[settings] setSettingAndSave DEBUG_LOG_LEVEL normalized", valToSet, typeof valToSet);
     setLogLevelByNum(valToSet);
@@ -249,6 +259,8 @@ export async function setSettingsAndSave(settingsObj) {
   }
   if ("DEBUG_LOG_LEVEL" in settingsObj) {
     log("TRACE", "[settings] setSettingsAndSave DEBUG_LOG_LEVEL incoming", settingsObj.DEBUG_LOG_LEVEL, typeof settingsObj.DEBUG_LOG_LEVEL);
+    // Store the raw value for diagnostics
+    _origSetSetting("DEBUG_LOG_LEVEL_RAW", settingsObj.DEBUG_LOG_LEVEL);
     settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevelNum(settingsObj.DEBUG_LOG_LEVEL);
     log("TRACE", "[settings] setSettingsAndSave DEBUG_LOG_LEVEL normalized", settingsObj.DEBUG_LOG_LEVEL, typeof settingsObj.DEBUG_LOG_LEVEL);
     setLogLevelByNum(settingsObj.DEBUG_LOG_LEVEL);
