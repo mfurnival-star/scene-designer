@@ -13,7 +13,7 @@
 
 import Konva from 'konva';
 import { log } from './log.js';
-import { attachShapeEvents } from './selection.js';
+import { attachSelectionHandlers } from './selection.js';
 
 /**
  * Create a Point shape (crosshair, halo, invisible hit area for easy selection/drag)
@@ -94,7 +94,7 @@ export function makePointShape(x, y) {
     selHalo.visible(isSelected);
   };
 
-  attachShapeEvents(group);
+  attachSelectionHandlers(group);
 
   log("TRACE", "[shapes] makePointShape exit", group);
   return group;
@@ -124,7 +124,7 @@ export function makeRectShape(x, y, w, h) {
   rect._label = "Rectangle";
   rect.locked = false;
 
-  attachShapeEvents(rect);
+  attachSelectionHandlers(rect);
 
   log("TRACE", "[shapes] makeRectShape exit", rect);
   return rect;
@@ -152,8 +152,9 @@ export function makeCircleShape(x, y, r) {
   circle._label = "Circle";
   circle.locked = false;
 
-  attachShapeEvents(circle);
+  attachSelectionHandlers(circle);
 
   log("TRACE", "[shapes] makeCircleShape exit", circle);
   return circle;
 }
+
