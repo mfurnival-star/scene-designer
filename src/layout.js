@@ -22,13 +22,12 @@ import { buildSettingsPanel, loadSettings } from './settings.js';
 import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
 import { AppState, getSetting, setSetting, subscribe } from './state.js';
 import { log } from './log.js';
-import { setSettingAndSave } from './settings.js'; // Correct, no unnecessary aliasing
+import { setSettingAndSave } from './settings.js';
 
 log("INFO", "[layout] layout.js module loaded and ready!");
 
 // Track layout instance and ErrorLog stack item
 let layout = null;
-let errorLogStackItem = null;
 
 /**
  * Returns true if Error Log panel is present in layout.
@@ -60,7 +59,21 @@ function findErrorLogStackItem() {
     }
     return null;
   };
-  return traverse(layout.rootItem);
+  return traverse(layout.rootItem?.contentItems?.[0]);
+}
+
+/**
+ * Find the top-level column below root (the only child).
+ */
+function getTopLevelColumn() {
+  if (!layout || !layout.rootItem) return null;
+  const firstChild = layout.rootItem.contentItems?.[0];
+  if (firstChild?.type === "column") return firstChild;
+  if (firstChild?.type === "row") {
+    // Should never happen after initial config, but for safety, wrap in column if needed
+    return null;
+  }
+  return null;
 }
 
 /**
@@ -76,33 +89,17 @@ export function showErrorLogPanel() {
     log("INFO", "[layout] showErrorLogPanel: already open, skipping");
     return;
   }
-  // Add as last child in column (full width at bottom)
-  const root = layout.rootItem;
-  // If root is a row, wrap in column
-  let column = root;
-  if (root.type === "row") {
-    // Convert to column with existing row and new error log
-    layout.root.replaceChild(root, layout.createContentItem({
-      type: 'column',
-      content: [
-        root.config,
-        {
-          type: 'component',
-          componentName: 'ErrorLogPanel',
-          title: 'Error Log',
-          height: 18
-        }
-      ]
-    }));
-  } else if (root.type === "column") {
-    // Add to bottom of column
-    layout.root.addChild({
-      type: 'component',
-      componentName: 'ErrorLogPanel',
-      title: 'Error Log',
-      height: 18
-    });
+  const col = getTopLevelColumn();
+  if (!col) {
+    log("ERROR", "[layout] showErrorLogPanel: top-level column not found or not a column");
+    return;
   }
+  col.addChild({
+    type: 'component',
+    componentName: 'ErrorLogPanel',
+    title: 'Error Log',
+    height: 18
+  });
   log("INFO", "[layout] ErrorLogPanel added to layout (showErrorLogPanel)");
 }
 
@@ -140,16 +137,7 @@ subscribe((state, details) => {
   }
 });
 
-function logEntryExit(fn, name) {
-  return function(...args) {
-    log("TRACE", `[layout] ${name} entry`, ...args);
-    const result = fn.apply(this, args);
-    log("TRACE", `[layout] ${name} exit`, result);
-    return result;
-  };
-}
-
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   log("TRACE", "[layout] DOMContentLoaded handler entry");
   log("INFO", "[layout] DOMContentLoaded fired");
 
@@ -162,11 +150,10 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // Load settings once before layout, to ensure correct panel config
+  // Load settings asynchronously before building layout, so we get the correct showErrorLogPanel value
   let showErrorLogPanelSetting = true;
   try {
-    // Import and call loadSettings from settings.js for proper persistence
-    loadSettings();
+    await loadSettings();
     showErrorLogPanelSetting = getSetting("showErrorLogPanel") !== false;
     log("DEBUG", "[layout] Loaded settings, showErrorLogPanel:", showErrorLogPanelSetting);
   } catch (e) {
@@ -222,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
     log("INFO", "[layout] About to create GoldenLayout instance...");
     layout = new GoldenLayout(
       panelLayout,
-      glRoot // <--- container is second argument!
+      glRoot
     );
     log("INFO", "[layout] GoldenLayout instance created.");
   } catch (e) {
@@ -258,7 +245,6 @@ document.addEventListener("DOMContentLoaded", () => {
       log("TRACE", "[layout] CanvasPanel factory exit");
     });
 
-    // === FIX: Delay SettingsPanel construction until visible ===
     layout.registerComponent('SettingsPanel', (container) => {
       log("TRACE", "[layout] SettingsPanel factory entry", {
         title: container?.title,
@@ -268,7 +254,6 @@ document.addEventListener("DOMContentLoaded", () => {
         title: container?.title,
         componentName: container?.componentName
       });
-      // Golden Layout: only build panel after it's visible/attached
       container.on('open', () => {
         log("TRACE", "[layout] SettingsPanel container 'open' event");
         buildSettingsPanel(container.element, container);
@@ -287,11 +272,9 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       buildErrorLogPanel(container.element, container);
 
-      // Listen for panel close/destroy and update the setting (so that Settings UI stays in sync)
       if (typeof container.on === "function") {
         container.on('destroy', () => {
           log("INFO", "[layout] ErrorLogPanel destroy event – updating setting to false");
-          // Only update if setting is still true (avoid infinite loop)
           if (getSetting("showErrorLogPanel")) {
             setSettingAndSave("showErrorLogPanel", false);
           }
@@ -300,7 +283,6 @@ document.addEventListener("DOMContentLoaded", () => {
       log("TRACE", "[layout] ErrorLogPanel factory exit");
     });
 
-    // Register log sink so all log messages go to ErrorLogPanel if open
     registerErrorLogSink();
 
     log("DEBUG", "[layout] All panel factories registered, log sink registered");
@@ -325,5 +307,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Export control functions for settings.js
 export { isErrorLogPanelOpen };
-
 
