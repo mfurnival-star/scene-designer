@@ -35,7 +35,7 @@ function usage() {
 Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
 
   prod     Build, inject settings, deploy to nginx (default)
-  dev      Build, inject settings, start dev server (does NOT deploy to /var/www)
+  dev      Just git add/commit/push, then start dev server (npm run dev)
 
 Environment variables (all optional, defaults shown):
 
@@ -62,6 +62,14 @@ function validate_log_level() {
       exit 1
       ;;
   esac
+}
+
+function git_commit_push() {
+  echo "[$DATESTAMP] === Git add/commit/push ==="
+  cd "$PROJECT_DIR"
+  git add .
+  git commit -m "Deploy at $DATESTAMP"
+  git push
 }
 
 function build_project() {
@@ -111,14 +119,6 @@ function inject_log_settings() {
   grep 'DEBUG_LOG_LEVEL\|LOG_OUTPUT_DEST\|externalLogServerURL\|externalLogServerToken' "$INDEX_HTML" || true
 }
 
-function git_commit_push() {
-  echo "[$DATESTAMP] === Git add/commit/push ==="
-  cd "$PROJECT_DIR"
-  git add .
-  git commit -m "Deploy at $DATESTAMP"
-  git push
-}
-
 function deploy_to_prod() {
   echo "[$DATESTAMP] === Deploying to $DEPLOY_DIR ==="
   sudo rm -f "$DEPLOY_DIR/index.html"
@@ -154,14 +154,13 @@ EOF
 # --- Main logic ---
 if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then usage; fi
 validate_log_level
-build_project
-prepare_index_html
-inject_log_settings
 git_commit_push
 
 if [[ "$MODE" == "prod" ]]; then
+  build_project
+  prepare_index_html
+  inject_log_settings
   deploy_to_prod
 else
   start_dev_server
 fi
-
