@@ -24,8 +24,6 @@ import { AppState, getSetting, setSetting, subscribe } from './state.js';
 import { log } from './log.js';
 import { setSettingAndSave } from './settings.js';
 
-// (Removed top-level INFO log to avoid logging before settings and log level are loaded.)
-
 // Track layout instance and ErrorLog stack item
 let layout = null;
 
@@ -138,15 +136,11 @@ subscribe((state, details) => {
 });
 
 document.addEventListener("DOMContentLoaded", async () => {
-  log("TRACE", "[layout] DOMContentLoaded handler entry");
-  log("INFO", "[layout] DOMContentLoaded fired");
-
+  // --------- DEFER ALL LOGGING UNTIL SETTINGS ARE LOADED ----------
   const glRoot = document.getElementById("gl-root");
-  log("INFO", "[layout] glRoot found?", !!glRoot, glRoot);
 
   if (!glRoot) {
     log("ERROR", "[layout] #gl-root not found!");
-    log("TRACE", "[layout] DOMContentLoaded handler exit (no glRoot)");
     return;
   }
 
@@ -155,7 +149,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await loadSettings();
     showErrorLogPanelSetting = getSetting("showErrorLogPanel") !== false;
+    // Now safe to log at INFO/DEBUG/TRACE after log level is set
     log("DEBUG", "[layout] Loaded settings, showErrorLogPanel:", showErrorLogPanelSetting);
+    log("INFO", "[layout] DOMContentLoaded fired");
+    log("INFO", "[layout] glRoot found?", !!glRoot, glRoot);
   } catch (e) {
     log("ERROR", "[layout] Error loading settings, defaulting showErrorLogPanel to true", e);
     showErrorLogPanelSetting = true;
@@ -214,7 +211,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     log("INFO", "[layout] GoldenLayout instance created.");
   } catch (e) {
     log("ERROR", "[layout] ERROR while creating GoldenLayout instance:", e?.message || e);
-    log("TRACE", "[layout] DOMContentLoaded handler exit (GoldenLayout error)");
     throw e;
   }
 
@@ -288,7 +284,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     log("DEBUG", "[layout] All panel factories registered, log sink registered");
   } catch (e) {
     log("ERROR", "[layout] ERROR in registerComponent:", e?.message || e);
-    log("TRACE", "[layout] DOMContentLoaded handler exit (registerComponent error)");
     throw e;
   }
 
@@ -298,13 +293,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     log("INFO", "[layout] layout.init called, done.");
   } catch (e) {
     log("ERROR", "[layout] ERROR during layout.init:", e?.message || e);
-    log("TRACE", "[layout] DOMContentLoaded handler exit (layout.init error)");
     throw e;
   }
-
-  log("TRACE", "[layout] DOMContentLoaded handler exit");
 });
 
 // Export control functions for settings.js
 export { isErrorLogPanelOpen };
+
 
