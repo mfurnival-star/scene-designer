@@ -64,6 +64,16 @@ export const settingsRegistry = [
     default: "fit"
   },
   { key: "canvasResponsive", label: "Responsive: Resize on Window Change", type: "boolean", default: true },
+  // --- Toolbar UI scale setting (NEW) ---
+  {
+    key: "toolbarUIScale",
+    label: "Toolbar UI Scale",
+    type: "number",
+    default: 1,
+    min: 0.5,
+    max: 2,
+    step: 0.05
+  },
   // --- The log level select (LABEL values and default) ---
   {
     key: "DEBUG_LOG_LEVEL",
