@@ -1,9 +1,10 @@
 /**
  * log.js
  * -------------------------------------------------------------------
- * Centralized, pluggable logging system for Scene Designer (ESM only).
+ * Centralized, pluggable logging system for Scene Designer (ESM only, numeric log levels).
  * - All logs routed through log() at appropriate level/tag.
  * - Supports runtime config of level, destination, server, and sinks.
+ * - Log level is an integer (0=SILENT, 1=ERROR, ... 5=TRACE), no string compat.
  * - Pluggable log sinks (console, server, in-app panels, etc).
  * - Safe serialization (handles cyclic/Error objects).
  * - Zero use of window.*, no globals except optional debug attach.
@@ -19,14 +20,19 @@
 export const LOG_LEVELS = {
   SILENT: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
 };
+export const LOG_LEVEL_NUMS = [0,1,2,3,4,5];
+export const LOG_LEVEL_NUM_TO_NAME = ["SILENT", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
+export const LOG_LEVEL_NAME_TO_NUM = {
+  "SILENT": 0, "ERROR": 1, "WARN": 2, "INFO": 3, "DEBUG": 4, "TRACE": 5
+};
 
 const LOGGER_INSTANCE_ID = Math.random().toString(36).slice(2) + "-" + Date.now();
-let curLogLevel = "INFO";
+let curLogLevelNum = 3; // Default: INFO
 let logDest = "console"; // "console", "server", or "both"
 let externalLogServerURL = "";
 let externalLogServerToken = "";
 
-// Pluggable sinks: each receives (level, ...args)
+// Pluggable sinks: each receives (levelNum, ...args)
 const logSinks = [];
 
 function printDiagnosticNoise(msg, ...args) {
@@ -36,21 +42,21 @@ function printDiagnosticNoise(msg, ...args) {
   }
 }
 
-// DIAGNOSTIC: Attach instance info to window for verification
+// DIAGNOSTIC: Attach instance info to window for verification (optional, dev only)
 if (typeof window !== "undefined") {
   window.__loggerInstanceIds = window.__loggerInstanceIds || [];
   window.__loggerInstanceIds.push(LOGGER_INSTANCE_ID);
-  window.__lastSetLogLevel = curLogLevel;
+  window.__lastSetLogLevel = curLogLevelNum;
   window.__setLogLevelCalls = window.__setLogLevelCalls || [];
   window.__getLogLevelCalls = window.__getLogLevelCalls || [];
   window.__lastLogCalls = window.__lastLogCalls || [];
   window.__logDestHistory = window.__logDestHistory || [];
   window.__logLevelHistory = window.__logLevelHistory || [];
-  printDiagnosticNoise("Logger module loaded", { curLogLevel, logDest });
+  printDiagnosticNoise("Logger module loaded", { curLogLevelNum, logDest });
 }
 
 /**
- * Register a log sink (fn(level, ...args) or {sinkLog(level, ...args)})
+ * Register a log sink (fn(levelNum, ...args) or {sinkLog(levelNum, ...args)})
  */
 export function registerLogSink(sink) {
   printDiagnosticNoise("registerLogSink called", sink);
@@ -61,25 +67,28 @@ export function registerLogSink(sink) {
 }
 
 /**
- * Set the log level at runtime.
- * @param {"SILENT"|"ERROR"|"WARN"|"INFO"|"DEBUG"|"TRACE"} level
+ * Set the log level at runtime using a number (0–5).
+ * @param {number} num
  */
-export function setLogLevel(level) {
-  const prev = curLogLevel;
-  curLogLevel = normalizeLevel(level);
+export function setLogLevel(num) {
+  const prev = curLogLevelNum;
+  curLogLevelNum = normalizeLevelNum(num);
   if (typeof window !== "undefined") {
-    window.__lastSetLogLevel = curLogLevel;
-    window.__setLogLevelCalls.push({ new: curLogLevel, prev, at: Date.now(), instance: LOGGER_INSTANCE_ID });
-    window.__logLevelHistory.push(curLogLevel);
-    printDiagnosticNoise("setLogLevel called", { prev, new: curLogLevel, instance: LOGGER_INSTANCE_ID });
+    window.__lastSetLogLevel = curLogLevelNum;
+    window.__setLogLevelCalls.push({ new: curLogLevelNum, prev, at: Date.now(), instance: LOGGER_INSTANCE_ID });
+    window.__logLevelHistory.push(curLogLevelNum);
+    printDiagnosticNoise("setLogLevel called", { prev, new: curLogLevelNum, instance: LOGGER_INSTANCE_ID });
   }
 }
+/**
+ * Get current log level as number (0–5).
+ */
 export function getLogLevel() {
   if (typeof window !== "undefined") {
-    window.__getLogLevelCalls.push({ at: Date.now(), level: curLogLevel, instance: LOGGER_INSTANCE_ID });
-    printDiagnosticNoise("getLogLevel returned", curLogLevel);
+    window.__getLogLevelCalls.push({ at: Date.now(), level: curLogLevelNum, instance: LOGGER_INSTANCE_ID });
+    printDiagnosticNoise("getLogLevel returned", curLogLevelNum);
   }
-  return curLogLevel;
+  return curLogLevelNum;
 }
 
 /**
@@ -112,33 +121,31 @@ export function setLogServerToken(token) {
 
 /**
  * Configure all logging params at once (used by settings.js).
+ * Accepts log level as number (0–5).
  */
 export function configureLogging({ level, dest, serverURL, token }) {
   printDiagnosticNoise("configureLogging called", { level, dest, serverURL, token });
-  if (level) setLogLevel(level);
+  if (typeof level === "number") setLogLevel(level);
   if (dest) setLogDestination(dest);
   if (serverURL) setLogServerURL(serverURL);
   if (token) setLogServerToken(token);
 }
 
 /**
- * Normalize log level string to UPPERCASE and only allow valid levels.
- * Only "SILENT" disables logging. "OFF" is not recognized at all.
+ * Normalize log level to valid number (0–5).
  */
-function normalizeLevel(level) {
-  if (!level) return "INFO";
-  const l = String(level).toUpperCase();
-  if (l in LOG_LEVELS) return l;
-  // Default fallback
-  return "INFO";
+function normalizeLevelNum(n) {
+  if (typeof n === "number" && LOG_LEVEL_NUMS.includes(n)) return n;
+  // Allow string name for completeness/debug, but never store
+  if (typeof n === "string" && n in LOG_LEVEL_NAME_TO_NUM) return LOG_LEVEL_NAME_TO_NUM[n];
+  return 3; // INFO as default
 }
 
 /**
- * Map log level string to numeric value.
+ * Map log level number to string name.
  */
-function levelNum(level) {
-  const l = normalizeLevel(level);
-  return LOG_LEVELS[l] ?? 99;
+function levelName(num) {
+  return LOG_LEVEL_NUM_TO_NAME[num] ?? "INFO";
 }
 
 /**
@@ -201,49 +208,48 @@ function safeLogArg(arg) {
 
 /**
  * Central log function (all modules must use this!).
- * @param {"ERROR"|"WARN"|"INFO"|"DEBUG"|"TRACE"} level
+ * @param {number} levelNum - Numeric log level (0–5)
  * @param  {...any} args
  */
-export function log(level, ...args) {
+export function log(levelNum, ...args) {
   // DIAGNOSTIC: record every log call and state at time of log
   if (typeof window !== "undefined") {
     window.__lastLogCalls.push({
-      at: Date.now(), level, args, curLogLevel, logDest, instance: LOGGER_INSTANCE_ID
+      at: Date.now(), levelNum, args, curLogLevelNum, logDest, instance: LOGGER_INSTANCE_ID
     });
     if (window.__lastLogCalls.length > 200) window.__lastLogCalls.shift();
   }
 
-  const msgLevelNum = levelNum(level);
-  const curLevelNum = levelNum(curLogLevel);
+  const msgLevelNum = normalizeLevelNum(levelNum);
+  const curLevelNum = curLogLevelNum;
 
   // DIAGNOSTIC: always print log attempt
-  printDiagnosticNoise(`log() called`, { level, args, curLogLevel, msgLevelNum, curLevelNum, logDest, instance: LOGGER_INSTANCE_ID });
+  printDiagnosticNoise(`log() called`, { levelNum, args, curLogLevelNum, msgLevelNum, curLevelNum, logDest, instance: LOGGER_INSTANCE_ID });
 
   if (msgLevelNum > curLevelNum) return;
 
   // Console output
   if (logDest === "console" || logDest === "both") {
-    const lvl = String(level).toUpperCase();
+    const lvlName = levelName(msgLevelNum);
     const safeArgs = args.map(safeLogArg);
     // Map to console methods
     if (typeof console !== "undefined") {
-      if (lvl === "ERROR" && console.error) console.error(`[log][${LOGGER_INSTANCE_ID}]`, level, ...safeArgs);
-      else if (lvl === "WARN" && console.warn) console.warn(`[log][${LOGGER_INSTANCE_ID}]`, level, ...safeArgs);
-      else if (lvl === "INFO" && console.info) console.info(`[log][${LOGGER_INSTANCE_ID}]`, level, ...safeArgs);
-      else if (lvl === "DEBUG" && console.debug) console.debug(`[log][${LOGGER_INSTANCE_ID}]`, level, ...safeArgs);
-      else if (lvl === "TRACE" && console.debug) console.debug(`[log][${LOGGER_INSTANCE_ID}]`, level, ...safeArgs);
-      else if (console.log) console.log(`[log][${LOGGER_INSTANCE_ID}]`, level, ...safeArgs);
+      if (msgLevelNum === 1 && console.error) console.error(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      else if (msgLevelNum === 2 && console.warn) console.warn(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      else if (msgLevelNum === 3 && console.info) console.info(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      else if ((msgLevelNum === 4 || msgLevelNum === 5) && console.debug) console.debug(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      else if (console.log) console.log(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
     }
   }
   // Server streaming
   if ((logDest === "server" || logDest === "both") && externalLogServerURL) {
-    logStream(level, ...args);
+    logStream(msgLevelNum, ...args);
   }
   // Panel sinks
   for (const sink of logSinks) {
     try {
-      if (typeof sink === "function") sink(level, ...args);
-      else if (sink && typeof sink.sinkLog === "function") sink.sinkLog(level, ...args);
+      if (typeof sink === "function") sink(msgLevelNum, ...args);
+      else if (sink && typeof sink.sinkLog === "function") sink.sinkLog(msgLevelNum, ...args);
     } catch (e) {
       if (typeof console !== "undefined" && console.warn) {
         console.warn(`[log][${LOGGER_INSTANCE_ID}]`, "Log sink error", e);
@@ -255,11 +261,12 @@ export function log(level, ...args) {
 /**
  * Async log streaming to external server (safe serialization).
  */
-export async function logStream(level, ...args) {
+export async function logStream(levelNum, ...args) {
   if (!externalLogServerURL) return;
   try {
     const payload = {
-      level,
+      level: levelNum,
+      levelName: levelName(levelNum),
       message: args.map(safeStringify).join(" "),
       timestamp: (new Date()).toISOString(),
       page: typeof location === "object" && location.pathname,
@@ -275,7 +282,7 @@ export async function logStream(level, ...args) {
     printDiagnosticNoise("logStream sent to server", payload);
   } catch (e) {
     if (typeof console !== "undefined" && console.error) {
-      console.error(`[log][${LOGGER_INSTANCE_ID}]`, level, "Failed to stream log", ...args, e);
+      console.error(`[log][${LOGGER_INSTANCE_ID}]`, levelName(levelNum), "Failed to stream log", ...args, e);
     }
   }
 }
@@ -288,7 +295,7 @@ export function reconfigureLoggingFromSettings({ level, dest, serverURL, token }
   configureLogging({ level, dest, serverURL, token });
 }
 
-// Attach to window for diagnostics and debugging
+// Attach to window for diagnostics and debugging (optional, dev only)
 if (typeof window !== "undefined") {
   window.log = log;
   window.setLogLevel = setLogLevel;
@@ -302,3 +309,4 @@ if (typeof window !== "undefined") {
     log, setLogLevel, getLogLevel, setLogDestination, setLogServerURL, setLogServerToken, LOGGER_INSTANCE_ID
   });
 }
+

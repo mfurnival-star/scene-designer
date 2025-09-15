@@ -134,6 +134,11 @@ function mergeSettingsWithForce(stored) {
 
 function normalizeLogLevelNum(val) {
   if (typeof val === "number" && LOG_LEVEL_NUMS.includes(val)) return val;
+  // Handle string numbers ("0", "1"...) from UI/select/serialization
+  if (typeof val === "string" && /^\d+$/.test(val)) {
+    const num = Number(val);
+    if (LOG_LEVEL_NUMS.includes(num)) return num;
+  }
   // Allow string names for force/debugging, but always convert to number
   if (typeof val === "string" && val in LOG_LEVEL_NAME_TO_NUM) return LOG_LEVEL_NAME_TO_NUM[val];
   return 0; // SILENT
@@ -211,6 +216,7 @@ export async function setSettingAndSave(key, value) {
   }
 
   if (key === "DEBUG_LOG_LEVEL") {
+    value = Number(value); // <-- COERCE TO NUMBER BEFORE NORMALIZATION
     value = normalizeLogLevelNum(value);
     setLogLevelByNum(value); // <--- IMMEDIATE reconfiguration!
     log("DEBUG", "[settings] setSettingAndSave: setLogLevelByNum called immediately", value);
@@ -244,6 +250,7 @@ export async function setSettingsAndSave(settingsObj) {
   }
 
   if ("DEBUG_LOG_LEVEL" in settingsObj) {
+    settingsObj.DEBUG_LOG_LEVEL = Number(settingsObj.DEBUG_LOG_LEVEL); // <-- COERCE TO NUMBER BEFORE NORMALIZATION
     settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevelNum(settingsObj.DEBUG_LOG_LEVEL);
     setLogLevelByNum(settingsObj.DEBUG_LOG_LEVEL); // <--- IMMEDIATE reconfiguration!
     log("DEBUG", "[settings] setSettingsAndSave: setLogLevelByNum called immediately", settingsObj.DEBUG_LOG_LEVEL);
@@ -415,6 +422,7 @@ export function buildSettingsPanel(rootElement, container) {
             }).on('change', ev => {
               let v = ev.value;
               if (key === "DEBUG_LOG_LEVEL") {
+                v = Number(ev.value); // <-- COERCE TO NUMBER
                 v = normalizeLogLevelNum(v);
                 setLogLevelByNum(v); // <--- IMMEDIATE reconfiguration for select as well
                 log("DEBUG", "[settings] Tweakpane onChange: setLogLevelByNum called immediately", v);
@@ -468,3 +476,4 @@ export function buildSettingsPanel(rootElement, container) {
     throw e;
   }
 }
+
