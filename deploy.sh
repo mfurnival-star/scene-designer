@@ -16,7 +16,7 @@ INDEX_HTML="$BUILD_DIR/index.html"
 DATESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
 MODE="${1:-prod}"
-shift || true
+if [[ $# -gt 0 ]]; then shift; fi
 
 INJECT_ERUDA="${INJECT_ERUDA:-0}"
 LOG_LEVEL="${LOG_LEVEL:-}"
@@ -46,7 +46,7 @@ function git_commit_push() {
   echo "[$DATESTAMP] === Git add/commit/push ==="
   cd "$PROJECT_DIR"
   git add .
-  git commit -m "Deploy at $DATESTAMP"
+  git commit -m "Deploy at $DATESTAMP" || true
   git push
 }
 
