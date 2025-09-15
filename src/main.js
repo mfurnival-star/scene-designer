@@ -21,7 +21,7 @@ if (typeof window !== "undefined") {
 
 // No legacy global code, no logToBox, no direct DOM mutation.
 // If you want to show a single "main.js executed!" message for legacy pages:
-log("INFO", "[main] main.js loaded and ready.");
+// (Removed to comply with log level policy – see Scene Designer Manifesto policy)
 
 // If classic index.html usage is detected, you may show a fallback message:
 const glRoot = document.getElementById("gl-root");

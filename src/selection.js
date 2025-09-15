@@ -159,7 +159,8 @@ export function getSelectedShape() {
 }
 
 // --- Self-test log ---
-log("INFO", "[selection] selection.js module loaded and ready.");
+// (Removed top-level INFO log to avoid logging before settings and log level are loaded.)
+// log("INFO", "[selection] selection.js module loaded and ready.");
 
 // Optionally attach to window for debugging (remove in production!)
 if (typeof window !== "undefined") {

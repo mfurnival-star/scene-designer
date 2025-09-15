@@ -24,7 +24,7 @@ import { AppState, getSetting, setSetting, subscribe } from './state.js';
 import { log } from './log.js';
 import { setSettingAndSave } from './settings.js';
 
-log("INFO", "[layout] layout.js module loaded and ready!");
+// (Removed top-level INFO log to avoid logging before settings and log level are loaded.)
 
 // Track layout instance and ErrorLog stack item
 let layout = null;
