@@ -11,6 +11,7 @@ layout.js
 errorlog.js
 main.js
 toolbar.js
+shapes.js
 ```
 
 ---
@@ -52,8 +53,13 @@ toolbar.js
 - **toolbar.js**  
   Modular toolbar UI element factory (button, dropdown, color swatch, text input), ESM only.
 
+- **shapes.js**  
+  Shape factory module:  
+  - Exports `makePointShape(x, y)`, `makeRectShape(x, y, w, h)`, `makeCircleShape(x, y, r)` (future).  
+  - Centralizes all Konva shape construction, selection logic, and property/event attachment.  
+  - Used by toolbar, canvas, sidebar, and all shape-creation features.
+
 ---
 **Instructions:**  
 Keep this file updated per SCENE_DESIGNER_MANIFESTO.md.
-
 
