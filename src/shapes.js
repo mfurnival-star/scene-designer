@@ -121,4 +121,64 @@ export function makePointShape(x, y) {
   return group;
 }
 
-// Future: makeRectShape, makeCircleShape, etc. to be added here.
+/**
+ * Factory: Create a rectangle shape (Konva.Rect) with selection, locking, and default size/stroke/fill.
+ * @param {number} x - X position (top-left)
+ * @param {number} y - Y position (top-left)
+ * @param {number} [w] - Width (from settings if not provided)
+ * @param {number} [h] - Height (from settings if not provided)
+ * @returns {Konva.Rect}
+ */
+export function makeRectShape(x, y, w, h) {
+  log("TRACE", "[shapes] makeRectShape entry", { x, y, w, h });
+
+  const width = Number(w) || Number(getSetting("defaultRectWidth")) || 50;
+  const height = Number(h) || Number(getSetting("defaultRectHeight")) || 30;
+  const stroke = getSetting("defaultStrokeColor") || "#000";
+  const fill = getSetting("defaultFillColor") || "#0000";
+
+  const rect = new Konva.Rect({
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    stroke,
+    strokeWidth: 1,
+    fill,
+    draggable: true
+  });
+
+  rect._type = "rect";
+  rect._label = "Rect" + (AppState.shapes.filter(s => s._type === 'rect').length + 1);
+  rect.locked = false;
+
+  // Selection/highlight logic for transformer
+  rect.showSelection = function (isSelected) {
+    // No custom highlight, use transformer anchors
+  };
+
+  // Color sampling hook (center pixel for now)
+  rect.getSampleCoords = function () {
+    return {
+      x: Math.round(rect.x() + rect.width() / 2),
+      y: Math.round(rect.y() + rect.height() / 2)
+    };
+  };
+
+  // Cursor feedback
+  rect.on('mouseenter', () => {
+    if (AppState.konvaStage && AppState.konvaStage.container())
+      AppState.konvaStage.container().style.cursor = 'move';
+  });
+  rect.on('mouseleave', () => {
+    if (AppState.konvaStage && AppState.konvaStage.container())
+      AppState.konvaStage.container().style.cursor = '';
+  });
+
+  attachSelectionHandlers(rect);
+
+  log("TRACE", "[shapes] makeRectShape exit", rect);
+  return rect;
+}
+
+// Future: makeCircleShape(x, y, r) to be added here.
