@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # Usage:
 #   ./deploy.sh [prod|dev] [env overrides...]
-#   e.g. LOG_LEVEL=TRACE ./deploy.sh dev
+#   e.g. LOG_LEVEL="Trace (very verbose)" ./deploy.sh dev
 #        ./deploy.sh prod
 # ---------------------------------------------------------------------------
 
@@ -19,6 +19,7 @@ MODE="${1:-prod}"
 shift || true
 
 INJECT_ERUDA="${INJECT_ERUDA:-0}"
+LOG_LEVEL="${LOG_LEVEL:-}"
 
 function usage() {
   cat <<EOF
@@ -30,10 +31,12 @@ Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
 Environment variables:
 
   INJECT_ERUDA     1 to add Eruda debug console, 0 otherwise   [default: 0]
+  LOG_LEVEL        Force Scene Designer log level (e.g. "Silent", "Info", "Trace (very verbose)")
 
 Examples:
   INJECT_ERUDA=1 ./deploy.sh prod
   INJECT_ERUDA=1 ./deploy.sh dev
+  LOG_LEVEL="Trace (very verbose)" ./deploy.sh prod
 
 EOF
   exit 0
@@ -63,7 +66,6 @@ function prepare_index_html() {
 
 function inject_eruda() {
   echo "[$DATESTAMP] === (Re)inserting Eruda (if enabled) ==="
-  # Remove any previous Eruda injection (between the known comment and the end of head)
   sed -i '/<!-- BEGIN ERUDA -->/,/<!-- END ERUDA -->/d' "$INDEX_HTML"
   if [[ "$INJECT_ERUDA" == "1" ]]; then
     awk '
@@ -81,6 +83,32 @@ function inject_eruda() {
   fi
 }
 
+function inject_force_log_level() {
+  if [[ -n "$LOG_LEVEL" ]]; then
+    echo "[$DATESTAMP] === Injecting forced log level: $LOG_LEVEL ==="
+    # Remove any previous force-log-level blocks
+    sed -i '/<!-- BEGIN FORCE LOG LEVEL -->/,/<!-- END FORCE LOG LEVEL -->/d' "$INDEX_HTML"
+    # Insert just before </head>
+    awk -v LOG_LEVEL="$LOG_LEVEL" '
+      /<\/head>/ {
+        print "  <!-- BEGIN FORCE LOG LEVEL -->";
+        print "  <script>";
+        print "    window.SCENE_DESIGNER_FORCE = true;";
+        print "    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};";
+        print "    window.SCENE_DESIGNER_FORCE_SETTINGS[\"DEBUG_LOG_LEVEL\"] = \"" LOG_LEVEL "\";";
+        print "  </script>";
+        print "  <!-- END FORCE LOG LEVEL -->";
+      }
+      { print }
+    ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
+    echo "[$DATESTAMP] === Forced log level injected: $LOG_LEVEL ==="
+  else
+    # Remove any old force log level block if present
+    sed -i '/<!-- BEGIN FORCE LOG LEVEL -->/,/<!-- END FORCE LOG LEVEL -->/d' "$INDEX_HTML"
+    echo "[$DATESTAMP] === No forced log level requested. ==="
+  fi
+}
+
 function deploy_to_prod() {
   echo "[$DATESTAMP] === Deploying to $DEPLOY_DIR ==="
   sudo rm -f "$DEPLOY_DIR/index.html"
@@ -95,7 +123,6 @@ function deploy_to_prod() {
 function start_dev_server() {
   echo "[$DATESTAMP] === Starting DEV SERVER (npm run dev) ==="
   export INJECT_ERUDA="$INJECT_ERUDA"
-  # Optionally inject into .env for Vite/webpack
   cat > .env.local <<EOF
 VITE_INJECT_ERUDA=$INJECT_ERUDA
 EOF
@@ -111,6 +138,7 @@ if [[ "$MODE" == "prod" ]]; then
   build_project
   prepare_index_html
   inject_eruda
+  inject_force_log_level
   deploy_to_prod
 else
   start_dev_server
