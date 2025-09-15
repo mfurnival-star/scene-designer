@@ -2,17 +2,19 @@
  * toolbar.js
  * -----------------------------------------------------------
  * Scene Designer – Modular Toolbar UI Element Factory (ESM only)
- * - Exports helpers for creating toolbar UI elements (button, dropdown).
+ * - Exports helpers for toolbar UI elements (button, dropdown).
  * - Exports buildCanvasToolbarPanel for use as Golden Layout panel (CanvasToolbarPanel).
  * - Handles device image upload and server image select, wiring both to setImage().
  * - Device-uploaded image filename is NOT displayed in the UI; just a button triggers the file dialog.
  * - Adds shape (point) at position controlled by shapeStartXPercent/shapeStartYPercent (as % of image/canvas).
+ * - Adds visible Konva point group (halo, crosshair, hit area) per prelayout logic.
  * - All ES module imports/exports, no window/global use.
  * - Toolbar scaling is controlled by the `toolbarUIScale` setting and updates live.
- * - Dependencies: log.js, state.js, settings.js.
+ * - Dependencies: log.js, state.js, Konva (as ES module).
  * -----------------------------------------------------------
  */
 
+import Konva from 'konva';
 import { log } from './log.js';
 import { setImage, getSetting, subscribe, addShape, AppState } from './state.js';
 
@@ -58,7 +60,6 @@ function getShapeStartXY() {
   const xPct = Number(getSetting('shapeStartXPercent')) || 50;
   const yPct = Number(getSetting('shapeStartYPercent')) || 50;
   let w = 0, h = 0;
-  // Try canvas (Konva) first, fallback to image, then default
   if (AppState.konvaStage) {
     w = AppState.konvaStage.width();
     h = AppState.konvaStage.height();
@@ -75,14 +76,104 @@ function getShapeStartXY() {
   return { x, y };
 }
 
+/**
+ * Make a visible, interactive "Point" Konva.Group as in shapes.js_prelayout.js.
+ * - Halo, crosshair, invisible hit area, selection halo, drag enabled.
+ */
+function makeKonvaPoint(x, y) {
+  // Use hardcoded values for now
+  const crossLen = 14;
+  const haloR = 12;
+  const hitR = 16;
+
+  const group = new Konva.Group({ x, y, draggable: true });
+
+  // Invisible hit area (for easy tap/drag)
+  const hitCircle = new Konva.Circle({
+    x: 0,
+    y: 0,
+    radius: hitR,
+    fill: "#fff",
+    opacity: 0,
+    listening: true
+  });
+
+  // Halo (faint circle for visibility/selection)
+  const halo = new Konva.Circle({
+    x: 0,
+    y: 0,
+    radius: haloR,
+    stroke: '#2176ff',
+    strokeWidth: 1.5,
+    opacity: 0.4,
+    listening: false
+  });
+
+  // Horizontal crosshair line
+  const crossH = new Konva.Line({
+    points: [-crossLen / 2, 0, crossLen / 2, 0],
+    stroke: '#2176ff',
+    strokeWidth: 2.5,
+    lineCap: 'round',
+    listening: false
+  });
+
+  // Vertical crosshair line
+  const crossV = new Konva.Line({
+    points: [0, -crossLen / 2, 0, crossLen / 2],
+    stroke: '#2176ff',
+    strokeWidth: 2.5,
+    lineCap: 'round',
+    listening: false
+  });
+
+  // Selection halo (visible when selected)
+  const selHalo = new Konva.Circle({
+    x: 0, y: 0,
+    radius: haloR + 3,
+    stroke: "#0057d8",
+    strokeWidth: 2,
+    opacity: 0.8,
+    visible: false,
+    listening: false
+  });
+
+  // Add in correct order
+  group.add(hitCircle);
+  group.add(selHalo);
+  group.add(halo);
+  group.add(crossH);
+  group.add(crossV);
+
+  // Data properties
+  group._type = 'point';
+  group._label = 'Point' + (AppState.shapes.filter(s => s._type === 'point').length + 1);
+  group.locked = false;
+
+  // Selection/highlight logic for future
+  group.showSelection = function (isSelected) {
+    selHalo.visible(isSelected);
+  };
+
+  // Cursor feedback
+  group.on('mouseenter', () => {
+    if (AppState.konvaStage && AppState.konvaStage.container())
+      AppState.konvaStage.container().style.cursor = 'pointer';
+  });
+  group.on('mouseleave', () => {
+    if (AppState.konvaStage && AppState.konvaStage.container())
+      AppState.konvaStage.container().style.cursor = '';
+  });
+
+  return group;
+}
+
 // --- PANEL FACTORY ---
 
 /**
  * Golden Layout panel factory for CanvasToolbarPanel.
- * - Uses a plain "Upload Image" button, not a file input, for device uploads.
- * - Device-uploaded image filename is NOT displayed.
  * - Applies toolbar scaling from settings and listens for changes.
- * - Adds "Add Point" functionality (with shapeStartX/YPercent).
+ * - Adds "Add Point" functionality (visible Konva group).
  * @param {HTMLElement} rootElement
  * @param {Object} container - Golden Layout container
  */
@@ -102,8 +193,9 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     bar.style.flexWrap = 'wrap';
     bar.style.alignItems = 'center';
     bar.style.padding = '6px 8px 4px 8px';
-    bar.style.background = '#f7f7fa';
-    bar.style.borderBottom = '1px solid #bbb';
+    // REMOVE border and background for minimal look
+    bar.style.borderBottom = 'none';
+    bar.style.background = 'none';
     rootElement.appendChild(bar);
 
     // --- Apply toolbar scaling from settings ---
@@ -205,7 +297,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     serverSelect.style.marginRight = "12px";
     bar.appendChild(serverSelect);
 
-    // --- Shape type dropdown (future types: rect, circle) ---
+    // --- Shape type dropdown (future: rect/circle) ---
     const shapeDropdown = createToolbarDropdown({
       id: "toolbar-shape-type",
       options: [
@@ -219,7 +311,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     shapeDropdown.style.marginRight = "6px";
     bar.appendChild(shapeDropdown);
 
-    // --- Add shape button (supports only Point for now) ---
+    // --- Add shape button ---
     const addBtn = createToolbarButton({
       id: "toolbar-add-btn",
       label: "Add",
@@ -228,17 +320,15 @@ export function buildCanvasToolbarPanel(rootElement, container) {
         const shapeType = shapeDropdown.value;
         const { x, y } = getShapeStartXY();
         if (shapeType === "point") {
-          // Minimal point shape object for Scene Designer
-          const pointShape = {
-            _type: "point",
-            _label: "Point" + (AppState.shapes.filter(s => s._type === "point").length + 1),
-            x: () => x,
-            y: () => y,
-            locked: false,
-            // Add any other required properties here
-          };
-          addShape(pointShape);
-          log("INFO", "[toolbar] Added point shape", pointShape);
+          // Create and add Konva point (visible, interactive)
+          const group = makeKonvaPoint(x, y);
+          // Attach to Konva layer
+          if (AppState.konvaLayer) {
+            AppState.konvaLayer.add(group);
+            AppState.konvaLayer.draw();
+          }
+          addShape(group);
+          log("INFO", "[toolbar] Added visible Konva point", group);
         } else {
           log("WARN", "[toolbar] Only Point shape add is implemented yet.");
         }
@@ -294,10 +384,13 @@ if (typeof document !== "undefined" && !document.getElementById('sd-toolbar-styl
       border: 1px solid #bbb;
       background: #fcfcff;
     }
+    /* .sd-toolbar-main: no border or background */
     .sd-toolbar-main {
       width: 100%;
       min-height: 32px;
       box-sizing: border-box;
+      border-bottom: none !important;
+      background: none !important;
     }
   `;
   document.head.appendChild(style);
