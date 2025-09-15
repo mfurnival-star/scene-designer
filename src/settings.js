@@ -19,6 +19,7 @@ import { log, setLogLevel, setLogDestination, setLogServerURL, setLogServerToken
 import { enableConsoleInterception, disableConsoleInterception, isConsoleInterceptionEnabled } from './console-stream.js';
 import { Pane } from 'tweakpane';
 import localforage from 'localforage';
+import { setErrorLogPanelVisible } from './layout.js'; // NEW: control Error Log panel
 
 // --- Settings Registry ---
 export const settingsRegistry = [
@@ -219,8 +220,16 @@ const _origSetSetting = setSetting;
 const _origSetSettings = setSettings;
 async function setSettingAndSave(key, value) {
   log("TRACE", "[settings] setSettingAndSave entry", { key, value });
+  const prev = getSetting(key);
   _origSetSetting(key, value);
   await saveSettings();
+
+  // NEW: If toggling showErrorLogPanel, trigger layout to open/close the panel
+  if (key === "showErrorLogPanel" && value !== prev) {
+    log("INFO", "[settings] Show Error Log Panel toggled", { value });
+    setErrorLogPanelVisible(value);
+  }
+
   log("DEBUG", "[settings] setSettingAndSave", { key, value });
   log("TRACE", "[settings] setSettingAndSave exit");
 }
@@ -228,6 +237,12 @@ async function setSettingsAndSave(settingsObj) {
   log("TRACE", "[settings] setSettingsAndSave entry", settingsObj);
   _origSetSettings(settingsObj);
   await saveSettings();
+  // Also handle initial showErrorLogPanel state on bulk set
+  if (
+    Object.prototype.hasOwnProperty.call(settingsObj, "showErrorLogPanel")
+  ) {
+    setErrorLogPanelVisible(settingsObj.showErrorLogPanel);
+  }
   log("DEBUG", "[settings] setSettingsAndSave", settingsObj);
   log("TRACE", "[settings] setSettingsAndSave exit");
 }
@@ -500,3 +515,4 @@ export function buildSettingsPanel(rootElement, container) {
 
 // Always patch setters at module load
 export { setSettingAndSave as setSetting, setSettingsAndSave as setSettings };
+
