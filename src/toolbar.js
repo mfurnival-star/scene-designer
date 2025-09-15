@@ -2,15 +2,16 @@
  * toolbar.js
  * -----------------------------------------------------------
  * Scene Designer – Modular Toolbar UI Element Factory (ESM only)
- * - Exports helpers for creating toolbar UI elements (button, dropdown, color swatch, text input).
- * - Exports buildCanvasToolbarPanel for use as a Golden Layout panel (CanvasToolbarPanel).
- * - All event handlers and logging via log.js.
- * - No global/window usage. No legacy DOM. All ES module only.
- * - Dependencies: log.js
+ * - Exports helpers for creating toolbar UI elements (button, dropdown).
+ * - Exports buildCanvasToolbarPanel for use as Golden Layout panel (CanvasToolbarPanel).
+ * - Handles device image upload and server image select, wiring both to setImage().
+ * - No global/window usage.
+ * - Dependencies: log.js, state.js (for setImage), all as ES modules.
  * -----------------------------------------------------------
  */
 
 import { log } from './log.js';
+import { setImage } from './state.js';
 
 // --- UI ELEMENT HELPERS ---
 
@@ -53,6 +54,7 @@ export function createToolbarDropdown({ id, options = [], value = "", tooltip = 
 
 /**
  * Golden Layout panel factory for CanvasToolbarPanel.
+ * - Wires up image upload (device), server select, shape dropdown, and add button.
  * @param {HTMLElement} rootElement
  * @param {Object} container - Golden Layout container
  */
@@ -76,10 +78,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     bar.style.borderBottom = '1px solid #bbb';
     rootElement.appendChild(bar);
 
-    // --- Combined Image Loader: Device upload + server image select ---
-    // Option 1: Try to combine by labeling/selecting both in a row
-
-    // 1a. Image upload (from device)
+    // --- Device image upload ---
     const uploadLabel = document.createElement('label');
     uploadLabel.textContent = "Image: ";
     uploadLabel.setAttribute('for', 'toolbar-image-upload');
@@ -95,17 +94,36 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     uploadInput.style.marginRight = "8px";
     uploadInput.title = "Upload image from your device";
     uploadInput.addEventListener('change', (e) => {
-      log("INFO", "[toolbar] Image upload (device) selected", e.target.files && e.target.files[0]);
-      // You must wire this event to setImage() in your app
+      const file = e.target.files && e.target.files[0];
+      if (!file) {
+        log("DEBUG", "[toolbar] Image upload: no file selected");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const url = ev.target.result;
+        const imgObj = new window.Image();
+        imgObj.onload = function() {
+          log("INFO", "[toolbar] Image upload: Image loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
+          setImage(url, imgObj);
+          serverSelect.value = "";
+        };
+        imgObj.onerror = function(e) {
+          log("ERROR", "[toolbar] Image upload: Image failed to load", e);
+          setImage(null, null);
+        };
+        imgObj.src = url;
+      };
+      reader.readAsDataURL(file);
     });
     bar.appendChild(uploadInput);
 
-    // 1b. Server image dropdown (hardcoded for now)
+    // --- Server image select ---
     const serverImages = [
       { label: "[Server image]", value: "" },
       { label: "sample1.png", value: "sample1.png" },
       { label: "sample2.png", value: "sample2.png" }
-      // TODO: Replace with dynamic list if needed
+      // Add more as needed
     ];
     const serverSelect = createToolbarDropdown({
       id: "toolbar-server-image-select",
@@ -113,9 +131,22 @@ export function buildCanvasToolbarPanel(rootElement, container) {
       value: "",
       tooltip: "Select server image",
       onChange: v => {
-        log("INFO", "[toolbar] Server image selected", v);
-        // You must wire this event to setImage() in your app
-        // For now, just log
+        if (!v) {
+          setImage(null, null);
+          return;
+        }
+        const url = './images/' + v;
+        const imgObj = new window.Image();
+        imgObj.onload = function() {
+          log("INFO", "[toolbar] Server image: Image loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
+          setImage(url, imgObj);
+          uploadInput.value = "";
+        };
+        imgObj.onerror = function(e) {
+          log("ERROR", "[toolbar] Server image: Image failed to load", e);
+          setImage(null, null);
+        };
+        imgObj.src = url;
       }
     });
     serverSelect.style.marginRight = "12px";
@@ -141,7 +172,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
       id: "toolbar-add-btn",
       label: "Add",
       tooltip: "Add shape",
-      onClick: () => log("INFO", "[toolbar] Add button clicked")
+      onClick: () => log("INFO", "[toolbar] Add button clicked (not yet wired to addShape)")
     });
     bar.appendChild(addBtn);
 
