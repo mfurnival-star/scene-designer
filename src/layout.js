@@ -3,7 +3,7 @@
  * -----------------------------------------------------------
  * Golden Layout App Bootstrapper for Scene Designer
  * - Sets up all Golden Layout panels and registers panel factories.
- * - Panels: Sidebar, Canvas, Settings, ErrorLog (dynamically shown/hidden).
+ * - Panels: Sidebar, CanvasToolbar, Canvas, Settings, ErrorLog (dynamically shown/hidden).
  * - Error Log panel is included on startup if AppState.settings.showErrorLogPanel is true.
  * - Now supports live show/hide of Error Log panel in response to settings.
  * - No use of window.* or global log boxes: all logs routed to ErrorLogPanel via ES module.
@@ -23,6 +23,8 @@ import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
 import { AppState, getSetting, setSetting, subscribe } from './state.js';
 import { log } from './log.js';
 import { setSettingAndSave } from './settings.js';
+// Import the new CanvasToolbarPanel builder (to be implemented)
+import { buildCanvasToolbarPanel } from './toolbar.js';
 
 // Track layout instance and ErrorLog stack item
 let layout = null;
@@ -158,7 +160,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     showErrorLogPanelSetting = true;
   }
 
-  // Layout config: conditionally add ErrorLog panel
+  // Layout config: new layout with CanvasToolbar above Canvas in a column
   let panelLayout = {
     root: {
       type: 'row',
@@ -170,10 +172,22 @@ document.addEventListener("DOMContentLoaded", async () => {
           width: 20,
         },
         {
-          type: 'component',
-          componentName: 'CanvasPanel',
-          title: 'Canvas',
+          type: 'column',
           width: 60,
+          content: [
+            {
+              type: 'component',
+              componentName: 'CanvasToolbarPanel',
+              title: 'Toolbar',
+              height: 8
+            },
+            {
+              type: 'component',
+              componentName: 'CanvasPanel',
+              title: 'Canvas',
+              height: 92
+            }
+          ]
         },
         {
           type: 'component',
@@ -226,6 +240,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       buildSidebarPanel(container.element, container);
       log("TRACE", "[layout] SidebarPanel factory exit");
+    });
+
+    layout.registerComponent('CanvasToolbarPanel', (container) => {
+      log("TRACE", "[layout] CanvasToolbarPanel factory entry", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
+      log("INFO", "[layout] CanvasToolbarPanel factory called", {
+        title: container?.title,
+        componentName: container?.componentName
+      });
+      buildCanvasToolbarPanel(container.element, container);
+      log("TRACE", "[layout] CanvasToolbarPanel factory exit");
     });
 
     layout.registerComponent('CanvasPanel', (container) => {
@@ -299,5 +326,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Export control functions for settings.js
 export { isErrorLogPanelOpen };
-
 
