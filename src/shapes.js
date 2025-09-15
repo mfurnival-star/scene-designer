@@ -16,12 +16,31 @@ import { log } from './log.js';
 import { attachSelectionHandlers } from './selection.js';
 
 /**
+ * Utility: Dump shape diagnostic info for debugging.
+ */
+function dumpShapeDebug(shape, tag = "") {
+  log("TRACE", `[shapes] ${tag} shape diagnostic`, {
+    typeofShape: typeof shape,
+    constructorName: shape?.constructor?.name,
+    isKonva: shape instanceof Konva.Shape,
+    isGroup: shape instanceof Konva.Group,
+    isRect: shape instanceof Konva.Rect,
+    isCircle: shape instanceof Konva.Circle,
+    isObject: shape && typeof shape === "object" && !(shape instanceof Konva.Shape),
+    attrs: shape?.attrs,
+    className: shape?.className,
+    _type: shape?._type,
+    _label: shape?._label,
+    keys: shape ? Object.keys(shape) : []
+  });
+}
+
+/**
  * Create a point shape (Konva.Group with crosshair and halo)
  */
 export function makePointShape(x, y) {
   log("TRACE", "[shapes] makePointShape entry", { x, y });
 
-  // These defaults can be fetched from settings if needed; hardcoded here for clarity
   const crossLen = 14;
   const haloR = 12;
   const hitR = 16;
@@ -90,7 +109,7 @@ export function makePointShape(x, y) {
 
   attachSelectionHandlers(group);
 
-  log("TRACE", "[shapes] makePointShape exit", group);
+  dumpShapeDebug(group, "makePointShape exit");
   return group;
 }
 
@@ -117,7 +136,7 @@ export function makeRectShape(x, y, w, h) {
 
   attachSelectionHandlers(rect);
 
-  log("TRACE", "[shapes] makeRectShape exit", rect);
+  dumpShapeDebug(rect, "makeRectShape exit");
   return rect;
 }
 
@@ -143,7 +162,7 @@ export function makeCircleShape(x, y, r) {
 
   attachSelectionHandlers(circle);
 
-  log("TRACE", "[shapes] makeCircleShape exit", circle);
+  dumpShapeDebug(circle, "makeCircleShape exit");
   return circle;
 }
 

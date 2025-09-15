@@ -13,6 +13,7 @@
  */
 
 import { log } from './log.js';
+import Konva from 'konva'; // For instanceof checks
 
 // Canonical state singleton
 export const AppState = {
@@ -43,6 +44,26 @@ export const AppState = {
   // Subscribers for state changes
   _subscribers: [],
 };
+
+/**
+ * Utility: Dump shape diagnostic info for debugging.
+ */
+function dumpShapeDebug(shape, tag = "") {
+  log("TRACE", `[state] ${tag} shape diagnostic`, {
+    typeofShape: typeof shape,
+    constructorName: shape?.constructor?.name,
+    isKonva: shape instanceof Konva.Shape,
+    isGroup: shape instanceof Konva.Group,
+    isRect: shape instanceof Konva.Rect,
+    isCircle: shape instanceof Konva.Circle,
+    isObject: shape && typeof shape === "object" && !(shape instanceof Konva.Shape),
+    attrs: shape?.attrs,
+    className: shape?.className,
+    _type: shape?._type,
+    _label: shape?._label,
+    keys: shape ? Object.keys(shape) : []
+  });
+}
 
 /**
  * Subscribe to AppState changes.
@@ -108,12 +129,14 @@ export function setSelectedShapes(arr) {
  */
 export function addShape(shape) {
   log("TRACE", "[state] addShape() entry", shape);
+  dumpShapeDebug(shape, "addShape entry");
   if (!shape) {
     log("TRACE", "[state] addShape() exit (no shape)");
     return;
   }
   AppState.shapes.push(shape);
   notifySubscribers({ type: "addShape", shape });
+  dumpShapeDebug(shape, "addShape after notify");
   log("DEBUG", "[state] addShape: shape added", shape);
   log("TRACE", "[state] addShape() exit");
 }
@@ -124,12 +147,14 @@ export function addShape(shape) {
  */
 export function removeShape(shape) {
   log("TRACE", "[state] removeShape() entry", shape);
+  dumpShapeDebug(shape, "removeShape entry");
   if (!shape) {
     log("TRACE", "[state] removeShape() exit (no shape)");
     return;
   }
   AppState.shapes = AppState.shapes.filter(s => s !== shape);
   notifySubscribers({ type: "removeShape", shape });
+  dumpShapeDebug(shape, "removeShape after notify");
   log("DEBUG", "[state] removeShape: shape removed", shape);
   log("TRACE", "[state] removeShape() exit");
 }

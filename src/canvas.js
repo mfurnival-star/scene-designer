@@ -21,6 +21,26 @@ let konvaInitialized = false;
 let bgKonvaImage = null;
 let groupBoundingBox = null;
 
+/**
+ * Utility: Dump shape diagnostic info for debugging.
+ */
+function dumpShapeDebug(shape, tag = "") {
+  log("TRACE", `[canvas] ${tag} shape diagnostic`, {
+    typeofShape: typeof shape,
+    constructorName: shape?.constructor?.name,
+    isKonva: shape instanceof Konva.Shape,
+    isGroup: shape instanceof Konva.Group,
+    isRect: shape instanceof Konva.Rect,
+    isCircle: shape instanceof Konva.Circle,
+    isObject: shape && typeof shape === "object" && !(shape instanceof Konva.Shape),
+    attrs: shape?.attrs,
+    className: shape?.className,
+    _type: shape?._type,
+    _label: shape?._label,
+    keys: shape ? Object.keys(shape) : []
+  });
+}
+
 function updateBackgroundImage() {
   log("TRACE", "[canvas] updateBackgroundImage entry");
   const layer = AppState.konvaLayer;
@@ -289,11 +309,14 @@ export function buildCanvasPanel(rootElement, container) {
       }
       // --- NEW: Listen for shape additions and ensure all shapes are always added to Konva layer ---
       if (details && details.type === "addShape" && details.shape) {
+        dumpShapeDebug(details.shape, "addShape (canvas subscriber)");
         // Only add shape if not already present in layer
         if (AppState.konvaLayer && !AppState.konvaLayer.findOne(node => node === details.shape)) {
           AppState.konvaLayer.add(details.shape);
           AppState.konvaLayer.draw();
           log("INFO", `[canvas] Shape added to Konva layer`, details.shape);
+        } else {
+          log("DEBUG", "[canvas] Shape not added to Konva layer (already present or not a Konva object)", details.shape);
         }
       }
       // Optionally: handle shape removal logic here if needed (not strictly required for add bug)
@@ -320,3 +343,4 @@ export function buildCanvasPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
+
