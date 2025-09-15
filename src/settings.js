@@ -7,7 +7,7 @@
  * - "Force mode": inject settings at deploy/debug time via SCENE_DESIGNER_FORCE/SCENE_DESIGNER_FORCE_SETTINGS in HTML.
  * - If force mode is enabled, SCENE_DESIGNER_FORCE_SETTINGS always overrides storage for those keys.
  * - All settings defaults come from settingsRegistry.
- * - LOG LEVEL IS STORED AND HANDLED AS A STRING ("INFO", "DEBUG", etc.; normalized to number for runtime).
+ * - LOG LEVEL IS STORED AND HANDLED AS A NUMBER (0–5).
  * - Logs all loads, saves, and force actions via log.js.
  * - All imports/exports are ES module only, no window/global access.
  * - Adheres to Engineering Manifesto and file policies.
@@ -21,19 +21,20 @@ import { Pane } from 'tweakpane';
 import localforage from 'localforage';
 import { setErrorLogPanelVisible } from './layout.js';
 
-// --- Log Level Options (STRING values for Tweakpane and storage) ---
+// --- Log Level Options (NUMERIC values for Tweakpane and storage) ---
 export const LOG_LEVELS = [
-  { value: "SILENT", label: "Silent" },
-  { value: "ERROR", label: "Error" },
-  { value: "WARN", label: "Warning" },
-  { value: "INFO", label: "Info" },
-  { value: "DEBUG", label: "Debug" },
-  { value: "TRACE", label: "Trace (very verbose)" }
+  { value: 0, label: "Silent" },
+  { value: 1, label: "Error" },
+  { value: 2, label: "Warning" },
+  { value: 3, label: "Info" },
+  { value: 4, label: "Debug" },
+  { value: 5, label: "Trace (very verbose)" }
 ];
+export const LOG_LEVEL_NUMS = LOG_LEVELS.map(l => l.value);
+export const LOG_LEVEL_NUM_TO_NAME = ["SILENT", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
 export const LOG_LEVEL_NAME_TO_NUM = {
   "SILENT": 0, "ERROR": 1, "WARN": 2, "INFO": 3, "DEBUG": 4, "TRACE": 5
 };
-export const LOG_LEVEL_NUM_TO_NAME = ["SILENT", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
 
 export const settingsRegistry = [
   { key: "multiDragBox", label: "Show Multi-Drag Box", type: "boolean", default: true },
@@ -57,13 +58,13 @@ export const settingsRegistry = [
     default: "fit"
   },
   { key: "canvasResponsive", label: "Responsive: Resize on Window Change", type: "boolean", default: true },
-  // --- The log level select (STRING values and default) ---
+  // --- The log level select (NUMERIC values and default) ---
   {
     key: "DEBUG_LOG_LEVEL",
     label: "Debug: Log Level",
     type: "select",
     options: LOG_LEVELS,
-    default: "INFO"
+    default: 3 // Info
   },
   {
     key: "LOG_OUTPUT_DEST",
@@ -82,14 +83,14 @@ export const settingsRegistry = [
   { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true },
   {
     key: "TEST_SELECT_NUMERIC",
-    label: "Test Select Numeric (string values)",
+    label: "Test Select Numeric (number values)",
     type: "select",
     options: [
-      { value: "0", label: "Zero" },
-      { value: "1", label: "One" },
-      { value: "2", label: "Two" }
+      { value: 0, label: "Zero" },
+      { value: 1, label: "One" },
+      { value: 2, label: "Two" }
     ],
-    default: "1"
+    default: 1
   },
   {
     key: "TEST_SELECT_STRING",
@@ -110,17 +111,13 @@ localforage.config({
   storeName: 'settings'
 });
 
-function normalizeLogLevelName(val) {
-  if (typeof val === "string" && val in LOG_LEVEL_NAME_TO_NUM) return val;
-  if (typeof val === "number" && val >= 0 && val < LOG_LEVEL_NUM_TO_NAME.length) {
-    return LOG_LEVEL_NUM_TO_NAME[val];
-  }
-  // Fallback to "INFO"
-  return "INFO";
-}
 function normalizeLogLevelNum(val) {
+  if (typeof val === "number" && LOG_LEVEL_NUMS.includes(val)) return val;
+  if (typeof val === "string" && /^\d+$/.test(val)) {
+    const num = Number(val);
+    if (LOG_LEVEL_NUMS.includes(num)) return num;
+  }
   if (typeof val === "string" && val in LOG_LEVEL_NAME_TO_NUM) return LOG_LEVEL_NAME_TO_NUM[val];
-  if (typeof val === "number" && val >= 0 && val < LOG_LEVEL_NUM_TO_NAME.length) return val;
   return 3; // INFO
 }
 
@@ -143,7 +140,7 @@ function mergeSettingsWithForce(stored) {
     }
     if (reg.key === "DEBUG_LOG_LEVEL") {
       log("TRACE", "[settings] merge DEBUG_LOG_LEVEL raw", val, typeof val);
-      val = normalizeLogLevelName(val);
+      val = normalizeLogLevelNum(val);
       log("TRACE", "[settings] merge DEBUG_LOG_LEVEL normalized", val, typeof val);
     }
     merged[reg.key] = val;
@@ -182,11 +179,11 @@ export async function saveSettings() {
       if (forceMode && reg.key in window.SCENE_DESIGNER_FORCE_SETTINGS) continue;
       toSave[reg.key] = AppState.settings[reg.key];
     }
-    // For log level, persist as string (for UI), normalized to number for runtime
+    // For log level, always normalize to number before saving
     if ("DEBUG_LOG_LEVEL" in AppState.settings) {
       log("TRACE", "[settings] saveSettings DEBUG_LOG_LEVEL raw", AppState.settings.DEBUG_LOG_LEVEL, typeof AppState.settings.DEBUG_LOG_LEVEL);
-      toSave.DEBUG_LOG_LEVEL = normalizeLogLevelName(AppState.settings.DEBUG_LOG_LEVEL);
-      log("TRACE", "[settings] saveSettings DEBUG_LOG_LEVEL persisted as string", toSave.DEBUG_LOG_LEVEL, typeof toSave.DEBUG_LOG_LEVEL);
+      toSave.DEBUG_LOG_LEVEL = normalizeLogLevelNum(AppState.settings.DEBUG_LOG_LEVEL);
+      log("TRACE", "[settings] saveSettings DEBUG_LOG_LEVEL normalized", toSave.DEBUG_LOG_LEVEL, typeof toSave.DEBUG_LOG_LEVEL);
     }
     log("DEBUG", "[settings] saveSettings: about to persist", toSave);
     await localforage.setItem("sceneDesignerSettings", toSave);
@@ -215,9 +212,9 @@ export async function setSettingAndSave(key, value) {
   let valToSet = value;
   if (key === "DEBUG_LOG_LEVEL") {
     log("TRACE", "[settings] setSettingAndSave DEBUG_LOG_LEVEL incoming", value, typeof value);
-    valToSet = normalizeLogLevelName(value);
-    log("TRACE", "[settings] setSettingAndSave DEBUG_LOG_LEVEL storing string value", valToSet, typeof valToSet);
-    setLogLevelByNum(normalizeLogLevelNum(valToSet));
+    valToSet = normalizeLogLevelNum(value);
+    log("TRACE", "[settings] setSettingAndSave DEBUG_LOG_LEVEL normalized", valToSet, typeof valToSet);
+    setLogLevelByNum(valToSet);
     log("DEBUG", "[settings] setSettingAndSave: setLogLevelByNum called", valToSet);
   }
   _origSetSetting(key, valToSet);
@@ -242,9 +239,9 @@ export async function setSettingsAndSave(settingsObj) {
   }
   if ("DEBUG_LOG_LEVEL" in settingsObj) {
     log("TRACE", "[settings] setSettingsAndSave DEBUG_LOG_LEVEL incoming", settingsObj.DEBUG_LOG_LEVEL, typeof settingsObj.DEBUG_LOG_LEVEL);
-    settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevelName(settingsObj.DEBUG_LOG_LEVEL);
-    log("TRACE", "[settings] setSettingsAndSave DEBUG_LOG_LEVEL storing string value", settingsObj.DEBUG_LOG_LEVEL, typeof settingsObj.DEBUG_LOG_LEVEL);
-    setLogLevelByNum(normalizeLogLevelNum(settingsObj.DEBUG_LOG_LEVEL));
+    settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevelNum(settingsObj.DEBUG_LOG_LEVEL);
+    log("TRACE", "[settings] setSettingsAndSave DEBUG_LOG_LEVEL normalized", settingsObj.DEBUG_LOG_LEVEL, typeof settingsObj.DEBUG_LOG_LEVEL);
+    setLogLevelByNum(settingsObj.DEBUG_LOG_LEVEL);
   }
   _origSetSettings(settingsObj);
   log("DEBUG", "[settings] setSettingsAndSave: after setSettings", AppState.settings);
@@ -401,3 +398,4 @@ export function buildSettingsPanel(rootElement, container) {
     throw e;
   }
 }
+
