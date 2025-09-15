@@ -12,6 +12,10 @@
  * -----------------------------------------------------------
  */
 
+// --- ESM Tabulator Theme CSS Import ---
+// This ensures Tabulator tables are styled even in pure ESM/Webpack builds (no CDN needed)
+import 'tabulator-tables/dist/css/tabulator.min.css';
+
 import { GoldenLayout } from 'golden-layout';
 import { buildSidebarPanel } from './sidebar.js';
 import { buildCanvasPanel } from './canvas.js';
@@ -194,4 +198,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
   log("TRACE", "[layout] DOMContentLoaded handler exit");
 });
+
 
