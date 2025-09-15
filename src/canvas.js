@@ -261,6 +261,8 @@ function updateSelectionHighlight() {
 
 /**
  * Main Panel Build
+ * - Now with scrollable Konva stage area.
+ * - Legacy UI elements are kept as placeholders but emit no events (for reminders only).
  */
 export function buildCanvasPanel(rootElement, container) {
   log("TRACE", "[canvas] buildCanvasPanel entry", {
@@ -276,44 +278,46 @@ export function buildCanvasPanel(rootElement, container) {
     });
 
     rootElement.innerHTML = `
-      <div id="canvas-panel-container" style="width:100%;height:100%;position:relative;">
+      <div id="canvas-panel-container" style="width:100%;height:100%;position:relative;overflow:hidden;">
         <div id="canvas-toolbar-main" style="display:flex;flex-wrap:wrap;align-items:center;padding:6px 8px 4px 8px;background:#f7f7fa;border-bottom:1px solid #bbb;">
-          <input type="file" id="canvas-image-upload" accept="image/*" style="display:inline-block;">
-          <select id="canvas-server-image-select" style="margin-left:6px;">
+          <input type="file" id="canvas-image-upload" accept="image/*" style="display:inline-block;" disabled>
+          <select id="canvas-server-image-select" style="margin-left:6px;" disabled>
             <option value="">[Server image]</option>
             <option value="sample1.png">sample1.png</option>
             <option value="sample2.png">sample2.png</option>
           </select>
           <span style="margin-left:12px;">Shape:</span>
-          <select id="shape-type-select" style="margin-left:4px;">
+          <select id="shape-type-select" style="margin-left:4px;" disabled>
             <option value="point">Point</option>
             <option value="rect">Rectangle</option>
             <option value="circle">Circle</option>
           </select>
-          <button id="add-shape-btn" style="margin-left:4px;">Add</button>
-          <button id="delete-shape-btn" style="margin-left:12px;">Delete</button>
-          <button id="duplicate-shape-btn" style="margin-left:4px;">Duplicate</button>
-          <button id="align-left-btn" style="margin-left:12px;">Align Left</button>
-          <button id="align-center-btn">Align Center</button>
-          <button id="align-right-btn">Align Right</button>
-          <button id="align-top-btn" style="margin-left:4px;">Align Top</button>
-          <button id="align-middle-btn">Align Middle</button>
-          <button id="align-bottom-btn">Align Bottom</button>
-          <button id="select-all-btn" style="margin-left:12px;">Select All</button>
-          <button id="lock-btn" style="margin-left:14px;">Lock</button>
-          <button id="unlock-btn" style="margin-left:4px;">Unlock</button>
+          <button id="add-shape-btn" style="margin-left:4px;" disabled>Add</button>
+          <button id="delete-shape-btn" style="margin-left:12px;" disabled>Delete</button>
+          <button id="duplicate-shape-btn" style="margin-left:4px;" disabled>Duplicate</button>
+          <button id="align-left-btn" style="margin-left:12px;" disabled>Align Left</button>
+          <button id="align-center-btn" disabled>Align Center</button>
+          <button id="align-right-btn" disabled>Align Right</button>
+          <button id="align-top-btn" style="margin-left:4px;" disabled>Align Top</button>
+          <button id="align-middle-btn" disabled>Align Middle</button>
+          <button id="align-bottom-btn" disabled>Align Bottom</button>
+          <button id="select-all-btn" style="margin-left:12px;" disabled>Select All</button>
+          <button id="lock-btn" style="margin-left:14px;" disabled>Lock</button>
+          <button id="unlock-btn" style="margin-left:4px;" disabled>Unlock</button>
         </div>
-        <div id="konva-stage-div" style="width:100%;height:calc(100% - 44px);background:#eee;"></div>
+        <div id="konva-stage-scroll-container" style="width:100%;height:calc(100% - 44px);overflow:auto;position:relative;background:#eee;">
+          <div id="konva-stage-div" style="position:relative;width:max-content;height:max-content;"></div>
+        </div>
       </div>
     `;
 
-    // --- Diagnostic logging for image upload setup ---
-    const imageUpload = rootElement.querySelector('#canvas-image-upload');
-    const serverImageSelect = rootElement.querySelector('#canvas-server-image-select');
-    log("TRACE", "[canvas] image upload DOM nodes", {
-      imageUploadType: typeof imageUpload,
-      serverImageSelectType: typeof serverImageSelect
-    });
+    // --- Make the canvas scrollable if larger than viewport ---
+    const scrollContainer = rootElement.querySelector('#konva-stage-scroll-container');
+    if (scrollContainer) {
+      scrollContainer.style.overflow = "auto";
+      scrollContainer.style.width = "100%";
+      scrollContainer.style.height = "calc(100% - 44px)";
+    }
 
     // --- Konva Stage/Layer Setup ---
     const stageDiv = rootElement.querySelector('#konva-stage-div');
@@ -339,75 +343,36 @@ export function buildCanvasPanel(rootElement, container) {
     AppState.konvaLayer = layer;
 
     // --- Image Upload (from device) ---
-    if (imageUpload) {
-      imageUpload.addEventListener('change', function(e) {
-        log("TRACE", "[canvas] imageUpload changed", e);
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(ev) {
-          log("TRACE", "[canvas] FileReader onload", { resultLen: ev.target.result.length });
-          const url = ev.target.result;
-          // Create an Image object, wait for it to load, then call setImage(url, imgObj)
-          const imgObj = new window.Image();
-          imgObj.onload = function() {
-            log("DEBUG", "[canvas] imageUpload: Image object loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
-            setImage(url, imgObj);
-            if (serverImageSelect) serverImageSelect.value = "";
-          };
-          imgObj.onerror = function(e) {
-            log("ERROR", "[canvas] imageUpload: Image object failed to load", e);
-            setImage(null, null);
-          };
-          imgObj.src = url;
-        };
-        reader.readAsDataURL(file);
-      });
-    } else {
-      log("ERROR", "[canvas] imageUpload element not found in DOM");
-    }
-
+    // (Disabled for now, toolbar handles image upload.)
     // --- Server Image Select ---
-    if (serverImageSelect) {
-      serverImageSelect.addEventListener('change', function(e) {
-        log("TRACE", "[canvas] serverImageSelect changed", e);
-        const filename = e.target.value;
-        if (!filename) {
-          setImage(null, null);
-          return;
-        }
-        const url = './images/' + filename;
-        const imgObj = new window.Image();
-        imgObj.onload = function() {
-          log("DEBUG", "[canvas] serverImageSelect: Image object loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
-          setImage(url, imgObj);
-          if (imageUpload) imageUpload.value = "";
-        };
-        imgObj.onerror = function(e) {
-          log("ERROR", "[canvas] serverImageSelect: Image object failed to load", e);
-          setImage(null, null);
-        };
-        imgObj.src = url;
-      });
-    } else {
-      log("ERROR", "[canvas] serverImageSelect element not found in DOM");
-    }
+    // (Disabled for now, toolbar handles server select.)
 
     // --- AppState subscription: update background image on setImage ---
     subscribe((state, details) => {
       if (details && details.type === "image") {
         updateBackgroundImage();
+        // Adjust scroll container size to match canvas
+        if (scrollContainer && stage) {
+          stageDiv.style.width = stage.width() + "px";
+          stageDiv.style.height = stage.height() + "px";
+        }
       }
     });
 
     // On panel build, show current background if image is present
     if (AppState.imageObj) {
       updateBackgroundImage();
+      if (scrollContainer && stage) {
+        stageDiv.style.width = stage.width() + "px";
+        stageDiv.style.height = stage.height() + "px";
+      }
     }
 
-    // ...[Rest of UI hook-up, Konva setup, and shape logic as in your robust version. All functions should have entry/exit TRACE logs.]
+    // --- Legacy UI elements as placeholders (disabled) ---
+    // All inputs and buttons in the toolbar are now disabled and emit no events,
+    // serving only as reminders for future refactor/feature migration.
 
-    log("INFO", "[canvas] Canvas panel fully initialized");
+    log("INFO", "[canvas] Canvas panel fully initialized (scrollable, legacy UI elements disabled)");
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
     alert("CanvasPanel ERROR: " + e.message);

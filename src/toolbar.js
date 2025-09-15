@@ -5,7 +5,7 @@
  * - Exports helpers for creating toolbar UI elements (button, dropdown).
  * - Exports buildCanvasToolbarPanel for use as Golden Layout panel (CanvasToolbarPanel).
  * - Handles device image upload and server image select, wiring both to setImage().
- * - Device-uploaded image filename is NOT displayed in the UI.
+ * - Device-uploaded image filename is NOT displayed in the UI; just a button triggers the file dialog.
  * - All ES module imports/exports, no window/global use.
  * - Dependencies: log.js, state.js.
  * -----------------------------------------------------------
@@ -55,8 +55,8 @@ export function createToolbarDropdown({ id, options = [], value = "", tooltip = 
 
 /**
  * Golden Layout panel factory for CanvasToolbarPanel.
- * - Wires up image upload (device), server select, shape dropdown, and add button.
- * - Does NOT show filename of device-uploaded image in the UI.
+ * - Uses a plain "Upload Image" button, not a file input, for device uploads.
+ * - Device-uploaded image filename is NOT displayed.
  * @param {HTMLElement} rootElement
  * @param {Object} container - Golden Layout container
  */
@@ -80,23 +80,24 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     bar.style.borderBottom = '1px solid #bbb';
     rootElement.appendChild(bar);
 
-    // --- Device image upload (no filename display) ---
-    const uploadLabel = document.createElement('label');
-    uploadLabel.textContent = "Image: ";
-    uploadLabel.setAttribute('for', 'toolbar-image-upload');
-    uploadLabel.style.marginRight = "4px";
-    bar.appendChild(uploadLabel);
+    // --- Device image upload as button ---
+    const uploadBtn = createToolbarButton({
+      id: 'toolbar-upload-btn',
+      label: "Upload Image",
+      tooltip: "Upload image from your device",
+      onClick: () => {
+        hiddenFileInput.value = ''; // reset file input so same file can be re-uploaded
+        hiddenFileInput.click();
+      }
+    });
+    bar.appendChild(uploadBtn);
 
-    const uploadInput = document.createElement('input');
-    uploadInput.type = 'file';
-    uploadInput.accept = 'image/*';
-    uploadInput.id = 'toolbar-image-upload';
-    uploadInput.className = 'sd-toolbar-file';
-    uploadInput.style.display = 'inline-block';
-    uploadInput.style.marginRight = "8px";
-    uploadInput.title = "Upload image from your device";
-    // -- No filename display anywhere --
-    uploadInput.addEventListener('change', (e) => {
+    // Hidden file input (real input, not visible)
+    const hiddenFileInput = document.createElement('input');
+    hiddenFileInput.type = 'file';
+    hiddenFileInput.accept = 'image/*';
+    hiddenFileInput.style.display = 'none';
+    hiddenFileInput.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) {
         log("DEBUG", "[toolbar] Image upload: no file selected");
@@ -119,7 +120,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
       };
       reader.readAsDataURL(file);
     });
-    bar.appendChild(uploadInput);
+    bar.appendChild(hiddenFileInput);
 
     // --- Server image select ---
     const serverImages = [
@@ -143,7 +144,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
         imgObj.onload = function() {
           log("INFO", "[toolbar] Server image: Image loaded", { width: imgObj.naturalWidth, height: imgObj.naturalHeight });
           setImage(url, imgObj);
-          uploadInput.value = "";
+          hiddenFileInput.value = "";
         };
         imgObj.onerror = function(e) {
           log("ERROR", "[toolbar] Server image: Image failed to load", e);
@@ -179,7 +180,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     });
     bar.appendChild(addBtn);
 
-    log("INFO", "[toolbar] CanvasToolbarPanel UI rendered (image upload, server select, shape dropdown, add)");
+    log("INFO", "[toolbar] CanvasToolbarPanel UI rendered (Upload button, server select, shape dropdown, add)");
 
     // Clean up on destroy
     if (container && typeof container.on === "function") {
