@@ -2,9 +2,10 @@
  * sidebar.js
  * -----------------------------------------------------------
  * Shape Table/List Panel for Scene Designer (Golden Layout)
- * - [Tabulator-free stub version]
- * - This revision removes all Tabulator code and dependencies.
- * - Displays a simple placeholder sidebar showing the number of shapes.
+ * - Tabulator-based shape table (ESM only, no globals).
+ * - Displays a live-updating table of all shapes in AppState.shapes.
+ * - Columns: Label, Type, X, Y, W, H, Lock status.
+ * - Clicking a row selects the corresponding shape (single selection for now).
  * - All state via AppState.
  * - Logging via log.js.
  * - Logging policy: Use INFO for user actions, DEBUG for updates, ERROR for UI problems.
@@ -13,12 +14,13 @@
  * -----------------------------------------------------------
  */
 
-import { AppState } from './state.js';
+import { AppState, subscribe } from './state.js';
+import { setSelectedShape } from './selection.js';
 import { log } from './log.js';
+import { Tabulator } from 'tabulator-tables';
 
 /**
- * Build the sidebar panel (stub version, no Tabulator).
- * Shows a simple list of shape count and a static message.
+ * Build the sidebar panel (Tabulator shape table).
  */
 export function buildSidebarPanel(rootElement, container) {
   log("TRACE", "[sidebar] buildSidebarPanel entry", {
@@ -26,63 +28,128 @@ export function buildSidebarPanel(rootElement, container) {
     containerTitle: container?.title,
     containerComponentName: container?.componentName
   });
+
   try {
-    log("INFO", "[sidebar] buildSidebarPanel called (Tabulator-free stub)", {
+    log("INFO", "[sidebar] buildSidebarPanel called (Tabulator shape table)", {
       rootElementType: rootElement?.tagName,
       containerTitle: container?.title,
       containerComponentName: container?.componentName
     });
 
-    // Render a simple stub sidebar
+    // Render container for Tabulator
     rootElement.innerHTML = `
       <div id="sidebar-panel-container" style="width:100%;height:100%;background:#f4f8ff;display:flex;flex-direction:column;overflow:auto;">
         <div style="padding:10px 8px 4px 8px;font-weight:bold;font-size:1.2em;color:#0057d8;">
-          Shape List (Tabulator-Free)
+          Shape List
         </div>
-        <div id="sidebar-shape-summary" style="padding:12px 8px;">
-          <div style="font-size:1.1em;">
-            Total shapes: <span id="sidebar-shape-count">${AppState.shapes?.length || 0}</span>
-          </div>
-          <div style="margin-top:1em;">
-            <em>This is a placeholder sidebar.<br>
-            The shape table will return when Tabulator is re-enabled.</em>
-          </div>
-        </div>
+        <div id="tabulator-table-div" style="flex:1 1 0;overflow:auto;"></div>
       </div>
     `;
 
-    // Subscribe to AppState for shape count updates
-    if (!rootElement._appStateUnsub) {
-      log("TRACE", "[sidebar] registering AppState update subscriber (Tabulator-free)");
-      const update = () => {
-        log("TRACE", "[sidebar] AppState update triggered (Tabulator-free)");
-        const countSpan = rootElement.querySelector("#sidebar-shape-count");
-        if (countSpan) countSpan.textContent = AppState.shapes?.length || 0;
-      };
-      AppState._subscribers = AppState._subscribers || [];
-      AppState._subscribers.push(update);
-      rootElement._appStateUnsub = update;
-      // Clean up when panel is destroyed
-      if (container && typeof container.on === "function") {
-        container.on("destroy", () => {
-          log("TRACE", "[sidebar] panel destroy event (Tabulator-free)");
-          const idx = AppState._subscribers.indexOf(update);
-          if (idx !== -1) AppState._subscribers.splice(idx, 1);
-        });
-      }
+    const tableDiv = rootElement.querySelector('#tabulator-table-div');
+    if (!tableDiv) {
+      log("ERROR", "[sidebar] tabulator-table-div not found in DOM");
+      return;
     }
 
-    log("INFO", "[sidebar] Sidebar panel fully initialized (Tabulator-free stub)");
+    // Helper: Convert shape to row object
+    function shapeToRow(shape, idx) {
+      let { _label, _type, locked } = shape;
+      let x = 0, y = 0, w = "", h = "";
+      if (_type === "rect") {
+        x = Math.round(shape.x());
+        y = Math.round(shape.y());
+        w = Math.round(shape.width());
+        h = Math.round(shape.height());
+      } else if (_type === "circle") {
+        x = Math.round(shape.x());
+        y = Math.round(shape.y());
+        w = Math.round(shape.radius());
+        h = Math.round(shape.radius());
+      } else if (_type === "point") {
+        x = Math.round(shape.x());
+        y = Math.round(shape.y());
+        w = "";
+        h = "";
+      }
+      return {
+        idx,
+        label: _label || "",
+        type: _type,
+        x,
+        y,
+        w,
+        h,
+        locked: locked ? "🔒" : ""
+      };
+    }
+
+    // Initial data
+    let tableData = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
+
+    // Tabulator setup
+    let tabulator = new Tabulator(tableDiv, {
+      data: tableData,
+      layout: "fitColumns",
+      movableColumns: false,
+      height: "100%",
+      columns: [
+        { title: "Label", field: "label", widthGrow: 2 },
+        { title: "Type", field: "type", widthGrow: 1 },
+        { title: "X", field: "x", width: 54, hozAlign: "right" },
+        { title: "Y", field: "y", width: 54, hozAlign: "right" },
+        { title: "W", field: "w", width: 54, hozAlign: "right" },
+        { title: "H", field: "h", width: 54, hozAlign: "right" },
+        { title: "Lock", field: "locked", width: 48, hozAlign: "center" }
+      ],
+      selectable: 1,
+      rowClick: function (e, row) {
+        const idx = row.getData().idx;
+        log("INFO", "[sidebar] Row clicked", { idx, shape: AppState.shapes[idx] });
+        if (AppState.shapes[idx]) {
+          setSelectedShape(AppState.shapes[idx]);
+        }
+      }
+    });
+
+    // Subscribe to AppState for live updates
+    const updateTable = () => {
+      log("TRACE", "[sidebar] AppState update triggered (Tabulator)");
+      const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
+      tabulator.replaceData(data);
+      // Reselect row if one is selected in AppState
+      if (AppState.selectedShape) {
+        const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
+        if (selIdx >= 0) tabulator.selectRow(selIdx);
+      } else {
+        tabulator.deselectRow();
+      }
+    };
+    const unsub = subscribe(updateTable);
+
+    // Clean up on destroy
+    if (container && typeof container.on === "function") {
+      container.on("destroy", () => {
+        log("TRACE", "[sidebar] panel destroy event (Tabulator)");
+        unsub && unsub();
+        tabulator.destroy();
+      });
+    }
+
+    // Initial update
+    updateTable();
+
+    log("INFO", "[sidebar] Sidebar panel fully initialized (Tabulator shape table)");
   } catch (e) {
-    log("ERROR", "[sidebar] buildSidebarPanel ERROR (Tabulator-free)", e);
+    log("ERROR", "[sidebar] buildSidebarPanel ERROR (Tabulator)", e);
     alert("SidebarPanel ERROR: " + e.message);
-    log("TRACE", "[sidebar] buildSidebarPanel exit (error, Tabulator-free)");
+    log("TRACE", "[sidebar] buildSidebarPanel exit (error, Tabulator)");
     throw e;
   }
-  log("TRACE", "[sidebar] buildSidebarPanel exit (Tabulator-free)", {
+
+  log("TRACE", "[sidebar] buildSidebarPanel exit (Tabulator)", {
     rootElementType: rootElement?.tagName,
     containerTitle: container?.title,
     containerComponentName: container?.componentName
   });
 }
-
