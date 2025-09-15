@@ -34,7 +34,7 @@ function updateBackgroundImage() {
     layer.draw();
   }
   if (AppState.imageObj) {
-    // Fit image to stage dimensions, respecting aspect ratio (basic logic only)
+    // Render at actual image size, update stage size to match
     const stage = AppState.konvaStage;
     if (!stage) {
       log("WARN", "[canvas] updateBackgroundImage: no konvaStage");
@@ -42,27 +42,23 @@ function updateBackgroundImage() {
     }
     let w = AppState.imageObj.naturalWidth || AppState.imageObj.width;
     let h = AppState.imageObj.naturalHeight || AppState.imageObj.height;
-    // Fit to stage size (if defined), else use image size
-    let targetW = stage.width ? stage.width() : w;
-    let targetH = stage.height ? stage.height() : h;
-    // Simple fit mode
-    const scale = Math.min(targetW / w, targetH / h, 1);
-    const drawW = Math.round(w * scale);
-    const drawH = Math.round(h * scale);
+    // Set stage/canvas to image native size (no scaling)
+    stage.width(w);
+    stage.height(h);
 
     bgKonvaImage = new Konva.Image({
       image: AppState.imageObj,
       x: 0,
       y: 0,
-      width: drawW,
-      height: drawH,
+      width: w,
+      height: h,
       listening: false
     });
     layer.add(bgKonvaImage);
     bgKonvaImage.moveToBottom();
     layer.draw();
-    log("DEBUG", "[canvas] updateBackgroundImage: background set", {
-      imgW: w, imgH: h, stageW: targetW, stageH: targetH, drawW, drawH
+    log("DEBUG", "[canvas] updateBackgroundImage: background set (actual size)", {
+      imgW: w, imgH: h
     });
   } else {
     log("DEBUG", "[canvas] updateBackgroundImage: no imageObj, background cleared");
@@ -329,6 +325,7 @@ export function buildCanvasPanel(rootElement, container) {
     if (AppState.konvaStage && typeof AppState.konvaStage.destroy === "function") {
       AppState.konvaStage.destroy();
     }
+    // Default size, will be updated upon image load
     const width = stageDiv.clientWidth || 600;
     const height = stageDiv.clientHeight || 400;
     const stage = new Konva.Stage({
