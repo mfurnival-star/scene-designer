@@ -74,6 +74,25 @@ export const settingsRegistry = [
     max: 2,
     step: 0.05
   },
+  // --- Shape default position as percent of image/canvas ---
+  {
+    key: "shapeStartXPercent",
+    label: "Shape Start X (%)",
+    type: "number",
+    default: 50,
+    min: 0,
+    max: 100,
+    step: 1
+  },
+  {
+    key: "shapeStartYPercent",
+    label: "Shape Start Y (%)",
+    type: "number",
+    default: 50,
+    min: 0,
+    max: 100,
+    step: 1
+  },
   // --- The log level select (LABEL values and default) ---
   {
     key: "DEBUG_LOG_LEVEL",
@@ -396,4 +415,5 @@ export function buildSettingsPanel(rootElement, container) {
     throw e;
   }
 }
+
 

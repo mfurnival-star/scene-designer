@@ -6,6 +6,7 @@
  * - Exports buildCanvasToolbarPanel for use as Golden Layout panel (CanvasToolbarPanel).
  * - Handles device image upload and server image select, wiring both to setImage().
  * - Device-uploaded image filename is NOT displayed in the UI; just a button triggers the file dialog.
+ * - Adds shape (point) at position controlled by shapeStartXPercent/shapeStartYPercent (as % of image/canvas).
  * - All ES module imports/exports, no window/global use.
  * - Toolbar scaling is controlled by the `toolbarUIScale` setting and updates live.
  * - Dependencies: log.js, state.js, settings.js.
@@ -13,7 +14,7 @@
  */
 
 import { log } from './log.js';
-import { setImage, getSetting, subscribe } from './state.js';
+import { setImage, getSetting, subscribe, addShape, AppState } from './state.js';
 
 // --- UI ELEMENT HELPERS ---
 
@@ -52,6 +53,28 @@ export function createToolbarDropdown({ id, options = [], value = "", tooltip = 
   return select;
 }
 
+// --- Helper: Get shape start X/Y in px as percent of image/canvas size ---
+function getShapeStartXY() {
+  const xPct = Number(getSetting('shapeStartXPercent')) || 50;
+  const yPct = Number(getSetting('shapeStartYPercent')) || 50;
+  let w = 0, h = 0;
+  // Try canvas (Konva) first, fallback to image, then default
+  if (AppState.konvaStage) {
+    w = AppState.konvaStage.width();
+    h = AppState.konvaStage.height();
+  } else if (AppState.imageObj) {
+    w = AppState.imageObj.naturalWidth || AppState.imageObj.width || 600;
+    h = AppState.imageObj.naturalHeight || AppState.imageObj.height || 400;
+  } else {
+    w = 600;
+    h = 400;
+  }
+  const x = Math.round((xPct / 100) * w);
+  const y = Math.round((yPct / 100) * h);
+  log("DEBUG", "[toolbar] Calculated shape start XY", { x, y, xPct, yPct, w, h });
+  return { x, y };
+}
+
 // --- PANEL FACTORY ---
 
 /**
@@ -59,6 +82,7 @@ export function createToolbarDropdown({ id, options = [], value = "", tooltip = 
  * - Uses a plain "Upload Image" button, not a file input, for device uploads.
  * - Device-uploaded image filename is NOT displayed.
  * - Applies toolbar scaling from settings and listens for changes.
+ * - Adds "Add Point" functionality (with shapeStartX/YPercent).
  * @param {HTMLElement} rootElement
  * @param {Object} container - Golden Layout container
  */
@@ -181,7 +205,7 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     serverSelect.style.marginRight = "12px";
     bar.appendChild(serverSelect);
 
-    // --- Shape type dropdown ---
+    // --- Shape type dropdown (future types: rect, circle) ---
     const shapeDropdown = createToolbarDropdown({
       id: "toolbar-shape-type",
       options: [
@@ -190,33 +214,46 @@ export function buildCanvasToolbarPanel(rootElement, container) {
         { label: "Circle", value: "circle" }
       ],
       value: "point",
-      tooltip: "Select shape type",
-      onChange: v => log("INFO", "[toolbar] Shape type selected", v)
+      tooltip: "Select shape type"
     });
     shapeDropdown.style.marginRight = "6px";
     bar.appendChild(shapeDropdown);
 
-    // --- Add shape button ---
+    // --- Add shape button (supports only Point for now) ---
     const addBtn = createToolbarButton({
       id: "toolbar-add-btn",
       label: "Add",
       tooltip: "Add shape",
-      onClick: () => log("INFO", "[toolbar] Add button clicked (not yet wired to addShape)")
+      onClick: () => {
+        const shapeType = shapeDropdown.value;
+        const { x, y } = getShapeStartXY();
+        if (shapeType === "point") {
+          // Minimal point shape object for Scene Designer
+          const pointShape = {
+            _type: "point",
+            _label: "Point" + (AppState.shapes.filter(s => s._type === "point").length + 1),
+            x: () => x,
+            y: () => y,
+            locked: false,
+            // Add any other required properties here
+          };
+          addShape(pointShape);
+          log("INFO", "[toolbar] Added point shape", pointShape);
+        } else {
+          log("WARN", "[toolbar] Only Point shape add is implemented yet.");
+        }
+      }
     });
     bar.appendChild(addBtn);
 
-    log("INFO", "[toolbar] CanvasToolbarPanel UI rendered (Upload button, server select, shape dropdown, add)");
+    log("INFO", "[toolbar] CanvasToolbarPanel UI rendered (Upload button, server select, shape dropdown, add w/point support)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
     rootElement.innerHTML = `<div style="color:red;padding:2em;">ToolbarPanel ERROR: ${e.message}</div>`;
     throw e;
   }
-  log("TRACE", "[toolbar] buildCanvasToolbarPanel exit", {
-    rootElementType: rootElement?.tagName,
-    containerTitle: container?.title,
-    containerComponentName: container?.componentName
-  });
+  log("TRACE", "[toolbar] buildCanvasToolbarPanel exit");
 }
 
 // --- Toolbar CSS inject ---
