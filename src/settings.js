@@ -7,6 +7,7 @@
  * - "Force mode": inject settings at deploy/debug time via SCENE_DESIGNER_FORCE/SCENE_DESIGNER_FORCE_SETTINGS in HTML.
  * - If force mode is enabled, SCENE_DESIGNER_FORCE_SETTINGS always overrides storage for those keys.
  * - All settings defaults come from settingsRegistry.
+ * - LOG LEVEL IS STORED AND HANDLED AS A NUMBER (no strings, no backwards compatibility).
  * - Logs all loads, saves, and force actions via log.js.
  * - All imports/exports are ES module only, no window/global access.
  * - Adheres to Engineering Manifesto and file policies.
@@ -20,16 +21,25 @@ import { Pane } from 'tweakpane';
 import localforage from 'localforage';
 import { setErrorLogPanelVisible } from './layout.js';
 
-// --- Log Level Options (UPPERCASE, no OFF, use SILENT for off) ---
-const LOG_LEVEL_OPTIONS = [
-  { value: "SILENT", label: "Silent" },
-  { value: "ERROR", label: "Error" },
-  { value: "WARN", label: "Warning" },
-  { value: "INFO", label: "Info" },
-  { value: "DEBUG", label: "Debug" },
-  { value: "TRACE", label: "Trace (very verbose)" }
+// --- Log Level Options (NUMERIC, no strings, no OFF; 0 = SILENT) ---
+export const LOG_LEVELS = [
+  { num: 0, label: "Silent" },
+  { num: 1, label: "Error" },
+  { num: 2, label: "Warning" },
+  { num: 3, label: "Info" },
+  { num: 4, label: "Debug" },
+  { num: 5, label: "Trace (very verbose)" }
 ];
-const LOG_LEVEL_VALUES = LOG_LEVEL_OPTIONS.map(opt => opt.value);
+export const LOG_LEVEL_NUMS = LOG_LEVELS.map(l => l.num);
+export const LOG_LEVEL_NUM_TO_NAME = ["SILENT", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
+export const LOG_LEVEL_NAME_TO_NUM = {
+  "SILENT": 0,
+  "ERROR": 1,
+  "WARN": 2,
+  "INFO": 3,
+  "DEBUG": 4,
+  "TRACE": 5
+};
 
 export const settingsRegistry = [
   { key: "multiDragBox", label: "Show Multi-Drag Box", type: "boolean", default: true },
@@ -53,7 +63,13 @@ export const settingsRegistry = [
     default: "fit"
   },
   { key: "canvasResponsive", label: "Responsive: Resize on Window Change", type: "boolean", default: true },
-  { key: "DEBUG_LOG_LEVEL", label: "Debug: Log Level", type: "select", options: LOG_LEVEL_OPTIONS, default: "SILENT" },
+  {
+    key: "DEBUG_LOG_LEVEL",
+    label: "Debug: Log Level",
+    type: "select",
+    options: LOG_LEVELS.map(l => ({ value: l.num, label: l.label })),
+    default: 0 // SILENT
+  },
   {
     key: "LOG_OUTPUT_DEST",
     label: "Log Output Destination",
@@ -81,7 +97,7 @@ localforage.config({
  * Merge settings using new force mode ONLY (no legacy HTML injection).
  * - If SCENE_DESIGNER_FORCE and SCENE_DESIGNER_FORCE_SETTINGS are present, use those keys as forced values.
  * - Otherwise, use storage, then registry defaults.
- * - No window._settings, no legacy variables.
+ * - All log level values are numbers only (no strings).
  */
 function mergeSettingsWithForce(stored) {
   const forceMode = typeof window !== "undefined" &&
@@ -101,9 +117,9 @@ function mergeSettingsWithForce(stored) {
     } else {
       val = reg.default;
     }
-    // Special: Normalize log level
-    if (reg.key === "DEBUG_LOG_LEVEL" && typeof val === "string") {
-      val = normalizeLogLevel(val);
+    // Special: Normalize log level to number
+    if (reg.key === "DEBUG_LOG_LEVEL") {
+      val = normalizeLogLevelNum(val);
     }
     merged[reg.key] = val;
   }
@@ -116,11 +132,11 @@ function mergeSettingsWithForce(stored) {
   return merged;
 }
 
-function normalizeLogLevel(val) {
-  if (typeof val !== "string") return "SILENT";
-  let v = val.toUpperCase();
-  if (!LOG_LEVEL_VALUES.includes(v)) v = "SILENT";
-  return v;
+function normalizeLogLevelNum(val) {
+  if (typeof val === "number" && LOG_LEVEL_NUMS.includes(val)) return val;
+  // Allow string names for force/debugging, but always convert to number
+  if (typeof val === "string" && val in LOG_LEVEL_NAME_TO_NUM) return LOG_LEVEL_NAME_TO_NUM[val];
+  return 0; // SILENT
 }
 
 /**
@@ -161,8 +177,8 @@ export async function saveSettings() {
       if (forceMode && reg.key in window.SCENE_DESIGNER_FORCE_SETTINGS) continue;
       toSave[reg.key] = AppState.settings[reg.key];
     }
-    if (AppState.settings.DEBUG_LOG_LEVEL) {
-      toSave.DEBUG_LOG_LEVEL = normalizeLogLevel(AppState.settings.DEBUG_LOG_LEVEL);
+    if ("DEBUG_LOG_LEVEL" in AppState.settings) {
+      toSave.DEBUG_LOG_LEVEL = normalizeLogLevelNum(AppState.settings.DEBUG_LOG_LEVEL);
     }
     log("DEBUG", "[settings] saveSettings: about to persist", toSave);
     await localforage.setItem("sceneDesignerSettings", toSave);
@@ -190,14 +206,14 @@ export async function setSettingAndSave(key, value) {
     typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
   if (forceMode && key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
     log("WARN", `[settings] setSettingAndSave: Attempted to save forced setting '${key}'; ignored.`);
-    setLogLevel(window.SCENE_DESIGNER_FORCE_SETTINGS.DEBUG_LOG_LEVEL || "SILENT");
+    setLogLevelByNum(window.SCENE_DESIGNER_FORCE_SETTINGS.DEBUG_LOG_LEVEL ?? 0);
     return;
   }
 
-  if (key === "DEBUG_LOG_LEVEL" && typeof value === "string") {
-    value = normalizeLogLevel(value);
-    setLogLevel(value); // <--- IMMEDIATE reconfiguration!
-    log("DEBUG", "[settings] setSettingAndSave: setLogLevel called immediately", value);
+  if (key === "DEBUG_LOG_LEVEL") {
+    value = normalizeLogLevelNum(value);
+    setLogLevelByNum(value); // <--- IMMEDIATE reconfiguration!
+    log("DEBUG", "[settings] setSettingAndSave: setLogLevelByNum called immediately", value);
   }
   const prev = getSetting(key);
   _origSetSetting(key, value);
@@ -227,10 +243,10 @@ export async function setSettingsAndSave(settingsObj) {
     }
   }
 
-  if ("DEBUG_LOG_LEVEL" in settingsObj && typeof settingsObj.DEBUG_LOG_LEVEL === "string") {
-    settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevel(settingsObj.DEBUG_LOG_LEVEL);
-    setLogLevel(settingsObj.DEBUG_LOG_LEVEL); // <--- IMMEDIATE reconfiguration!
-    log("DEBUG", "[settings] setSettingsAndSave: setLogLevel called immediately", settingsObj.DEBUG_LOG_LEVEL);
+  if ("DEBUG_LOG_LEVEL" in settingsObj) {
+    settingsObj.DEBUG_LOG_LEVEL = normalizeLogLevelNum(settingsObj.DEBUG_LOG_LEVEL);
+    setLogLevelByNum(settingsObj.DEBUG_LOG_LEVEL); // <--- IMMEDIATE reconfiguration!
+    log("DEBUG", "[settings] setSettingsAndSave: setLogLevelByNum called immediately", settingsObj.DEBUG_LOG_LEVEL);
   }
   _origSetSettings(settingsObj);
   log("DEBUG", "[settings] setSettingsAndSave: after setSettings", AppState.settings);
@@ -242,6 +258,12 @@ export async function setSettingsAndSave(settingsObj) {
   log("TRACE", "[settings] setSettingsAndSave exit");
 }
 
+function setLogLevelByNum(numLevel) {
+  // Convert number to string for logger
+  let name = LOG_LEVEL_NUM_TO_NAME[numLevel] ?? "SILENT";
+  setLogLevel(name);
+}
+
 function updateLogConfigFromSettings(settings) {
   log("TRACE", "[settings] updateLogConfigFromSettings entry", settings);
   if (!settings) {
@@ -249,11 +271,8 @@ function updateLogConfigFromSettings(settings) {
     return;
   }
   if ("DEBUG_LOG_LEVEL" in settings) {
-    let level = settings.DEBUG_LOG_LEVEL;
-    if (typeof level === "string") {
-      level = normalizeLogLevel(level);
-    }
-    setLogLevel(level);
+    const num = normalizeLogLevelNum(settings.DEBUG_LOG_LEVEL);
+    setLogLevelByNum(num);
   }
   if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
   if ("LOG_SERVER_URL" in settings) setLogServerURL(settings.LOG_SERVER_URL);
@@ -395,10 +414,10 @@ export function buildSettingsPanel(rootElement, container) {
               options: reg.options.reduce((acc, cur) => { acc[cur.value] = cur.label; return acc; }, {}),
             }).on('change', ev => {
               let v = ev.value;
-              if (key === "DEBUG_LOG_LEVEL" && typeof v === "string") {
-                v = normalizeLogLevel(v);
-                setLogLevel(v); // <--- IMMEDIATE reconfiguration for select as well
-                log("DEBUG", "[settings] Tweakpane onChange: setLogLevel called immediately", v);
+              if (key === "DEBUG_LOG_LEVEL") {
+                v = normalizeLogLevelNum(v);
+                setLogLevelByNum(v); // <--- IMMEDIATE reconfiguration for select as well
+                log("DEBUG", "[settings] Tweakpane onChange: setLogLevelByNum called immediately", v);
               }
               settingsPOJO[key] = v;
               setSettingAndSave(key, v);
