@@ -86,29 +86,7 @@ export const settingsRegistry = [
   { key: "LOG_SERVER_URL", label: "Log Server URL", type: "text", default: "" },
   { key: "LOG_SERVER_TOKEN", label: "Log Server Token", type: "text", default: "" },
   { key: "INTERCEPT_CONSOLE", label: "Intercept All Console Logs (for Mobile/Dev)", type: "boolean", default: false },
-  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true },
-  {
-    key: "TEST_SELECT_NUMERIC",
-    label: "Test Select Numeric (number values)",
-    type: "select",
-    options: [
-      { value: 0, label: "Zero" },
-      { value: 1, label: "One" },
-      { value: 2, label: "Two" }
-    ],
-    default: 1
-  },
-  {
-    key: "TEST_SELECT_STRING",
-    label: "Test Select String",
-    type: "select",
-    options: [
-      { value: "a", label: "A" },
-      { value: "b", label: "B" },
-      { value: "c", label: "C" }
-    ],
-    default: "b"
-  }
+  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true }
 ];
 
 // --- Persistence using localForage (async) ---
@@ -408,3 +386,4 @@ export function buildSettingsPanel(rootElement, container) {
     throw e;
   }
 }
+
