@@ -5,6 +5,8 @@
  * - Builds and manages the main toolbar UI for annotation and canvas actions.
  * - Toolbar UI scale is controlled by the `toolbarUIScale` setting (from settings.js).
  * - Listens for live setting changes and updates the scale accordingly.
+ * - Toolbar contains only: image upload, shape dropdown, add shape button.
+ * - No legacy/extra controls, all elements enabled.
  * - No global/window code; all state flows via AppState.
  * - Logging: Uses log.js; logs at INFO for major events, DEBUG for UI changes, TRACE for entry/exit.
  * - Exports: buildCanvasToolbarPanel
@@ -35,33 +37,17 @@ export function buildCanvasToolbarPanel(rootElement, container) {
       containerComponentName: container?.componentName
     });
 
-    // --- Toolbar HTML (structure only, disabled for now) ---
+    // --- Minimal Toolbar HTML: image upload, shape dropdown, add button ---
     rootElement.innerHTML = `
-      <div id="canvas-toolbar-main" class="sd-toolbar-main" style="display:flex;flex-wrap:wrap;align-items:center;padding:6px 8px 4px 8px;background:#f7f7fa;border-bottom:1px solid #bbb;">
-        <input type="file" id="canvas-image-upload" accept="image/*" style="display:inline-block;" disabled>
-        <select id="canvas-server-image-select" style="margin-left:6px;" disabled>
-          <option value="">[Server image]</option>
-          <option value="sample1.png">sample1.png</option>
-          <option value="sample2.png">sample2.png</option>
-        </select>
-        <span style="margin-left:12px;">Shape:</span>
-        <select id="shape-type-select" style="margin-left:4px;" disabled>
+      <div id="canvas-toolbar-main" class="sd-toolbar-main" style="display:flex;align-items:center;gap:12px;padding:6px 8px 4px 8px;background:#f7f7fa;border-bottom:1px solid #bbb;">
+        <input type="file" id="canvas-image-upload" accept="image/*" style="display:inline-block;">
+        <span style="margin-left:0;">Shape:</span>
+        <select id="shape-type-select" style="margin-left:0;">
           <option value="point">Point</option>
           <option value="rect">Rectangle</option>
           <option value="circle">Circle</option>
         </select>
-        <button id="add-shape-btn" style="margin-left:4px;" disabled>Add</button>
-        <button id="delete-shape-btn" style="margin-left:12px;" disabled>Delete</button>
-        <button id="duplicate-shape-btn" style="margin-left:4px;" disabled>Duplicate</button>
-        <button id="align-left-btn" style="margin-left:12px;" disabled>Align Left</button>
-        <button id="align-center-btn" disabled>Align Center</button>
-        <button id="align-right-btn" disabled>Align Right</button>
-        <button id="align-top-btn" style="margin-left:4px;" disabled>Align Top</button>
-        <button id="align-middle-btn" disabled>Align Middle</button>
-        <button id="align-bottom-btn" disabled>Align Bottom</button>
-        <button id="select-all-btn" style="margin-left:12px;" disabled>Select All</button>
-        <button id="lock-btn" style="margin-left:14px;" disabled>Lock</button>
-        <button id="unlock-btn" style="margin-left:4px;" disabled>Unlock</button>
+        <button id="add-shape-btn" style="margin-left:0;">Add</button>
       </div>
     `;
 
@@ -94,7 +80,9 @@ export function buildCanvasToolbarPanel(rootElement, container) {
       log("ERROR", "[toolbar] #canvas-toolbar-main not found in DOM");
     }
 
-    log("INFO", "[toolbar] CanvasToolbarPanel initialized (UI scale applied, no events yet)");
+    // --- (Optional: wire up events here in future) ---
+
+    log("INFO", "[toolbar] CanvasToolbarPanel initialized (UI scale applied, minimal controls only)");
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
     alert("CanvasToolbarPanel ERROR: " + e.message);
@@ -108,5 +96,3 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     containerComponentName: container?.componentName
   });
 }
-
-
