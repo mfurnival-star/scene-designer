@@ -1,7 +1,7 @@
 # Scene Designer: ES Modules Engineering Manifesto
 
 > **Reference:**  
-> This document is the single source of truth for Scene Designer architecture, code review, and delivery.  
+> This document is the single source of truth for Scene Designer architecture, engineering practices, review, and file delivery.  
 > All contributors must adhere to these rules for all code, documentation, and review.
 
 ---
@@ -26,25 +26,52 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 3. File Delivery, Review, and Change Policy
+## 3. Centralized Architecture & Engineering Structure (2025 Update)
+
+**Scene Designer now uses a modular, layered architecture:**
+
+1. **AppState as the single source of truth**  
+   All state (shapes, selection, transformer, settings) flows through the exported `AppState` object in `state.js`.  
+   All modules interact via AppState and exported setter/getter functions only.
+
+2. **Selection & Transformer Logic Centralization**  
+   - All selection logic is managed in `selection.js`.
+   - Only selection.js can trigger transformer lifecycle (attach/detach/update) in `transformer.js`.
+   - Highlights (single, multi-select) are decoupled from transformer logic.
+
+3. **Decoupled UI Panels**  
+   - UI panels (sidebar, settings, toolbar) only interact via AppState, state mutators, and selection APIs.
+   - No direct DOM manipulation outside designated UI modules.
+
+4. **Per-shape Config & State Machines**  
+   - Each shape type and transform mode defined in `shape-defs.js`.
+   - Per-shape state transitions handled by `shape-state.js`.
+
+5. **File Delivery & Review Workflow**  
+   - All code delivery, review, and requests operate on full files, never snippets or diffs.
+   - File delivery follows a strict, numbered, one-at-a-time workflow (see below).
+
+---
+
+## 4. File Delivery, Review, and Change Policy (Numbered, Ordered Delivery)
 
 - **All code requests, reviews, and deliveries must be for full files, never code snippets or diffs.**
 - **All deliveries and reviews must comply with the explicit file-by-file workflow:**
-    1. **List all files that require changes up front.**
+    1. **List all files that require changes up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...)**.
     2. **Deliver each file, one at a time, in the order listed.**
-    3. **After each file, state the name of the next file to expect, e.g., "Next file: `src/sidebar.js`".**
+    3. **After each file, state the name and number of the next file to expect, e.g., "Next file: 2. sidebar.js".**
     4. **Wait for explicit user confirmation ("next", "ready", etc.) before delivering the next file.**
-    5. **Keep a list of remaining files in each reply until all are delivered.**
-    6. **After all files are delivered, explicitly confirm completion (e.g., "All done – ES module migration is complete").**
-- **If a module is added, removed, or renamed, update `src/modules.index.md` accordingly.**
+    5. **Keep a list of remaining files and their numbers in each reply until all are delivered.**
+    6. **After all files are delivered, explicitly confirm completion (e.g., "All done – refactor complete.")**
+- **Update `src/modules.index.md` if modules are added/removed/renamed.**
 - **All code delivery, review, and requests operate on complete files, never snippets.**
 
 ---
 
-## 4. File Size and Splitting Policy
+## 5. File Size and Splitting Policy
 
 - **No single file should exceed approximately 350 lines.**
-- **If a file grows beyond 350 lines, it must be split into logically separated ES module files (e.g., `settings.part1.js`, `settings.part2.js`, or `settings-core.js`, `settings-ui.js`).**
+- **If a file grows beyond 350 lines, it must be split into logically separated ES module files (e.g., `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).**
 - **Each part should be ≤350 lines if possible.**
 - **When splitting:**
     - Prefer splitting by logical concern (core logic, UI/panel, data, helpers, etc).
@@ -57,7 +84,7 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 5. Logging Policy (MANDATORY)
+## 6. Logging Policy (MANDATORY)
 
 - **All modules must use the shared logger, `log()`, with standardized log levels:**
     - `ERROR` – Unexpected or fatal failures
@@ -73,7 +100,7 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 6. Documentation & API Contract
+## 7. Documentation & API Contract
 
 - **Every module/file starts with a JSDoc-style or Markdown comment summarizing:**
     - Its responsibilities
@@ -84,7 +111,7 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 7. File and Module Structure
+## 8. File and Module Structure
 
 - All logic is organized into ES module files under `src/`.
 - Each module:
@@ -97,7 +124,7 @@ Build a modular, professional, maintainable scene annotation tool for ADB automa
 
 ---
 
-## 8. Example: ES Module Import/Export Pattern
+## 9. Example: ES Module Import/Export Pattern
 
 ```js
 // Good:
@@ -108,31 +135,4 @@ import { buildSidebarPanel } from "./sidebar.js";
 const stage = new window.Konva.Stage(...);   // ❌ Not allowed
 window.Pickr.create(...);                    // ❌ Not allowed
 import { something } from "./notExportedHere.js"; // ❌ Not allowed if not actually exported
-```
 
----
-
-## 9. Review Checklist
-
-- [ ] All code delivered as full files.
-- [ ] All dependencies imported as ES modules (no window/global usage).
-- [ ] All imports correspond to real exports from their source.
-- [ ] No references to CDN/global scripts in code or HTML.
-- [ ] Updated `src/modules.index.md` if modules changed.
-- [ ] Logging and documentation policies followed.
-- [ ] Delivery workflow (list, one-by-one, next file named, explicit "all done") followed.
-- [ ] **No single file exceeds 350 lines; split as per policy if needed.**
-
----
-
-## 10. Example Delivery Workflow
-
-1. List all files that require changes for ES module or logging compliance.
-2. Deliver each file, in full, one at a time.
-3. After each file, explicitly mention the name of the next file to expect.
-4. Wait for explicit user confirmation after each.
-5. After the final file, state "All done – ES module migration is complete."
-
----
-
-_This contract is enforceable for all code, review, and documentation in Scene Designer._

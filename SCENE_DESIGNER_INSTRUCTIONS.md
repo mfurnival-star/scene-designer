@@ -20,17 +20,17 @@ These instructions are binding for all development, code review, and delivery in
 
 ---
 
-## 3. **File Delivery Policy**
+## 3. **File Delivery and Review Workflow**
 
-- All code delivery, review, and requests operate on **complete files** only (never snippets).
-- When a change is required:
-    1. List all files to be delivered.
-    2. Deliver each file one at a time, in order.
-    3. After each, clearly state the name of the next file to expect.
-    4. Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.
-    5. Keep a running list of remaining files in each reply.
-    6. After all files, explicitly confirm completion.
-- Update `src/modules.index.md` if modules are added/removed/renamed.
+- **All code delivery, review, and requests operate on complete files only (never snippets).**
+- **File-by-file delivery workflow:**
+    1. **List all files to be delivered up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...).**
+    2. **Deliver each file, one at a time, in the order listed.**
+    3. **After each file, state the name and number of the next file to expect (e.g., "Next file: 2. sidebar.js").**
+    4. **Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.**
+    5. **Keep a running list of remaining files and their numbers in each reply until all are delivered.**
+    6. **After all files, explicitly confirm completion (e.g., "All files delivered. Refactor complete.").**
+- **If a module is added, removed, or renamed, update `src/modules.index.md` accordingly.**
 
 ---
 
