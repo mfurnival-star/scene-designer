@@ -41,6 +41,22 @@ function dumpShapeDebug(shape, tag = "") {
   });
 }
 
+/**
+ * Extra: Dump Konva layer state (children and their types).
+ */
+function dumpLayerState(layer, tag = "") {
+  if (!layer) {
+    log("TRACE", `[canvas] ${tag} dumpLayerState: NO layer`);
+    return;
+  }
+  const children = layer.getChildren();
+  log("TRACE", `[canvas] ${tag} layer children`, {
+    count: children.length,
+    types: children.map(n => n.className || n.constructor?.name || typeof n),
+    labels: children.map(n => n._label || n._type || n.className || n.constructor?.name)
+  });
+}
+
 function updateBackgroundImage() {
   log("TRACE", "[canvas] updateBackgroundImage entry");
   const layer = AppState.konvaLayer;
@@ -78,8 +94,10 @@ function updateBackgroundImage() {
     log("DEBUG", "[canvas] updateBackgroundImage: background set (actual size)", {
       imgW: w, imgH: h
     });
+    dumpLayerState(layer, "updateBackgroundImage");
   } else {
     log("DEBUG", "[canvas] updateBackgroundImage: no imageObj, background cleared");
+    dumpLayerState(layer, "updateBackgroundImage");
   }
   log("TRACE", "[canvas] updateBackgroundImage exit");
 }
@@ -195,6 +213,7 @@ function updateSelectionHighlight() {
   if (AppState.selectedShapes.length === 1 && !AppState.selectedShapes[0].locked) {
     updateTransformer();
     layer.draw();
+    dumpLayerState(layer, "updateSelectionHighlight (single)");
   } else if (AppState.selectedShapes.length > 1) {
     detachTransformer();
     const sel = AppState.selectedShapes;
@@ -218,9 +237,11 @@ function updateSelectionHighlight() {
     });
     layer.add(groupBoundingBox);
     layer.draw();
+    dumpLayerState(layer, "updateSelectionHighlight (multi)");
   } else {
     detachTransformer();
     layer.draw();
+    dumpLayerState(layer, "updateSelectionHighlight (none)");
   }
   log("TRACE", "[canvas] updateSelectionHighlight exit");
 }
@@ -300,8 +321,11 @@ export function buildCanvasPanel(rootElement, container) {
     AppState.konvaLayer = layer;
 
     subscribe((state, details) => {
+      log("TRACE", "[canvas] subscriber fired", { details });
       if (details && details.type === "image") {
+        log("TRACE", "[canvas] subscriber: image update event");
         updateBackgroundImage();
+        dumpLayerState(layer, "subscriber:image after update");
         if (scrollContainer && stage) {
           stageDiv.style.width = stage.width() + "px";
           stageDiv.style.height = stage.height() + "px";
@@ -309,30 +333,39 @@ export function buildCanvasPanel(rootElement, container) {
       }
       // --- Listen for shape additions and ensure all shapes are always added to Konva layer ---
       if (details && details.type === "addShape" && details.shape) {
+        log("TRACE", "[canvas] subscriber: addShape event", { shape: details.shape });
         dumpShapeDebug(details.shape, "addShape (canvas subscriber)");
         // Only add shape if not already present in layer
-        if (AppState.konvaLayer && !AppState.konvaLayer.findOne(node => node === details.shape)) {
+        const alreadyPresent = AppState.konvaLayer.findOne(node => node === details.shape);
+        log("TRACE", "[canvas] addShape: alreadyPresent?", alreadyPresent);
+        if (AppState.konvaLayer && !alreadyPresent) {
           AppState.konvaLayer.add(details.shape);
           AppState.konvaLayer.draw();
           log("INFO", `[canvas] Shape added to Konva layer`, details.shape);
+          dumpLayerState(AppState.konvaLayer, "addShape after add");
           // Attach transformer for single selection, if shape is selectable
           if (!details.shape.locked && details.shape._type !== "point") {
+            log("TRACE", "[canvas] addShape: attaching transformer", { shape: details.shape });
             attachTransformerForShape(details.shape);
           }
         } else {
           log("DEBUG", "[canvas] Shape not added to Konva layer (already present or not a Konva object)", details.shape);
+          dumpLayerState(AppState.konvaLayer, "addShape (already present)");
         }
       }
       // Optionally: handle shape removal logic here if needed
       if (details && details.type === "selection") {
+        log("TRACE", "[canvas] subscriber: selection event");
         updateSelectionHighlight();
         // Ensure transformer updates on selection changes
         updateTransformer();
+        dumpLayerState(layer, "subscriber:selection after update");
       }
     });
 
     if (AppState.imageObj) {
       updateBackgroundImage();
+      dumpLayerState(layer, "buildCanvasPanel (imageObj present)");
       if (scrollContainer && stage) {
         stageDiv.style.width = stage.width() + "px";
         stageDiv.style.height = stage.height() + "px";
@@ -340,6 +373,7 @@ export function buildCanvasPanel(rootElement, container) {
     }
 
     log("INFO", "[canvas] Canvas panel fully initialized (scrollable, legacy UI elements disabled)");
+    dumpLayerState(layer, "buildCanvasPanel end");
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
     alert("CanvasPanel ERROR: " + e.message);
