@@ -4,6 +4,7 @@
  * Scene Designer – Konva Transformer Handler (ESM ONLY)
  * - Centralized logic for attaching, detaching, and updating Konva.Transformers for all shape types.
  * - All per-shape transformer config comes from shape-defs.js.
+ * - Ensures transformer is always enabled, updated, and interactive on selection.
  * - Rectangle: 8 anchors (corners + sides), rotate enabled unless locked.
  * - Circle: 4 corner anchors only, rotate disabled (no rotate anchor), aspect ratio enforced.
  * - Point: no anchors, rotate disabled.
@@ -20,6 +21,7 @@ import { getShapeDef } from './shape-defs.js';
 /**
  * Attach a Konva.Transformer to a shape (single selection only).
  * Only one transformer is supported at a time (AppState.transformer).
+ * Always destroys previous transformer and creates a new one.
  * Called from canvas.js and selection.js.
  * @param {Konva.Shape|Konva.Group} shape
  */
@@ -112,6 +114,7 @@ export function detachTransformer() {
 /**
  * Update transformer when selection or lock state changes.
  * Called from selection.js and canvas.js.
+ * Always destroys old transformer and creates a new one if needed.
  */
 export function updateTransformer() {
   log("TRACE", "[transformer] updateTransformer entry");
@@ -128,6 +131,7 @@ export function updateTransformer() {
     return;
   }
   const shape = sel[0];
+  // Always force transformer re-attach for robustness
   attachTransformerForShape(shape);
   log("TRACE", "[transformer] updateTransformer exit (attached)");
 }

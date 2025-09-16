@@ -135,6 +135,9 @@ function attachShapeEvents(shape) {
     selectShape(shape);
     setSelectedShapes([shape]);
     updateSelectionHighlight();
+    // --- Ensure transformer and edit mode are enabled on selection ---
+    updateTransformer();
+    attachTransformerForShape(shape);
   });
 
   // Drag start -- set state
@@ -198,7 +201,7 @@ function clampShapeToStage(shape) {
 }
 
 function clampGroupDragDelta(dx, dy, origPositions) {
-  log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy });
+  log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy, origPositions });
   const stage = AppState.konvaStage;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   origPositions.forEach(obj => {
@@ -383,3 +386,4 @@ export function buildCanvasPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
+

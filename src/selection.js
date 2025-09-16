@@ -6,6 +6,7 @@
  * - Updates and syncs selection data in AppState.
  * - Integrates per-shape state machine from shape-state.js for robust state transitions.
  * - Integrates per-shape config from shape-defs.js for robust transformer/anchors.
+ * - Ensures that selecting a shape always enables edit mode (transformer, drag, anchors) as allowed.
  * - Exports selection API for use by sidebar, toolbar, and canvas modules.
  * - Logs all selection changes and user actions at appropriate log levels.
  * - TRACE-level logging for all function entry/exit (diagnostic).
@@ -14,22 +15,19 @@
 
 import { AppState } from './state.js';
 import { log } from './log.js';
-import { updateTransformer } from './transformer.js';
+import { updateTransformer, attachTransformerForShape, detachTransformer } from './transformer.js';
 import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
 import { getShapeDef } from './shape-defs.js';
 
 /**
  * Set the currently selected shape (single selection).
  * Integrates per-shape state machine and config.
+ * Always enables edit mode (transformer, drag, anchors) if allowed.
  * @param {Object|null} shape - Shape object or null to clear.
  */
 export function setSelectedShape(shape) {
   log("TRACE", "[selection] setSelectedShape entry", { shape });
-  if (AppState.selectedShape === shape) {
-    log("DEBUG", "[selection] setSelectedShape: no change", { shape });
-    log("TRACE", "[selection] setSelectedShape exit (no change)");
-    return;
-  }
+  // Always enable transformer/edit mode, even if reselecting the same shape
   // Deselect previous selection
   if (AppState.selectedShape && typeof deselectShape === "function") {
     deselectShape(AppState.selectedShape);
@@ -41,8 +39,14 @@ export function setSelectedShape(shape) {
     selectShape(shape);
     // Ensure edit mode is fully enabled (anchors, transformer, etc)
     updateTransformer();
+    // If shape is editable, force transformer re-attach for robustness
+    const def = getShapeDef(shape);
+    if (def && def.editable && !shape.locked) {
+      attachTransformerForShape(shape);
+    }
   } else {
     updateTransformer();
+    detachTransformer();
   }
   log("INFO", "[selection] Single shape selected", { id: shape?._id, type: shape?._type });
   notifySelectionChanged();
@@ -70,7 +74,16 @@ export function setSelectedShapes(arr) {
     setMultiSelected(shape, newArr.length > 1);
     if (newArr.length === 1) selectShape(shape);
   });
-  updateTransformer(); // always update transformer on selection change
+  // Always update transformer on selection change
+  if (newArr.length === 1 && newArr[0] && !newArr[0].locked) {
+    const def = getShapeDef(newArr[0]);
+    if (def && def.editable) {
+      attachTransformerForShape(newArr[0]);
+    }
+  } else {
+    updateTransformer();
+    detachTransformer();
+  }
   log("INFO", "[selection] Multi-selection changed", {
     ids: AppState.selectedShapes.map(s => s._id),
     types: AppState.selectedShapes.map(s => s._type)
@@ -102,6 +115,7 @@ export function deselectAll() {
   AppState.selectedShape = null;
   AppState.selectedShapes = [];
   updateTransformer();
+  detachTransformer();
   notifySelectionChanged();
   log("TRACE", "[selection] deselectAll exit");
 }
@@ -194,7 +208,7 @@ export function getSelectedShape() {
   return result;
 }
 
-// Attach for debugging (remove in production!)
+// Debugging helpers (remove in production!)
 if (typeof window !== "undefined") {
   window.setSelectedShape = setSelectedShape;
   window.setSelectedShapes = setSelectedShapes;
