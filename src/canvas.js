@@ -12,8 +12,7 @@
  * -----------------------------------------------------------
  */
 
-import fabric from 'fabric';
-const { Canvas, Rect, Circle, Line, Group, Image } = fabric;
+import { Canvas, Rect, Circle, Line, Group, Image } from 'fabric';
 
 import {
   AppState,
@@ -337,4 +336,3 @@ export function buildCanvasPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
-
