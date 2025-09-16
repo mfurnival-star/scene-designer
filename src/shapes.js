@@ -101,13 +101,19 @@ export function makePointShape(x, y) {
   group.on('mouseenter', () => {
     log("TRACE", "[shapes] point mouseenter", { group });
     if (typeof document !== "undefined") {
-      group.getStage()?.container().style.cursor = 'pointer';
+      const stage = group.getStage();
+      if (stage && stage.container()) {
+        stage.container().style.cursor = 'pointer';
+      }
     }
   });
   group.on('mouseleave', () => {
     log("TRACE", "[shapes] point mouseleave", { group });
     if (typeof document !== "undefined") {
-      group.getStage()?.container().style.cursor = '';
+      const stage = group.getStage();
+      if (stage && stage.container()) {
+        stage.container().style.cursor = '';
+      }
     }
   });
 
@@ -220,5 +226,4 @@ if (typeof window !== "undefined") {
   window.makeRectShape = makeRectShape;
   window.makeCircleShape = makeCircleShape;
 }
-
 
