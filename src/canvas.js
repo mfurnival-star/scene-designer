@@ -2,13 +2,12 @@
  * canvas.js
  * -----------------------------------------------------------
  * Scene Designer – Canvas/Konva Panel
- * - Robust, modern ES module for all canvas, image, and shape logic.
- * - Handles creation, deletion, duplication, selection, lock, drag, and transform.
+ * - Modern ES module for all canvas, image, and shape logic.
+ * - NO UI creation or controls here: all toolbar, image upload, and server image logic are now only in src/toolbar.js.
+ * - Handles Konva stage/layer, creation, deletion, duplication, selection, lock, drag, and transform.
  * - Imports all dependencies as ES modules.
- * - All state and selection is sanitized after every mutation to avoid stale references.
- * - No global/window code; all state flows via AppState.
- * - Logging: Uses log.js; logs at INFO for user/major events, DEBUG for internal state changes, TRACE for entry/exit of all functions.
- * - Transformer logic for shape anchors and resizing is now delegated to transformer.js.
+ * - All state flows via AppState.
+ * - Logging via log.js.
  * -----------------------------------------------------------
  */
 
@@ -17,7 +16,6 @@ import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes
 import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
 
-let konvaInitialized = false;
 let bgKonvaImage = null;
 let groupBoundingBox = null;
 
@@ -259,59 +257,25 @@ export function buildCanvasPanel(rootElement, container) {
       componentName: container?.componentName
     });
 
-    rootElement.innerHTML = `
-      <div id="canvas-panel-container" style="width:100%;height:100%;position:relative;overflow:hidden;">
-        <div id="canvas-toolbar-main" style="display:flex;flex-wrap:wrap;align-items:center;padding:6px 8px 4px 8px;background:#f7f7fa;border-bottom:1px solid #bbb;">
-          <input type="file" id="canvas-image-upload" accept="image/*" style="display:inline-block;" disabled>
-          <select id="canvas-server-image-select" style="margin-left:6px;" disabled>
-            <option value="">[Server image]</option>
-            <option value="sample1.png">sample1.png</option>
-            <option value="sample2.png">sample2.png</option>
-          </select>
-          <span style="margin-left:12px;">Shape:</span>
-          <select id="shape-type-select" style="margin-left:4px;" disabled>
-            <option value="point">Point</option>
-            <option value="rect">Rectangle</option>
-            <option value="circle">Circle</option>
-          </select>
-          <button id="add-shape-btn" style="margin-left:4px;" disabled>Add</button>
-          <button id="delete-shape-btn" style="margin-left:12px;" disabled>Delete</button>
-          <button id="duplicate-shape-btn" style="margin-left:4px;" disabled>Duplicate</button>
-          <button id="align-left-btn" style="margin-left:12px;" disabled>Align Left</button>
-          <button id="align-center-btn" disabled>Align Center</button>
-          <button id="align-right-btn" disabled>Align Right</button>
-          <button id="align-top-btn" style="margin-left:4px;" disabled>Align Top</button>
-          <button id="align-middle-btn" disabled>Align Middle</button>
-          <button id="align-bottom-btn" disabled>Align Bottom</button>
-          <button id="select-all-btn" style="margin-left:12px;" disabled>Select All</button>
-          <button id="lock-btn" style="margin-left:14px;" disabled>Lock</button>
-          <button id="unlock-btn" style="margin-left:4px;" disabled>Unlock</button>
-        </div>
-        <div id="konva-stage-scroll-container" style="width:100%;height:calc(100% - 44px);overflow:auto;position:relative;background:#eee;">
-          <div id="konva-stage-div" style="position:relative;width:max-content;height:max-content;"></div>
-        </div>
-      </div>
-    `;
+    // --- NO UI creation here ---
+    // Only create the Konva stage and layer.
+    // All toolbar and control UI are now in src/toolbar.js.
 
-    const scrollContainer = rootElement.querySelector('#konva-stage-scroll-container');
-    if (scrollContainer) {
-      scrollContainer.style.overflow = "auto";
-      scrollContainer.style.width = "100%";
-      scrollContainer.style.height = "calc(100% - 44px)";
-    }
-
-    const stageDiv = rootElement.querySelector('#konva-stage-div');
-    if (!stageDiv) {
-      log("ERROR", "[canvas] konva-stage-div not found in DOM");
-      return;
-    }
     if (AppState.konvaStage && typeof AppState.konvaStage.destroy === "function") {
       AppState.konvaStage.destroy();
     }
-    const width = stageDiv.clientWidth || 600;
-    const height = stageDiv.clientHeight || 400;
+    const width = 600;
+    const height = 400;
+    const containerDiv = document.createElement('div');
+    containerDiv.id = "konva-stage-div";
+    containerDiv.style.position = "relative";
+    containerDiv.style.width = width + "px";
+    containerDiv.style.height = height + "px";
+    rootElement.innerHTML = "";
+    rootElement.appendChild(containerDiv);
+
     const stage = new Konva.Stage({
-      container: stageDiv,
+      container: containerDiv,
       width,
       height
     });
@@ -326,10 +290,8 @@ export function buildCanvasPanel(rootElement, container) {
         log("TRACE", "[canvas] subscriber: image update event");
         updateBackgroundImage();
         dumpLayerState(layer, "subscriber:image after update");
-        if (scrollContainer && stage) {
-          stageDiv.style.width = stage.width() + "px";
-          stageDiv.style.height = stage.height() + "px";
-        }
+        containerDiv.style.width = stage.width() + "px";
+        containerDiv.style.height = stage.height() + "px";
       }
       // --- Listen for shape additions and ensure all shapes are always added to Konva layer ---
       if (details && details.type === "addShape" && details.shape) {
@@ -366,13 +328,11 @@ export function buildCanvasPanel(rootElement, container) {
     if (AppState.imageObj) {
       updateBackgroundImage();
       dumpLayerState(layer, "buildCanvasPanel (imageObj present)");
-      if (scrollContainer && stage) {
-        stageDiv.style.width = stage.width() + "px";
-        stageDiv.style.height = stage.height() + "px";
-      }
+      containerDiv.style.width = stage.width() + "px";
+      containerDiv.style.height = stage.height() + "px";
     }
 
-    log("INFO", "[canvas] Canvas panel fully initialized (scrollable, legacy UI elements disabled)");
+    log("INFO", "[canvas] Canvas panel initialized (Konva only, no UI controls)");
     dumpLayerState(layer, "buildCanvasPanel end");
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
@@ -386,4 +346,3 @@ export function buildCanvasPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
-
