@@ -10,9 +10,13 @@
  * - All state flows via AppState.
  * - Logging via log.js (TRACE at every function entry/exit, decision point, and mutation).
  * -----------------------------------------------------------
+ *
+ * NOTE: Fabric.js npm package (v5.x) is UMD-only (no named ESM exports).
+ * Use default import and destructure classes from 'fabric'.
  */
 
-import { Canvas, Rect, Circle, Line, Group, Image } from 'fabric';
+import fabric from 'fabric';
+const { Canvas, Rect, Circle, Line, Group, Image } = fabric;
 
 import {
   AppState,

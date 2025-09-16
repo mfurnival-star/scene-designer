@@ -10,9 +10,14 @@
  * - No global variables, no window.* usage.
  * - Logging via log.js (DEEP TRACE logging for creation and handler attachment).
  * -----------------------------------------------------------
+ *
+ * NOTE: Fabric.js npm package (v5.x) is UMD-only (no named ESM exports).
+ * Use default import and destructure classes from 'fabric'.
  */
 
-import { Canvas, Rect, Circle, Line, Group, Image } from 'fabric';
+import fabric from 'fabric';
+const { Canvas, Rect, Circle, Line, Group, Image } = fabric;
+
 import { log } from './log.js';
 import { attachSelectionHandlers } from './selection.js';
 import { setShapeState } from './shape-state.js';

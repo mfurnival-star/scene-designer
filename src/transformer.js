@@ -9,9 +9,14 @@
  * - Logging via log.js.
  * - No direct event handling or canvas logic.
  * -----------------------------------------------------------
+ *
+ * NOTE: Fabric.js npm package (v5.x) is UMD-only (no named ESM exports).
+ * Use default import and destructure classes from 'fabric'.
  */
 
-import { Canvas, Rect, Circle, Line, Group, Image } from 'fabric';
+import fabric from 'fabric';
+const { Canvas, Rect, Circle, Line, Group, Image } = fabric;
+
 import { AppState } from './state.js';
 import { log } from './log.js';
 import { getShapeDef } from './shape-defs.js';
