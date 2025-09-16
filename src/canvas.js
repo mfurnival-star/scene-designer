@@ -5,6 +5,7 @@
  * - Modern ES module for all canvas, image, and shape logic.
  * - NO UI creation or controls here: all toolbar, image upload, and server image logic are now only in src/toolbar.js.
  * - Handles Konva stage/layer, creation, deletion, duplication, selection, lock, drag, and transform.
+ * - Integrates per-shape state machine from shape-state.js for robust state transitions.
  * - Imports all dependencies as ES modules.
  * - All state flows via AppState.
  * - Logging via log.js.
@@ -15,10 +16,9 @@ import Konva from 'konva';
 import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes, subscribe } from './state.js';
 import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
+import { getShapeState, setShapeState, selectShape, deselectShape, startDraggingShape, stopDraggingShape } from './shape-state.js';
 
-/**
- * Utility: Dump shape diagnostic info for debugging.
- */
+// --- Utility: Dump shape diagnostic info for debugging ---
 function dumpShapeDebug(shape, tag = "") {
   log("TRACE", `[canvas] ${tag} shape diagnostic`, {
     typeofShape: typeof shape,
@@ -32,13 +32,12 @@ function dumpShapeDebug(shape, tag = "") {
     className: shape?.className,
     _type: shape?._type,
     _label: shape?._label,
+    _state: shape?._state,
     keys: shape ? Object.keys(shape) : []
   });
 }
 
-/**
- * Extra: Dump Konva layer state (children and their types).
- */
+// --- Extra: Dump Konva layer state (children and their types) ---
 function dumpLayerState(layer, tag = "") {
   if (!layer) {
     log("TRACE", `[canvas] ${tag} dumpLayerState: NO layer`);
@@ -117,35 +116,57 @@ function sanitizeSelection() {
 function removeAllShapeHandlers(shape) {
   log("TRACE", "[canvas] removeAllShapeHandlers entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   if (shape && typeof shape.off === "function") {
-    shape.off('mousedown.shape dragmove.shape transformstart.shape transformend.shape');
+    shape.off('mousedown.shape dragmove.shape dragstart.shape dragend.shape transformstart.shape transformend.shape');
   }
   log("TRACE", "[canvas] removeAllShapeHandlers exit");
 }
 
+// --- NEW: Attach shape events, using state machine for all transitions ---
 function attachShapeEvents(shape) {
   log("TRACE", "[canvas] attachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   removeAllShapeHandlers(shape);
 
-  // Ensure shapes are selectable by tap/click (reselect after unselect)
+  // Selection logic -- always reselect, and set state
   shape.on('mousedown.shape', (e) => {
     log("DEBUG", "[canvas] mousedown.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape.locked) return;
-    // Always select shape, even if it's already selected (reselect after unselect)
+    selectShape(shape);
     setSelectedShapes([shape]);
     updateSelectionHighlight();
   });
 
+  // Drag start -- set state
+  shape.on('dragstart.shape', (e) => {
+    log("DEBUG", "[canvas] dragstart.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
+    if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
+    if (shape.locked) {
+      shape.stopDrag();
+      setShapeState(shape, 'locked');
+      return;
+    }
+    startDraggingShape(shape);
+  });
+
+  // Drag move -- keep state, clamp, update highlight
   shape.on('dragmove.shape', () => {
     log("DEBUG", "[canvas] dragmove.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape.locked) {
       shape.stopDrag();
+      setShapeState(shape, 'locked');
       return;
     }
     if (AppState.selectedShapes.length === 1) clampShapeToStage(shape);
+    updateSelectionHighlight();
+  });
+
+  // Drag end -- set state back
+  shape.on('dragend.shape', () => {
+    log("DEBUG", "[canvas] dragend.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
+    stopDraggingShape(shape);
     updateSelectionHighlight();
   });
 
@@ -205,6 +226,7 @@ function clampGroupDragDelta(dx, dy, origPositions) {
   return [adjDx, adjDy];
 }
 
+// --- Selection highlight: uses shape state machine to show correct UI ---
 function updateSelectionHighlight() {
   log("TRACE", "[canvas] updateSelectionHighlight entry");
   const layer = AppState.konvaLayer;
@@ -293,6 +315,7 @@ export function buildCanvasPanel(rootElement, container) {
     // --- Unselect shapes by clicking on empty background ---
     stage.on("mousedown.unselect touchstart.unselect", function(e) {
       if (e.target === stage) {
+        AppState.selectedShapes.forEach(deselectShape);
         setSelectedShapes([]);
       }
     });
@@ -334,7 +357,6 @@ export function buildCanvasPanel(rootElement, container) {
       if (details && details.type === "selection") {
         log("TRACE", "[canvas] subscriber: selection event");
         updateSelectionHighlight();
-        // Ensure transformer updates on selection changes
         updateTransformer();
         dumpLayerState(layer, "subscriber:selection after update");
       }

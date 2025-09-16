@@ -13,6 +13,7 @@ main.js
 toolbar.js
 shapes.js
 transformer.js
+shape-state.js
 ```
 
 ---
@@ -68,6 +69,11 @@ transformer.js
   - Point: no anchors/transform (not resizeable).
   - Invoked by canvas.js and consumes AppState, selection.
   - All logging via log.js.
+
+- **shape-state.js**  
+  Per-shape state machine module:
+  - Exports: `initShapeState`, `setShapeState`, `selectShape`, `deselectShape`, `startDraggingShape`, `stopDraggingShape`, `lockShape`, `unlockShape`, `setMultiSelected`, `isShapeInState`.
+  - Used by shapes.js, canvas.js, selection.js, transformer.js for all robust state transitions.
 
 ---
 **Instructions:**  

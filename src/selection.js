@@ -1,10 +1,10 @@
-
 /**
  * selection.js
  * -----------------------------------------------------------
  * Shape Selection Logic for Scene Designer
  * - Handles single and multi-shape selection state.
  * - Updates and syncs selection data in AppState.
+ * - Integrates per-shape state machine from shape-state.js for robust state transitions.
  * - Exports selection API for use by sidebar, toolbar, and canvas modules.
  * - Logs all selection changes and user actions at appropriate log levels.
  * - Adheres to SCENE_DESIGNER_MANIFESTO.md.
@@ -15,9 +15,11 @@
 import { AppState } from './state.js';
 import { log } from './log.js';
 import { updateTransformer } from './transformer.js';
+import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
 
 /**
  * Set the currently selected shape (single selection).
+ * Integrates per-shape state machine.
  * @param {Object|null} shape - Shape object or null to clear.
  */
 export function setSelectedShape(shape) {
@@ -27,8 +29,14 @@ export function setSelectedShape(shape) {
     log("TRACE", "[selection] setSelectedShape exit (no change)");
     return;
   }
+  // Deselect previous selection
+  if (AppState.selectedShape && typeof deselectShape === "function") {
+    deselectShape(AppState.selectedShape);
+  }
+  // Set new selection and state
   AppState.selectedShape = shape;
   AppState.selectedShapes = shape ? [shape] : [];
+  if (shape) selectShape(shape);
   log("INFO", "[selection] Single shape selected", { id: shape?._id, type: shape?._type });
   notifySelectionChanged();
   updateTransformer();
@@ -37,13 +45,25 @@ export function setSelectedShape(shape) {
 
 /**
  * Set the current multi-selection.
+ * Integrates per-shape state machine.
  * @param {Array} arr - Array of shape objects.
  */
 export function setSelectedShapes(arr) {
   log("TRACE", "[selection] setSelectedShapes entry", { arr });
   const newArr = Array.isArray(arr) ? arr : [];
+  // Deselect previous selection
+  if (AppState.selectedShapes && Array.isArray(AppState.selectedShapes)) {
+    AppState.selectedShapes.forEach(s => {
+      if (!newArr.includes(s)) deselectShape(s);
+    });
+  }
+  // Set new selection and state
   AppState.selectedShapes = newArr;
   AppState.selectedShape = newArr.length === 1 ? newArr[0] : null;
+  newArr.forEach((shape, idx) => {
+    setMultiSelected(shape, newArr.length > 1);
+    if (newArr.length === 1) selectShape(shape);
+  });
   log("INFO", "[selection] Multi-selection changed", {
     ids: AppState.selectedShapes.map(s => s._id),
     types: AppState.selectedShapes.map(s => s._type)
@@ -65,10 +85,14 @@ export function selectAllShapes() {
 
 /**
  * Deselect all shapes.
+ * Integrates per-shape state machine.
  */
 export function deselectAll() {
   log("TRACE", "[selection] deselectAll entry");
   log("INFO", "[selection] deselectAll called");
+  if (AppState.selectedShapes && Array.isArray(AppState.selectedShapes)) {
+    AppState.selectedShapes.forEach(s => deselectShape(s));
+  }
   AppState.selectedShape = null;
   AppState.selectedShapes = [];
   notifySelectionChanged();
@@ -99,6 +123,7 @@ function notifySelectionChanged() {
 
 /**
  * Attach selection event handlers to a shape.
+ * Integrates per-shape state machine.
  * @param {Object} shape - Shape object to attach handlers to.
  */
 export function attachSelectionHandlers(shape) {

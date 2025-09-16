@@ -1,34 +1,36 @@
 /**
  * shapes.js
  * -----------------------------------------------------------
- * Scene Designer – Shape Factory Module (ESM ONLY)
- * - Centralizes all Konva shape construction, labeling, and event attachment.
- * - Exports: makePointShape(x, y), makeRectShape(x, y, w, h), makeCircleShape(x, y, r)
- * - No direct Konva layer addition; shape addition handled in canvas.js subscriber only.
- * - All dependencies imported as ES modules.
- * - No window/global code except optional debug helpers (remove for production).
- * - All logging via log.js.
+ * Scene Designer – Shape Factory and State Logic (ESM ONLY)
+ * - Centralizes creation of shape objects (rect, circle, point).
+ * - Integrates per-shape state machine via shape-state.js.
+ * - Handles attach/detach of Konva events and selection logic.
+ * - All shape creation, duplication, locking, and event wiring here.
+ * - Used by canvas.js, toolbar.js, sidebar.js, and any shape-creation features.
+ * - Logging via log.js.
  * -----------------------------------------------------------
  */
 
 import Konva from 'konva';
 import { log } from './log.js';
-import { attachSelectionHandlers } from './selection.js';
-import { AppState, getSetting } from './state.js';
+import { initShapeState, selectShape, deselectShape, startDraggingShape, stopDraggingShape, lockShape, unlockShape, setMultiSelected } from './shape-state.js';
+
+// --- Shape Factory Functions ---
 
 /**
- * Factory: Point shape (crosshair + halo + hit area)
+ * Create a new point shape (crosshair + halo + hit area).
+ * @param {number} x
+ * @param {number} y
+ * @returns {Konva.Group}
  */
 export function makePointShape(x, y) {
   log("TRACE", "[shapes] makePointShape entry", { x, y });
+  const crossLen = 14;
+  const haloR = 12;
+  const hitR = 16;
+  const group = new Konva.Group({ x: x, y: y, draggable: true });
 
-  const crossLen = getSetting("pointCrossLen") ?? 14;
-  const haloR = getSetting("pointHaloRadius") ?? 12;
-  const hitR = getSetting("pointHitRadius") ?? 16;
-
-  const group = new Konva.Group({ x, y, draggable: true });
-
-  // Invisible hit area
+  // Invisible hit area (for easy tap/drag)
   const hitCircle = new Konva.Circle({
     x: 0,
     y: 0,
@@ -38,7 +40,7 @@ export function makePointShape(x, y) {
     listening: true
   });
 
-  // Halo (faint circle for selection)
+  // Halo for selection feedback
   const halo = new Konva.Circle({
     x: 0,
     y: 0,
@@ -49,7 +51,7 @@ export function makePointShape(x, y) {
     listening: false
   });
 
-  // Horizontal crosshair
+  // Crosshair lines
   const crossH = new Konva.Line({
     points: [-crossLen / 2, 0, crossLen / 2, 0],
     stroke: '#2176ff',
@@ -58,7 +60,6 @@ export function makePointShape(x, y) {
     listening: false
   });
 
-  // Vertical crosshair
   const crossV = new Konva.Line({
     points: [0, -crossLen / 2, 0, crossLen / 2],
     stroke: '#2176ff',
@@ -67,7 +68,7 @@ export function makePointShape(x, y) {
     listening: false
   });
 
-  // Selection halo
+  // Selection halo (visible only when selected)
   const selHalo = new Konva.Circle({
     x: 0, y: 0,
     radius: haloR + 3,
@@ -85,145 +86,138 @@ export function makePointShape(x, y) {
   group.add(crossV);
 
   group._type = 'point';
-  group._label = 'Point' + (AppState.shapes.filter(s => s._type === 'point').length + 1);
+  group._label = 'Point';
   group.locked = false;
 
+  // State machine init
+  initShapeState(group, 'unselected');
+
   group.getSampleCoords = function() {
-    log("TRACE", "[shapes] getSampleCoords called", { group });
+    log("TRACE", "[shapes] point.getSampleCoords", { group });
     return { x: group.x(), y: group.y() };
   };
 
   group.showSelection = function(isSelected) {
-    log("TRACE", "[shapes] showSelection called", { isSelected });
     selHalo.visible(isSelected);
   };
 
-  group.on('mouseenter', () => {
-    log("TRACE", "[shapes] point mouseenter", { group });
-    if (typeof document !== "undefined") {
-      const stage = group.getStage();
-      if (stage && stage.container()) {
-        stage.container().style.cursor = 'pointer';
-      }
-    }
-  });
-  group.on('mouseleave', () => {
-    log("TRACE", "[shapes] point mouseleave", { group });
-    if (typeof document !== "undefined") {
-      const stage = group.getStage();
-      if (stage && stage.container()) {
-        stage.container().style.cursor = '';
-      }
-    }
-  });
-
-  // Attach selection handlers for selection logic
-  attachSelectionHandlers(group);
-
-  log("TRACE", "[shapes] makePointShape exit shape diagnostic", {
-    typeofShape: typeof group,
-    constructorName: group?.constructor?.name,
-    isKonva: group instanceof Konva.Group,
-    isRect: false,
-    isCircle: false,
-    isObject: group && typeof group === "object" && !(group instanceof Konva.Shape),
-    attrs: group?.attrs,
-    className: group?.className,
-    _type: group?._type,
-    _label: group?._label,
-    keys: group ? Object.keys(group) : []
-  });
-
+  // Attach events for selection and drag
+  attachShapeEvents(group);
+  log("TRACE", "[shapes] makePointShape exit");
   return group;
 }
 
 /**
- * Factory: Rectangle shape
+ * Create a new rectangle shape.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} w
+ * @param {number} h
+ * @returns {Konva.Rect}
  */
 export function makeRectShape(x, y, w, h) {
   log("TRACE", "[shapes] makeRectShape entry", { x, y, w, h });
-
-  const stroke = getSetting("defaultStrokeColor") ?? "#000";
-  const fill = getSetting("defaultFillColor") ?? "#0000";
-
   const rect = new Konva.Rect({
     x: x,
     y: y,
     width: w,
     height: h,
-    stroke,
+    stroke: "#2176ff",
     strokeWidth: 1,
-    fill,
+    fill: "#00000000",
     draggable: true
   });
-  rect._type = "rect";
-  rect._label = "Rectangle" + (AppState.shapes.filter(s => s._type === 'rect').length + 1);
+
+  rect._type = 'rect';
+  rect._label = 'Rect';
   rect.locked = false;
 
-  attachSelectionHandlers(rect);
+  // State machine init
+  initShapeState(rect, 'unselected');
 
-  log("TRACE", "[shapes] makeRectShape exit shape diagnostic", {
-    typeofShape: typeof rect,
-    constructorName: rect?.constructor?.name,
-    isKonva: rect instanceof Konva.Rect,
-    isRect: true,
-    isCircle: false,
-    isObject: rect && typeof rect === "object" && !(rect instanceof Konva.Shape),
-    attrs: rect?.attrs,
-    className: rect?.className,
-    _type: rect?._type,
-    _label: rect?._label,
-    keys: rect ? Object.keys(rect) : []
-  });
-
+  attachShapeEvents(rect);
+  log("TRACE", "[shapes] makeRectShape exit");
   return rect;
 }
 
 /**
- * Factory: Circle shape
+ * Create a new circle shape.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} r
+ * @returns {Konva.Circle}
  */
 export function makeCircleShape(x, y, r) {
   log("TRACE", "[shapes] makeCircleShape entry", { x, y, r });
-
-  const stroke = getSetting("defaultStrokeColor") ?? "#000";
-  const fill = getSetting("defaultFillColor") ?? "#0000";
-
   const circle = new Konva.Circle({
     x: x,
     y: y,
     radius: r,
-    stroke,
+    stroke: "#2176ff",
     strokeWidth: 1,
-    fill,
+    fill: "#00000000",
     draggable: true
   });
-  circle._type = "circle";
-  circle._label = "Circle" + (AppState.shapes.filter(s => s._type === 'circle').length + 1);
+
+  circle._type = 'circle';
+  circle._label = 'Circle';
   circle.locked = false;
 
-  attachSelectionHandlers(circle);
+  // State machine init
+  initShapeState(circle, 'unselected');
 
-  log("TRACE", "[shapes] makeCircleShape exit shape diagnostic", {
-    typeofShape: typeof circle,
-    constructorName: circle?.constructor?.name,
-    isKonva: circle instanceof Konva.Circle,
-    isRect: false,
-    isCircle: true,
-    isObject: circle && typeof circle === "object" && !(circle instanceof Konva.Shape),
-    attrs: circle?.attrs,
-    className: circle?.className,
-    _type: circle?._type,
-    _label: circle?._label,
-    keys: circle ? Object.keys(circle) : []
-  });
-
+  attachShapeEvents(circle);
+  log("TRACE", "[shapes] makeCircleShape exit");
   return circle;
 }
 
-// Optionally attach to window for debugging (remove in production!)
-if (typeof window !== "undefined") {
-  window.makePointShape = makePointShape;
-  window.makeRectShape = makeRectShape;
-  window.makeCircleShape = makeCircleShape;
-}
+// --- Shape Events and State Machine Integration ---
 
+/**
+ * Attach selection, drag, and lock events to a shape.
+ * Updates per-shape state using shape-state.js.
+ * @param {Konva.Shape|Konva.Group} shape
+ */
+export function attachShapeEvents(shape) {
+  log("TRACE", "[shapes] attachShapeEvents entry", { shape });
+  // Remove previous handlers
+  shape.off('mousedown.shape dragstart.shape dragmove.shape dragend.shape');
+
+  // Selection logic
+  shape.on('mousedown.shape', (e) => {
+    log("DEBUG", "[shapes] mousedown.shape event", { shape });
+    if (shape.locked) return;
+    selectShape(shape); // State machine transition
+    shape.getLayer() && shape.getLayer().batchDraw();
+  });
+
+  // Drag start
+  shape.on('dragstart.shape', () => {
+    log("DEBUG", "[shapes] dragstart.shape event", { shape });
+    if (shape.locked) {
+      shape.stopDrag();
+      lockShape(shape);
+      return;
+    }
+    startDraggingShape(shape);
+  });
+
+  // Drag end
+  shape.on('dragend.shape', () => {
+    log("DEBUG", "[shapes] dragend.shape event", { shape });
+    stopDraggingShape(shape);
+    shape.getLayer() && shape.getLayer().batchDraw();
+  });
+
+  // Lock/unlock event (for future multi-select logic)
+  shape.on('lock.shape', () => {
+    log("DEBUG", "[shapes] lock.shape event", { shape });
+    lockShape(shape);
+  });
+  shape.on('unlock.shape', () => {
+    log("DEBUG", "[shapes] unlock.shape event", { shape });
+    unlockShape(shape);
+  });
+
+  log("TRACE", "[shapes] attachShapeEvents exit", { shape });
+}
