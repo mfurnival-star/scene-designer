@@ -238,7 +238,7 @@ export function attachSelectionHandlers(shape) {
       shapeType: shape._type,
       shapeLabel: shape._label,
       shapeRefEq: AppState.shapes.includes(shape),
-      selectedShapes: AppState.selectedShapes.map(s => s?._id),
+      selectedShapes: AppState.selectedShapes.map(s => s._id),
       selectedShape: AppState.selectedShape?._id
     });
 
@@ -311,4 +311,5 @@ if (typeof window !== "undefined") {
   window.getSelectedShapes = getSelectedShapes;
   window.attachSelectionHandlers = attachSelectionHandlers;
 }
+
 

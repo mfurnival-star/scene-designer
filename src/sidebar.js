@@ -122,13 +122,18 @@ export function buildSidebarPanel(rootElement, container) {
       log("DEBUG", "[sidebar] updateTable ENTRY");
       const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
       tabulator.replaceData(data);
-      // --- Selection sync: ensure selected row is highlighted ---
+
+      // Selection sync: ensure selected row is highlighted
       if (AppState.selectedShape) {
         const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
         let rows = tabulator.getRows ? tabulator.getRows() : [];
         if (selIdx >= 0 && rows[selIdx] && typeof rows[selIdx].select === "function") {
           rows[selIdx].select();
           log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx });
+        } else if (typeof tabulator.selectRow === "function") {
+          // Fallback for Tabulator v4/v5: select by index
+          tabulator.selectRow(selIdx);
+          log("DEBUG", "[sidebar] updateTable: selectRow fallback", { selIdx });
         } else {
           log("WARN", "[sidebar] updateTable: Cannot select row", { selIdx });
         }
@@ -144,14 +149,12 @@ export function buildSidebarPanel(rootElement, container) {
     };
 
     tabulator.on("tableBuilt", () => {
-      log("TRACE", "[sidebar] tableBuilt event");
       updateTable();
       // Subscribe after built to avoid early calls
       var unsub = subscribe(updateTable);
       // Clean up on destroy
       if (container && typeof container.on === "function") {
         container.on("destroy", () => {
-          log("TRACE", "[sidebar] panel destroy event (Tabulator)");
           unsub && unsub();
           tabulator.destroy();
         });
@@ -171,4 +174,3 @@ export function buildSidebarPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
-
