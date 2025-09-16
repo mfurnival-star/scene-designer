@@ -307,7 +307,7 @@ export function buildCanvasPanel(rootElement, container) {
           stageDiv.style.height = stage.height() + "px";
         }
       }
-      // --- NEW: Listen for shape additions and ensure all shapes are always added to Konva layer ---
+      // --- Listen for shape additions and ensure all shapes are always added to Konva layer ---
       if (details && details.type === "addShape" && details.shape) {
         dumpShapeDebug(details.shape, "addShape (canvas subscriber)");
         // Only add shape if not already present in layer
@@ -315,11 +315,20 @@ export function buildCanvasPanel(rootElement, container) {
           AppState.konvaLayer.add(details.shape);
           AppState.konvaLayer.draw();
           log("INFO", `[canvas] Shape added to Konva layer`, details.shape);
+          // Attach transformer for single selection, if shape is selectable
+          if (!details.shape.locked && details.shape._type !== "point") {
+            attachTransformerForShape(details.shape);
+          }
         } else {
           log("DEBUG", "[canvas] Shape not added to Konva layer (already present or not a Konva object)", details.shape);
         }
       }
-      // Optionally: handle shape removal logic here if needed (not strictly required for add bug)
+      // Optionally: handle shape removal logic here if needed
+      if (details && details.type === "selection") {
+        updateSelectionHighlight();
+        // Ensure transformer updates on selection changes
+        updateTransformer();
+      }
     });
 
     if (AppState.imageObj) {

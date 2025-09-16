@@ -1,168 +1,122 @@
 /**
  * transformer.js
  * -----------------------------------------------------------
- * Scene Designer – Shape Transformer/Resize Logic (ESM only)
- * - Centralizes attach/detach/configure of Konva.Transformers for all shape types.
- * - Rectangle: 8 anchors (corners + sides), resize freely and rotatable.
- * - Circle: 4 anchors (corners only), aspect ratio enforced (circle stays circle) and rotatable.
- * - Point: no anchors/transform (not resizeable/rotatable).
- * - Transformer logic is invoked by canvas.js and consumes AppState, selection.
+ * Centralized Transformer Logic for Scene Designer
+ * - Manages Konva.Transformer nodes, anchors, and resizing for shapes.
+ * - Rectangle: 8 anchors (corners + sides), resize freely.
+ * - Circle: 4 anchors (corners only), aspect ratio enforced (circle stays circle).
+ * - Point: no anchors/transform (not resizeable).
+ * - Invoked by canvas.js and selection.js, consumes AppState.
  * - All logging via log.js.
- * - No color logic; color handled by shapes.js/toolbar.js/sidebar.js.
- * - No global/window code.
+ * - No global/window code; ES module only.
  * -----------------------------------------------------------
- * Exports:
- *   - attachTransformerForShape(shape)
- *   - detachTransformer()
- *   - updateTransformer()
- * Dependencies:
- *   - Konva (ESM)
- *   - AppState from state.js
- *   - log.js
  */
 
-import Konva from "konva";
-import { AppState } from "./state.js";
-import { log } from "./log.js";
+import Konva from 'konva';
+import { AppState } from './state.js';
+import { log } from './log.js';
 
 /**
- * Attach a Konva.Transformer for the given shape, customizing anchors and aspect ratio logic.
- * - Rectangle: 8 anchors, free resize and rotate.
- * - Circle: 4 anchors (corners), aspect ratio locked, rotate enabled.
- * - Point: no anchors (not resizeable/rotatable).
- * - Returns the created Transformer.
+ * Attach a Konva.Transformer to the given shape.
+ * Only single selection is supported for transform.
+ * @param {Konva.Shape|Konva.Group} shape - The Konva shape to attach transformer to.
  */
 export function attachTransformerForShape(shape) {
-  log("TRACE", "[transformer] attachTransformerForShape entry", { shapeType: shape?._type, shape });
-
-  if (!AppState.konvaLayer || !shape) {
-    log("ERROR", "[transformer] attachTransformerForShape: missing konvaLayer or shape");
-    return null;
-  }
-
-  // Check that the shape is actually attached to the layer
-  const found = AppState.konvaLayer.findOne(node => node === shape);
-  if (!found) {
-    log("ERROR", "[transformer] Shape is not a child of konvaLayer", { shape });
-    return null;
+  log("TRACE", "[transformer] attachTransformerForShape entry", { shape });
+  const layer = AppState.konvaLayer;
+  if (!layer || !shape) {
+    log("WARN", "[transformer] attachTransformerForShape: missing layer or shape", { layer, shape });
+    log("TRACE", "[transformer] attachTransformerForShape exit (missing layer/shape)");
+    return;
   }
 
   // Remove any existing transformer
   detachTransformer();
 
-  // Determine anchors and config per shape type
+  // Determine allowed anchors by shape type/lock status
   let anchors = [];
   let rotateEnabled = false;
-  let keepAspectRatio = false;
-
-  if (shape._type === "rect") {
-    anchors = [
-      "top-left", "top-center", "top-right",
-      "middle-left", "middle-right",
-      "bottom-left", "bottom-center", "bottom-right"
-    ];
-    rotateEnabled = true;
-    keepAspectRatio = false;
-  } else if (shape._type === "circle") {
-    anchors = ["top-left", "top-right", "bottom-left", "bottom-right"];
-    rotateEnabled = true;
-    keepAspectRatio = true; // Always keep aspect ratio for circle
-  } else if (shape._type === "point") {
-    anchors = [];
-    rotateEnabled = false;
-    keepAspectRatio = false;
+  if (!shape.locked) {
+    if (shape._type === "rect") {
+      anchors = ['top-left','top-center','top-right','middle-left','middle-right','bottom-left','bottom-center','bottom-right'];
+      rotateEnabled = true;
+    } else if (shape._type === "circle") {
+      anchors = ['top-left','top-right','bottom-left','bottom-right'];
+      rotateEnabled = true;
+    }
+    // Points: no anchors/transform
   }
 
-  const tr = new Konva.Transformer({
+  if (anchors.length === 0) {
+    log("DEBUG", "[transformer] No anchors for shape type", shape._type);
+    log("TRACE", "[transformer] attachTransformerForShape exit (no anchors)");
+    return;
+  }
+
+  // Create transformer
+  const transformer = new Konva.Transformer({
     nodes: [shape],
     enabledAnchors: anchors,
-    rotateEnabled,
-    keepRatio: keepAspectRatio
+    rotateEnabled
   });
 
-  // Aspect ratio lock for circles
-  if (shape._type === "circle") {
-    tr.on("transform", () => {
-      // Always keep scaleX == scaleY for circle, so shape remains a circle
-      const sx = shape.scaleX();
-      const sy = shape.scaleY();
-      if (sx !== sy) {
-        const avgScale = (sx + sy) / 2;
-        shape.scale({ x: avgScale, y: avgScale });
-      }
-    });
-    tr.on("transformend", () => {
-      // Apply scale as radius, reset scale
-      const scale = shape.scaleX();
-      shape.radius(shape.radius() * scale);
-      shape.scale({ x: 1, y: 1 });
-      log("INFO", "[transformer] Circle transformed (aspect ratio locked)", {
-        newRadius: shape.radius()
-      });
-    });
-  } else if (shape._type === "rect") {
-    tr.on("transformend", () => {
-      // Apply scale as width/height, reset scale
-      const scaleX = shape.scaleX();
-      const scaleY = shape.scaleY();
+  // Handle transformend event (resize logic)
+  transformer.on('transformend.transformer', () => {
+    log("DEBUG", "[transformer] transformend event", { shape });
+    // Normalize scale and update dimensions
+    const scaleX = shape.scaleX();
+    const scaleY = shape.scaleY();
+    if (shape._type === "rect") {
       shape.width(shape.width() * scaleX);
       shape.height(shape.height() * scaleY);
-      shape.scale({ x: 1, y: 1 });
-      log("INFO", "[transformer] Rectangle transformed", {
-        newWidth: shape.width(),
-        newHeight: shape.height()
-      });
-    });
-  }
-
-  // No transform for points
-
-  AppState.konvaLayer.add(tr);
-  AppState.transformer = tr;
-  AppState.konvaLayer.draw();
-
-  log("DEBUG", "[transformer] Transformer attached", {
-    shapeType: shape._type,
-    anchors,
-    rotateEnabled,
-    keepAspectRatio
+    } else if (shape._type === "circle") {
+      // Constrain to aspect ratio (circle stays circle)
+      const avgScale = (scaleX + scaleY) / 2;
+      shape.radius(shape.radius() * avgScale);
+    }
+    shape.scaleX(1);
+    shape.scaleY(1);
+    if (typeof shape.strokeWidth === "function") shape.strokeWidth(1);
+    layer.batchDraw();
   });
-  log("TRACE", "[transformer] attachTransformerForShape exit", tr);
 
-  return tr;
+  // Attach to layer and AppState
+  layer.add(transformer);
+  AppState.transformer = transformer;
+  layer.batchDraw();
+  log("INFO", "[transformer] Transformer attached for shape", { shape, anchors, rotateEnabled });
+  log("TRACE", "[transformer] attachTransformerForShape exit");
 }
 
 /**
- * Detach and destroy any existing Konva.Transformer.
+ * Detach and destroy any active transformer.
  */
 export function detachTransformer() {
   log("TRACE", "[transformer] detachTransformer entry");
-  const tr = AppState.transformer;
-  if (tr && typeof tr.destroy === "function") {
-    tr.destroy();
+  const layer = AppState.konvaLayer;
+  const transformer = AppState.transformer;
+  if (transformer && typeof transformer.destroy === "function") {
+    transformer.destroy();
     AppState.transformer = null;
-    if (AppState.konvaLayer) AppState.konvaLayer.draw();
+    if (layer) layer.batchDraw();
     log("INFO", "[transformer] Transformer detached");
-  } else {
-    log("DEBUG", "[transformer] No transformer to detach");
   }
   log("TRACE", "[transformer] detachTransformer exit");
 }
 
 /**
- * Update the transformer for the currently selected shape.
- * - If no shape or locked, detach transformer.
- * - Otherwise, attach transformer for shape.
+ * Update the transformer for the current selection.
+ * Single selection: attach.
+ * Multi-selection or none: detach.
  */
 export function updateTransformer() {
   log("TRACE", "[transformer] updateTransformer entry");
   const sel = AppState.selectedShapes;
-  if (!AppState.konvaLayer || !sel || sel.length !== 1 || sel[0].locked) {
+  if (Array.isArray(sel) && sel.length === 1 && !sel[0].locked) {
+    attachTransformerForShape(sel[0]);
+  } else {
     detachTransformer();
-    log("DEBUG", "[transformer] Transformer detached (no valid single selection)");
-    log("TRACE", "[transformer] updateTransformer exit");
-    return;
   }
-  attachTransformerForShape(sel[0]);
   log("TRACE", "[transformer] updateTransformer exit");
 }
+

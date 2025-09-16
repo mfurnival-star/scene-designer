@@ -1,3 +1,4 @@
+
 /**
  * selection.js
  * -----------------------------------------------------------
@@ -13,6 +14,7 @@
 
 import { AppState } from './state.js';
 import { log } from './log.js';
+import { updateTransformer } from './transformer.js';
 
 /**
  * Set the currently selected shape (single selection).
@@ -29,6 +31,7 @@ export function setSelectedShape(shape) {
   AppState.selectedShapes = shape ? [shape] : [];
   log("INFO", "[selection] Single shape selected", { id: shape?._id, type: shape?._type });
   notifySelectionChanged();
+  updateTransformer();
   log("TRACE", "[selection] setSelectedShape exit");
 }
 
@@ -46,6 +49,7 @@ export function setSelectedShapes(arr) {
     types: AppState.selectedShapes.map(s => s._type)
   });
   notifySelectionChanged();
+  updateTransformer();
   log("TRACE", "[selection] setSelectedShapes exit");
 }
 
@@ -68,6 +72,7 @@ export function deselectAll() {
   AppState.selectedShape = null;
   AppState.selectedShapes = [];
   notifySelectionChanged();
+  updateTransformer();
   log("TRACE", "[selection] deselectAll exit");
 }
 
