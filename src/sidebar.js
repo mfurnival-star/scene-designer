@@ -100,9 +100,22 @@ export function buildSidebarPanel(rootElement, container) {
       selectable: 1,
       rowClick: function (e, row) {
         const idx = row.getData().idx;
-        log("INFO", "[sidebar] Row clicked", { idx, shape: AppState.shapes[idx] });
+        log("TRACE", "[sidebar] rowClick event fired", { idx, shape: AppState.shapes[idx], allShapes: AppState.shapes });
         if (AppState.shapes[idx]) {
+          log("TRACE", "[sidebar] rowClick: About to call setSelectedShape", {
+            shapeRef: AppState.shapes[idx],
+            shapeType: AppState.shapes[idx]._type,
+            shapeLabel: AppState.shapes[idx]._label,
+            shapeIdx: idx,
+            shapeObj: AppState.shapes[idx]
+          });
           setSelectedShape(AppState.shapes[idx]);
+          log("TRACE", "[sidebar] rowClick: setSelectedShape called", {
+            selectedShape: AppState.selectedShape,
+            selectedShapes: AppState.selectedShapes
+          });
+        } else {
+          log("WARN", "[sidebar] rowClick: No shape found at idx", { idx, shape: AppState.shapes[idx] });
         }
       }
     });
@@ -149,7 +162,7 @@ export function buildSidebarPanel(rootElement, container) {
   log("TRACE", "[sidebar] buildSidebarPanel exit (Tabulator)", {
     rootElementType: rootElement?.tagName,
     containerTitle: container?.title,
-    containerComponentName: container?.componentName
+    componentName: container?.componentName
   });
 }
 
