@@ -262,6 +262,8 @@ export function buildCanvasPanel(rootElement, container) {
     }
     const width = 600;
     const height = 400;
+
+    // --- FIX: Create a <canvas> element and pass it to Fabric.js ---
     const containerDiv = document.createElement('div');
     containerDiv.id = "fabric-canvas-div";
     containerDiv.style.position = "relative";
@@ -270,8 +272,15 @@ export function buildCanvasPanel(rootElement, container) {
     rootElement.innerHTML = "";
     rootElement.appendChild(containerDiv);
 
-    // Fabric.js canvas
-    const canvas = new Canvas(containerDiv, {
+    const canvasEl = document.createElement('canvas');
+    canvasEl.id = "fabric-main-canvas";
+    canvasEl.width = width;
+    canvasEl.height = height;
+    canvasEl.style.display = "block";
+    containerDiv.appendChild(canvasEl);
+
+    // Fabric.js canvas: must pass the <canvas> element, not a <div>
+    const canvas = new Canvas(canvasEl, {
       width,
       height,
       selection: true,
