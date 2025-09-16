@@ -13,7 +13,7 @@
 
 import { log } from './log.js';
 // Optionally import layout.js if you want the Golden Layout bootstrap:
- import './layout.js';
+// import './layout.js';
 
 // (Optional) Attach for debugging; remove for production
 if (typeof window !== "undefined") {
