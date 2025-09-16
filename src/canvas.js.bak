@@ -16,7 +16,7 @@
  */
 
 
-import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
+import fabric from 'fabric';
 const { Canvas, Rect, Circle, Line, Group, Image } = fabric;
 console.log("fabric import:", fabric);
 console.log("fabric.Canvas:", fabric.Canvas);
