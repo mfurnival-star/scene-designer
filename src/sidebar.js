@@ -9,8 +9,7 @@
  * - All state via AppState.
  * - Logging via log.js.
  * - Logging policy: Use INFO for user actions, DEBUG for updates, ERROR for UI problems.
- * - ES module only: no globals, no window.*.
- * - TRACE-level logging for all function entry/exit (diagnostic).
+ * - TRACE-level logging for all function entry/exit and row selection diagnostics.
  * -----------------------------------------------------------
  */
 
@@ -23,7 +22,7 @@ import { Tabulator } from 'tabulator-tables';
  * Build the sidebar panel (Tabulator shape table).
  */
 export function buildSidebarPanel(rootElement, container) {
-  log("TRACE", "[sidebar] buildSidebarPanel entry", {
+  log("TRACE", "[sidebar] buildSidebarPanel ENTRY", {
     rootElementType: rootElement?.tagName,
     containerTitle: container?.title,
     containerComponentName: container?.componentName
@@ -83,6 +82,7 @@ export function buildSidebarPanel(rootElement, container) {
       };
     }
 
+    log("TRACE", "[sidebar] Instantiating Tabulator table", { tableDiv });
     let tabulator = new Tabulator(tableDiv, {
       data: [],
       layout: "fitColumns",
@@ -100,19 +100,23 @@ export function buildSidebarPanel(rootElement, container) {
       selectable: 1,
       rowClick: function (e, row) {
         const idx = row.getData().idx;
-        log("TRACE", "[sidebar] rowClick event fired", { idx, shape: AppState.shapes[idx], allShapes: AppState.shapes });
+        log("TRACE", "[sidebar] rowClick FIRED", {
+          idx,
+          shape: AppState.shapes[idx],
+          rowData: row.getData(),
+          allShapes: AppState.shapes.map(s => ({ id: s._id, type: s._type, label: s._label }))
+        });
         if (AppState.shapes[idx]) {
           log("TRACE", "[sidebar] rowClick: About to call setSelectedShape", {
             shapeRef: AppState.shapes[idx],
             shapeType: AppState.shapes[idx]._type,
             shapeLabel: AppState.shapes[idx]._label,
-            shapeIdx: idx,
-            shapeObj: AppState.shapes[idx]
+            shapeIdx: idx
           });
           setSelectedShape(AppState.shapes[idx]);
           log("TRACE", "[sidebar] rowClick: setSelectedShape called", {
             selectedShape: AppState.selectedShape,
-            selectedShapes: AppState.selectedShapes
+            selectedShapes: AppState.selectedShapes.map(s => s._id)
           });
         } else {
           log("WARN", "[sidebar] rowClick: No shape found at idx", { idx, shape: AppState.shapes[idx] });
@@ -120,24 +124,61 @@ export function buildSidebarPanel(rootElement, container) {
       }
     });
 
-    // Robust updateTable, only after table is built
+    // --- Robust updateTable: syncs selection and shape rows ---
     const updateTable = () => {
-      log("TRACE", "[sidebar] AppState update triggered (Tabulator)");
+      log("TRACE", "[sidebar] updateTable ENTRY");
       const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
+      log("TRACE", "[sidebar] updateTable: New data", { data });
+
       if (tabulator) {
         tabulator.replaceData(data);
+        log("TRACE", "[sidebar] updateTable: Data replaced");
+        // --- Selection sync: ensure selected row is highlighted ---
         if (AppState.selectedShape) {
           const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
-          if (selIdx >= 0) tabulator.selectRow(selIdx);
-        } else if (typeof tabulator.deselectRow === "function") {
+          log("TRACE", "[sidebar] updateTable: Selected shape index", { selIdx, selectedShapeId: AppState.selectedShape._id });
+          // Tabulator v5+ selectRow robust logic
+          let rows = tabulator.getRows ? tabulator.getRows() : [];
+          log("TRACE", "[sidebar] updateTable: All table rows", { rowsLen: rows.length });
+          if (selIdx >= 0 && rows[selIdx]) {
+            // Use row component's select method if available
+            if (typeof rows[selIdx].select === "function") {
+              rows[selIdx].select();
+              log("TRACE", "[sidebar] updateTable: rows[selIdx].select() called", { selIdx });
+            } else if (typeof tabulator.selectRow === "function") {
+              tabulator.selectRow(selIdx);
+              log("TRACE", "[sidebar] updateTable: tabulator.selectRow(selIdx) called", { selIdx });
+            } else {
+              log("WARN", "[sidebar] updateTable: Cannot select row, no selectRow method", { selIdx });
+            }
+          } else {
+            log("WARN", "[sidebar] updateTable: Selected shape index not found in rows", { selIdx });
+          }
+        } else {
           // Robustly clear all selection (Tabulator v5+)
-          try { tabulator.deselectRow(true); } catch(e) {}
+          if (typeof tabulator.deselectRow === "function") {
+            try {
+              tabulator.deselectRow(true);
+              log("TRACE", "[sidebar] updateTable: deselectRow(true) called");
+            } catch (e) {
+              log("ERROR", "[sidebar] updateTable: deselectRow failed", e);
+            }
+          } else {
+            // Fallback: deselect all rows manually
+            let rows = tabulator.getRows ? tabulator.getRows() : [];
+            rows.forEach(r => {
+              if (typeof r.deselect === "function") r.deselect();
+            });
+            log("TRACE", "[sidebar] updateTable: Manually deselected all rows");
+          }
         }
       }
+      log("TRACE", "[sidebar] updateTable EXIT");
     };
 
     // Only update after table is fully built
     tabulator.on("tableBuilt", () => {
+      log("TRACE", "[sidebar] tableBuilt event");
       updateTable();
       // Subscribe after built to avoid early calls
       var unsub = subscribe(updateTable);
@@ -155,14 +196,13 @@ export function buildSidebarPanel(rootElement, container) {
   } catch (e) {
     log("ERROR", "[sidebar] buildSidebarPanel ERROR (Tabulator)", e);
     alert("SidebarPanel ERROR: " + e.message);
-    log("TRACE", "[sidebar] buildSidebarPanel exit (error, Tabulator)");
+    log("TRACE", "[sidebar] buildSidebarPanel EXIT (error, Tabulator)");
     throw e;
   }
 
-  log("TRACE", "[sidebar] buildSidebarPanel exit (Tabulator)", {
+  log("TRACE", "[sidebar] buildSidebarPanel EXIT", {
     rootElementType: rootElement?.tagName,
     containerTitle: container?.title,
     componentName: container?.componentName
   });
 }
-
