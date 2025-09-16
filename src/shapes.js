@@ -15,19 +15,28 @@ import Konva from 'konva';
 import { log } from './log.js';
 import { attachSelectionHandlers } from './selection.js';
 import { setShapeState } from './shape-state.js';
+import { AppState } from './state.js';
 
 /**
  * Make a point shape (crosshair/halo/transparent hit area).
  */
 export function makePointShape(x, y) {
   log("TRACE", "[shapes] makePointShape entry", { x, y });
+
+  // Read settings for point shape visuals
+  const hitRadius = AppState.settings?.pointHitRadius ?? 16;
+  const haloRadius = AppState.settings?.pointHaloRadius ?? 12;
+  const crossLen = AppState.settings?.pointCrossLen ?? 14;
+  const strokeColor = AppState.settings?.defaultStrokeColor ?? '#2176ff';
+  const fillColor = AppState.settings?.defaultFillColor ?? '#00000000';
+
   const group = new Konva.Group({ x, y, draggable: true });
 
   // Invisible hit area for easy selection/tap
   const hitCircle = new Konva.Circle({
     x: 0,
     y: 0,
-    radius: 16,
+    radius: hitRadius,
     fill: "#fff",
     opacity: 0,
     listening: true
@@ -37,25 +46,26 @@ export function makePointShape(x, y) {
   const halo = new Konva.Circle({
     x: 0,
     y: 0,
-    radius: 12,
-    stroke: '#2176ff',
+    radius: haloRadius,
+    stroke: strokeColor,
     strokeWidth: 1.5,
+    fill: fillColor,
     opacity: 0.4,
     listening: false
   });
 
   // Crosshairs
   const crossH = new Konva.Line({
-    points: [-7, 0, 7, 0],
-    stroke: '#2176ff',
+    points: [-crossLen / 2, 0, crossLen / 2, 0],
+    stroke: strokeColor,
     strokeWidth: 2.5,
     lineCap: 'round',
     listening: false
   });
 
   const crossV = new Konva.Line({
-    points: [0, -7, 0, 7],
-    stroke: '#2176ff',
+    points: [0, -crossLen / 2, 0, crossLen / 2],
+    stroke: strokeColor,
     strokeWidth: 2.5,
     lineCap: 'round',
     listening: false
@@ -82,14 +92,19 @@ export function makePointShape(x, y) {
  */
 export function makeRectShape(x, y, w, h) {
   log("TRACE", "[shapes] makeRectShape entry", { x, y, w, h });
+
+  // Read settings for rect shape defaults
+  const strokeColor = AppState.settings?.defaultStrokeColor ?? '#2176ff';
+  const fillColor = AppState.settings?.defaultFillColor ?? '#00000000';
+
   const rect = new Konva.Rect({
     x: x,
     y: y,
     width: w,
     height: h,
-    stroke: '#2176ff',
+    stroke: strokeColor,
     strokeWidth: 1,
-    fill: '#00000000',
+    fill: fillColor,
     draggable: true
   });
   rect._type = 'rect';
@@ -108,13 +123,18 @@ export function makeRectShape(x, y, w, h) {
  */
 export function makeCircleShape(x, y, r) {
   log("TRACE", "[shapes] makeCircleShape entry", { x, y, r });
+
+  // Read settings for circle shape defaults
+  const strokeColor = AppState.settings?.defaultStrokeColor ?? '#2176ff';
+  const fillColor = AppState.settings?.defaultFillColor ?? '#00000000';
+
   const circle = new Konva.Circle({
     x: x,
     y: y,
     radius: r,
-    stroke: '#2176ff',
+    stroke: strokeColor,
     strokeWidth: 1,
-    fill: '#00000000',
+    fill: fillColor,
     draggable: true
   });
   circle._type = 'circle';

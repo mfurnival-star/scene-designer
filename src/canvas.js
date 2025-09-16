@@ -17,7 +17,7 @@ import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes
 import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
 import { getShapeState, setShapeState, selectShape, deselectShape, startDraggingShape, stopDraggingShape } from './shape-state.js';
-import { setSelectedShape } from './selection.js';
+import { setSelectedShape, attachSelectionHandlers } from './selection.js';
 
 // --- Utility: Dump shape diagnostic info for debugging ---
 function dumpShapeDebug(shape, tag = "") {
@@ -122,55 +122,13 @@ function removeAllShapeHandlers(shape) {
   log("TRACE", "[canvas] removeAllShapeHandlers exit");
 }
 
-// --- NEW: Attach shape events, using state machine for all transitions ---
-function attachShapeEvents(shape) {
-  log("TRACE", "[canvas] attachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
+// --- NO: Attach shape events here. Only attach selection events via selection.js ---
+function centralAttachShapeEvents(shape) {
+  log("TRACE", "[canvas] centralAttachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   removeAllShapeHandlers(shape);
-
-  // Selection logic -- always reselect, and set state
-  shape.on('mousedown.shape', (e) => {
-    log("DEBUG", "[canvas] mousedown.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
-    if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
-    sanitizeSelection();
-    if (shape.locked) return;
-    setSelectedShape(shape);  // Use selection.js API
-    updateSelectionHighlight();
-  });
-
-  // Drag start -- set state
-  shape.on('dragstart.shape', (e) => {
-    log("DEBUG", "[canvas] dragstart.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
-    if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
-    if (shape.locked) {
-      shape.stopDrag();
-      setShapeState(shape, 'locked');
-      return;
-    }
-    startDraggingShape(shape);
-  });
-
-  // Drag move -- keep state, clamp, update highlight
-  shape.on('dragmove.shape', () => {
-    log("DEBUG", "[canvas] dragmove.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
-    if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
-    sanitizeSelection();
-    if (shape.locked) {
-      shape.stopDrag();
-      setShapeState(shape, 'locked');
-      return;
-    }
-    if (AppState.selectedShapes.length === 1) clampShapeToStage(shape);
-    updateSelectionHighlight();
-  });
-
-  // Drag end -- set state back
-  shape.on('dragend.shape', () => {
-    log("DEBUG", "[canvas] dragend.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
-    stopDraggingShape(shape);
-    updateSelectionHighlight();
-  });
-
-  log("TRACE", "[canvas] attachShapeEvents exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
+  // Delegate all selection events to selection.js only!
+  attachSelectionHandlers(shape);
+  log("TRACE", "[canvas] centralAttachShapeEvents exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
 function clampShapeToStage(shape) {
@@ -342,8 +300,8 @@ export function buildCanvasPanel(rootElement, container) {
           AppState.konvaLayer.draw();
           log("INFO", `[canvas] Shape added to Konva layer`, details.shape);
           dumpLayerState(AppState.konvaLayer, "addShape after add");
-          // Attach selection and drag/transform handlers (always!)
-          attachShapeEvents(details.shape);
+          // Attach selection handlers only via selection.js (centralized)
+          centralAttachShapeEvents(details.shape);
         } else {
           log("DEBUG", "[canvas] Shape not added to Konva layer (already present or not a Konva object)", details.shape);
           dumpLayerState(AppState.konvaLayer, "addShape (already present)");
