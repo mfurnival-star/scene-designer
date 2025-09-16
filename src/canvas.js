@@ -1,7 +1,7 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Konva Panel (Refactored + Unselect Bugfix)
+ * Scene Designer – Canvas/Konva Panel (Refactored + Robust Unselect Fix)
  * - Modern ES module for all canvas, image, and shape logic.
  * - NO UI creation or controls here: all toolbar, image upload, and server image logic are now only in src/toolbar.js.
  * - Handles Konva stage/layer, creation, deletion, duplication, selection, lock, drag, and transform.
@@ -9,7 +9,7 @@
  * - Imports all dependencies as ES modules.
  * - All state flows via AppState.
  * - Logging via log.js.
- * - Unselect handler now fires only when clicking the canvas background (not on a shape).
+ * - Unselect handler now robust: fires only when background is clicked (canvas, layer), not on shape or transformer.
  * -----------------------------------------------------------
  */
 
@@ -245,13 +245,19 @@ export function buildCanvasPanel(rootElement, container) {
     AppState.konvaStage = stage;
     AppState.konvaLayer = layer;
 
-    // --- Unselect shapes by clicking on empty background ONLY ---
+    // --- Robust: Unselect shapes by clicking on empty background (canvas, layer) ---
     stage.on("mousedown.unselect touchstart.unselect", function(e) {
-      // Only deselect if background is clicked (not a shape)
-      if (e.target && e.target.className === "Stage") {
+      const target = e.target;
+      // Deselect if background is clicked (not a shape, not Transformer, not highlight box)
+      if (
+        !target ||
+        target === stage ||
+        target.className === "Stage" ||
+        target.className === "Layer" ||
+        (target.className === "Rect" && target.listening() === false) // highlight box
+      ) {
         AppState.selectedShapes.forEach(deselectShape);
         setSelectedShapes([]);
-        // Re-attach selection handlers to all shapes after deselect
         (AppState.shapes || []).forEach(s => {
           attachSelectionHandlers(s);
         });
