@@ -9,7 +9,7 @@
  * - All state via AppState.
  * - Logging via log.js.
  * - Logging policy: Use INFO for user actions, DEBUG for updates, ERROR for UI problems.
- * - TRACE-level logging for all function entry/exit and row selection diagnostics.
+ * - TRACE-level logging for function entry/exit and row selection diagnostics.
  * -----------------------------------------------------------
  */
 
@@ -100,23 +100,16 @@ export function buildSidebarPanel(rootElement, container) {
       selectable: 1,
       rowClick: function (e, row) {
         const idx = row.getData().idx;
-        log("TRACE", "[sidebar] rowClick FIRED", {
+        log("DEBUG", "[sidebar] rowClick", {
           idx,
           shape: AppState.shapes[idx],
-          rowData: row.getData(),
-          allShapes: AppState.shapes.map(s => ({ id: s._id, type: s._type, label: s._label }))
+          rowData: row.getData()
         });
         if (AppState.shapes[idx]) {
-          log("TRACE", "[sidebar] rowClick: About to call setSelectedShape", {
-            shapeRef: AppState.shapes[idx],
-            shapeType: AppState.shapes[idx]._type,
-            shapeLabel: AppState.shapes[idx]._label,
-            shapeIdx: idx
-          });
           setSelectedShape(AppState.shapes[idx]);
-          log("TRACE", "[sidebar] rowClick: setSelectedShape called", {
-            selectedShape: AppState.selectedShape,
-            selectedShapes: AppState.selectedShapes.map(s => s._id)
+          log("INFO", "[sidebar] Shape selected via rowClick", {
+            selectedShapeId: AppState.shapes[idx]._id,
+            selectedShapeType: AppState.shapes[idx]._type
           });
         } else {
           log("WARN", "[sidebar] rowClick: No shape found at idx", { idx, shape: AppState.shapes[idx] });
@@ -126,57 +119,30 @@ export function buildSidebarPanel(rootElement, container) {
 
     // --- Robust updateTable: syncs selection and shape rows ---
     const updateTable = () => {
-      log("TRACE", "[sidebar] updateTable ENTRY");
+      log("DEBUG", "[sidebar] updateTable ENTRY");
       const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
-      log("TRACE", "[sidebar] updateTable: New data", { data });
-
-      if (tabulator) {
-        tabulator.replaceData(data);
-        log("TRACE", "[sidebar] updateTable: Data replaced");
-        // --- Selection sync: ensure selected row is highlighted ---
-        if (AppState.selectedShape) {
-          const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
-          log("TRACE", "[sidebar] updateTable: Selected shape index", { selIdx, selectedShapeId: AppState.selectedShape._id });
-          // Tabulator v5+ selectRow robust logic
-          let rows = tabulator.getRows ? tabulator.getRows() : [];
-          log("TRACE", "[sidebar] updateTable: All table rows", { rowsLen: rows.length });
-          if (selIdx >= 0 && rows[selIdx]) {
-            // Use row component's select method if available
-            if (typeof rows[selIdx].select === "function") {
-              rows[selIdx].select();
-              log("TRACE", "[sidebar] updateTable: rows[selIdx].select() called", { selIdx });
-            } else if (typeof tabulator.selectRow === "function") {
-              tabulator.selectRow(selIdx);
-              log("TRACE", "[sidebar] updateTable: tabulator.selectRow(selIdx) called", { selIdx });
-            } else {
-              log("WARN", "[sidebar] updateTable: Cannot select row, no selectRow method", { selIdx });
-            }
-          } else {
-            log("WARN", "[sidebar] updateTable: Selected shape index not found in rows", { selIdx });
-          }
+      tabulator.replaceData(data);
+      // --- Selection sync: ensure selected row is highlighted ---
+      if (AppState.selectedShape) {
+        const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
+        let rows = tabulator.getRows ? tabulator.getRows() : [];
+        if (selIdx >= 0 && rows[selIdx] && typeof rows[selIdx].select === "function") {
+          rows[selIdx].select();
+          log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx });
         } else {
-          // Robustly clear all selection (Tabulator v5+)
-          if (typeof tabulator.deselectRow === "function") {
-            try {
-              tabulator.deselectRow(true);
-              log("TRACE", "[sidebar] updateTable: deselectRow(true) called");
-            } catch (e) {
-              log("ERROR", "[sidebar] updateTable: deselectRow failed", e);
-            }
-          } else {
-            // Fallback: deselect all rows manually
-            let rows = tabulator.getRows ? tabulator.getRows() : [];
-            rows.forEach(r => {
-              if (typeof r.deselect === "function") r.deselect();
-            });
-            log("TRACE", "[sidebar] updateTable: Manually deselected all rows");
-          }
+          log("WARN", "[sidebar] updateTable: Cannot select row", { selIdx });
         }
+      } else {
+        // Robustly clear all selection (Tabulator v5+)
+        let rows = tabulator.getRows ? tabulator.getRows() : [];
+        rows.forEach(r => {
+          if (typeof r.deselect === "function") r.deselect();
+        });
+        log("DEBUG", "[sidebar] updateTable: All rows deselected");
       }
-      log("TRACE", "[sidebar] updateTable EXIT");
+      log("DEBUG", "[sidebar] updateTable EXIT");
     };
 
-    // Only update after table is fully built
     tabulator.on("tableBuilt", () => {
       log("TRACE", "[sidebar] tableBuilt event");
       updateTable();
@@ -196,7 +162,6 @@ export function buildSidebarPanel(rootElement, container) {
   } catch (e) {
     log("ERROR", "[sidebar] buildSidebarPanel ERROR (Tabulator)", e);
     alert("SidebarPanel ERROR: " + e.message);
-    log("TRACE", "[sidebar] buildSidebarPanel EXIT (error, Tabulator)");
     throw e;
   }
 
@@ -206,3 +171,4 @@ export function buildSidebarPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
+

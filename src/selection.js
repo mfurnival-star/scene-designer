@@ -32,18 +32,11 @@ export function setSelectedShape(shape) {
     prevSelectedShapeId: AppState.selectedShape?._id,
     prevSelectedShapeType: AppState.selectedShape?._type,
     prevSelectedShapeLabel: AppState.selectedShape?._label,
-    prevSelectedShapeRefEq: AppState.selectedShape === shape,
-    stack: (new Error()).stack
+    prevSelectedShapeRefEq: AppState.selectedShape === shape
   });
 
   // Deselect previous selection (always, even if selecting same shape)
   if (AppState.selectedShape && typeof deselectShape === "function") {
-    log("TRACE", "[selection] setSelectedShape: Deselecting previous shape", {
-      prevId: AppState.selectedShape?._id,
-      prevType: AppState.selectedShape?._type,
-      prevLabel: AppState.selectedShape?._label,
-      prevRefEq: AppState.selectedShape === shape
-    });
     deselectShape(AppState.selectedShape);
   }
 
@@ -61,24 +54,20 @@ export function setSelectedShape(shape) {
     selectShape(shape);
     // Attach transformer for single unlocked, editable shape
     const def = getShapeDef(shape);
-    log("TRACE", "[selection] setSelectedShape: ShapeDef", {
+    log("DEBUG", "[selection] getShapeDef", {
       def,
       editable: def && def.editable,
       locked: shape.locked
     });
     if (def && def.editable && !shape.locked) {
-      log("TRACE", "[selection] setSelectedShape: Attaching transformer", {
+      log("INFO", "[selection] Attaching transformer", {
         shapeId: shape._id, shapeType: shape._type, shapeLabel: shape._label
       });
       attachTransformerForShape(shape);
     } else {
-      log("TRACE", "[selection] setSelectedShape: Detaching transformer (not editable or locked)", {
-        shapeId: shape._id, shapeType: shape._type, shapeLabel: shape._label
-      });
       detachTransformer();
     }
   } else {
-    log("TRACE", "[selection] setSelectedShape: Detaching transformer (no shape)");
     detachTransformer();
   }
 
@@ -102,11 +91,9 @@ export function setSelectedShape(shape) {
  */
 export function setSelectedShapes(arr) {
   log("TRACE", "[selection] setSelectedShapes ENTRY", {
-    arr: arr,
     arrTypes: arr && arr.map ? arr.map(s => s?._type) : [],
     arrIds: arr && arr.map ? arr.map(s => s?._id) : [],
-    prevSelectedShapes: AppState.selectedShapes && AppState.selectedShapes.map ? AppState.selectedShapes.map(s => s?._id) : [],
-    stack: (new Error()).stack
+    prevSelectedShapes: AppState.selectedShapes && AppState.selectedShapes.map ? AppState.selectedShapes.map(s => s?._id) : []
   });
   const newArr = Array.isArray(arr) ? arr : [];
 
@@ -114,11 +101,6 @@ export function setSelectedShapes(arr) {
   if (AppState.selectedShapes && Array.isArray(AppState.selectedShapes)) {
     AppState.selectedShapes.forEach(s => {
       if (!newArr.includes(s)) {
-        log("TRACE", "[selection] setSelectedShapes: Deselecting previous shape", {
-          shapeId: s?._id,
-          shapeType: s?._type,
-          shapeLabel: s?._label
-        });
         deselectShape(s);
       }
     });
@@ -140,21 +122,19 @@ export function setSelectedShapes(arr) {
   // Transformer only for single unlocked, editable shape
   if (newArr.length === 1 && newArr[0] && !newArr[0].locked) {
     const def = getShapeDef(newArr[0]);
-    log("TRACE", "[selection] setSelectedShapes: ShapeDef", {
+    log("DEBUG", "[selection] getShapeDef", {
       def,
       editable: def && def.editable
     });
     if (def && def.editable) {
-      log("TRACE", "[selection] setSelectedShapes: Attaching transformer", {
+      log("INFO", "[selection] Attaching transformer", {
         shapeId: newArr[0]._id, shapeType: newArr[0]._type
       });
       attachTransformerForShape(newArr[0]);
     } else {
-      log("TRACE", "[selection] setSelectedShapes: Detaching transformer (not editable)");
       detachTransformer();
     }
   } else {
-    log("TRACE", "[selection] setSelectedShapes: Detaching transformer (multi or locked)");
     detachTransformer();
   }
 
@@ -175,11 +155,11 @@ export function setSelectedShapes(arr) {
  * Select all shapes currently in AppState.
  */
 export function selectAllShapes() {
-  log("TRACE", "[selection] selectAllShapes ENTRY", {
+  log("DEBUG", "[selection] selectAllShapes ENTRY", {
     allShapes: AppState.shapes.map(s => ({ id: s._id, type: s._type, label: s._label }))
   });
   setSelectedShapes(AppState.shapes.slice());
-  log("TRACE", "[selection] selectAllShapes EXIT");
+  log("DEBUG", "[selection] selectAllShapes EXIT");
 }
 
 /**
@@ -188,7 +168,7 @@ export function selectAllShapes() {
  * Only selection.js manages transformer lifecycle.
  */
 export function deselectAll() {
-  log("TRACE", "[selection] deselectAll ENTRY", {
+  log("DEBUG", "[selection] deselectAll ENTRY", {
     prevSelectedShapeId: AppState.selectedShape?._id,
     prevSelectedShapes: AppState.selectedShapes.map(s => s?._id)
   });
@@ -199,7 +179,7 @@ export function deselectAll() {
   AppState.selectedShapes = [];
   detachTransformer();
   notifySelectionChanged();
-  log("TRACE", "[selection] deselectAll EXIT", {
+  log("DEBUG", "[selection] deselectAll EXIT", {
     selectedShape: AppState.selectedShape,
     selectedShapes: AppState.selectedShapes
   });
@@ -207,20 +187,19 @@ export function deselectAll() {
 
 /**
  * Notify subscribers of selection change.
- * TRACE logs for entry/exit, shape refs, stack.
+ * TRACE logs for entry/exit, shape refs.
  */
 function notifySelectionChanged() {
   log("TRACE", "[selection] notifySelectionChanged ENTRY", {
     selectedShapeId: AppState.selectedShape?._id,
-    selectedShapes: AppState.selectedShapes.map(s => s?._id),
-    stack: (new Error()).stack
+    selectedShapes: AppState.selectedShapes.map(s => s?._id)
   });
   if (typeof AppState._subscribers === "object" && Array.isArray(AppState._subscribers)) {
     AppState._subscribers.forEach(fn => {
       try {
         fn(AppState, { type: "selection", selectedShape: AppState.selectedShape, selectedShapes: AppState.selectedShapes });
       } catch (e) {
-        log("ERROR", "[selection] Subscriber error", e, { stack: (new Error()).stack });
+        log("ERROR", "[selection] Subscriber error", e);
       }
     });
   }
@@ -252,7 +231,7 @@ export function attachSelectionHandlers(shape) {
       ? { x: evt.evt.clientX, y: evt.evt.clientY, type: evt.evt.type }
       : {};
 
-    log("TRACE", "[selection] Shape mousedown.selection handler FIRED", {
+    log("DEBUG", "[selection] Shape mousedown.selection handler FIRED", {
       eventType: pointer.type,
       pointer,
       shapeId: shape._id,
@@ -281,7 +260,7 @@ export function attachSelectionHandlers(shape) {
         setSelectedShapes(newArr);
       }
     } else {
-      log("TRACE", "[selection] Shape mousedown.selection: Single select", {
+      log("DEBUG", "[selection] Shape mousedown.selection: Single select", {
         shapeId: shape._id,
         shapeType: shape._type,
         shapeLabel: shape._label
@@ -302,10 +281,7 @@ export function attachSelectionHandlers(shape) {
  * @returns {boolean}
  */
 export function isShapeSelected(shape) {
-  log("TRACE", "[selection] isShapeSelected ENTRY", { shapeId: shape?._id });
-  const result = !!shape && AppState.selectedShapes.includes(shape);
-  log("TRACE", "[selection] isShapeSelected EXIT", { result });
-  return result;
+  return !!shape && AppState.selectedShapes.includes(shape);
 }
 
 /**
@@ -313,10 +289,7 @@ export function isShapeSelected(shape) {
  * @returns {Array}
  */
 export function getSelectedShapes() {
-  log("TRACE", "[selection] getSelectedShapes ENTRY");
-  const result = AppState.selectedShapes;
-  log("TRACE", "[selection] getSelectedShapes EXIT", { result: result.map(s => s?._id) });
-  return result;
+  return AppState.selectedShapes;
 }
 
 /**
@@ -324,10 +297,7 @@ export function getSelectedShapes() {
  * @returns {Object|null}
  */
 export function getSelectedShape() {
-  log("TRACE", "[selection] getSelectedShape ENTRY");
-  const result = AppState.selectedShape;
-  log("TRACE", "[selection] getSelectedShape EXIT", { resultId: result?._id });
-  return result;
+  return AppState.selectedShape;
 }
 
 // Debugging helpers (remove in production!)
