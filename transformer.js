@@ -19,6 +19,7 @@ function getAnchorsForShape(shape) {
   // Return the correct anchor set for the shape type and lock state.
   if (!shape || shape.locked) return [];
   if (shape._type === 'rect') {
+    // Rectangle: 8 anchors, corners + sides
     return [
       'top-left','top-center','top-right',
       'middle-left','middle-right',
