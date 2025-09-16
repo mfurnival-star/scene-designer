@@ -1,7 +1,7 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Konva Panel (Refactored + Deep TRACE Logging)
+ * Scene Designer – Canvas/Konva Panel (Refactored + Unselect Bugfix)
  * - Modern ES module for all canvas, image, and shape logic.
  * - NO UI creation or controls here: all toolbar, image upload, and server image logic are now only in src/toolbar.js.
  * - Handles Konva stage/layer, creation, deletion, duplication, selection, lock, drag, and transform.
@@ -9,7 +9,7 @@
  * - Imports all dependencies as ES modules.
  * - All state flows via AppState.
  * - Logging via log.js.
- * - DEEP TRACE logging for all handler attach, layer state, selection events.
+ * - Unselect handler now fires only when clicking the canvas background (not on a shape).
  * -----------------------------------------------------------
  */
 
@@ -22,14 +22,13 @@ import { setSelectedShape, attachSelectionHandlers } from './selection.js';
 
 // --- Utility: Dump shape diagnostic info for debugging ---
 function dumpShapeDebug(shape, tag = "") {
-  log("TRACE", `[canvas] ${tag} shape diagnostic`, {
+  log("DEBUG", `[canvas] ${tag} shape diagnostic`, {
     typeofShape: typeof shape,
     constructorName: shape?.constructor?.name,
     isKonva: shape instanceof Konva.Shape,
     isGroup: shape instanceof Konva.Group,
     isRect: shape instanceof Konva.Rect,
     isCircle: shape instanceof Konva.Circle,
-    isObject: shape && typeof shape === "object" && !(shape instanceof Konva.Shape),
     attrs: shape?.attrs,
     className: shape?.className,
     _type: shape?._type,
@@ -41,12 +40,9 @@ function dumpShapeDebug(shape, tag = "") {
 
 // --- Extra: Dump Konva layer state (children and their types) ---
 function dumpLayerState(layer, tag = "") {
-  if (!layer) {
-    log("TRACE", `[canvas] ${tag} dumpLayerState: NO layer`);
-    return;
-  }
+  if (!layer) return;
   const children = layer.getChildren();
-  log("TRACE", `[canvas] ${tag} layer children`, {
+  log("DEBUG", `[canvas] ${tag} layer children`, {
     count: children.length,
     types: children.map(n => n.className || n.constructor?.name || typeof n),
     labels: children.map(n => n._label || n._type || n.className || n.constructor?.name),
@@ -56,7 +52,7 @@ function dumpLayerState(layer, tag = "") {
 
 // Extra: Dump event listeners for every shape (diagnostic)
 function dumpShapeEventListeners(shape, tag = "") {
-  log("TRACE", `[canvas] ${tag} eventListeners`, {
+  log("DEBUG", `[canvas] ${tag} eventListeners`, {
     shapeId: shape?._id,
     shapeType: shape?._type,
     eventListeners: shape?.eventListeners
@@ -65,12 +61,8 @@ function dumpShapeEventListeners(shape, tag = "") {
 
 // --- Background image logic (no change) ---
 function updateBackgroundImage() {
-  log("TRACE", "[canvas] updateBackgroundImage entry");
   const layer = AppState.konvaLayer;
-  if (!layer) {
-    log("WARN", "[canvas] updateBackgroundImage: no konvaLayer yet");
-    return;
-  }
+  if (!layer) return;
   if (AppState.bgKonvaImage) {
     AppState.bgKonvaImage.destroy();
     AppState.bgKonvaImage = null;
@@ -78,10 +70,7 @@ function updateBackgroundImage() {
   }
   if (AppState.imageObj) {
     const stage = AppState.konvaStage;
-    if (!stage) {
-      log("WARN", "[canvas] updateBackgroundImage: no konvaStage");
-      return;
-    }
+    if (!stage) return;
     let w = AppState.imageObj.naturalWidth || AppState.imageObj.width;
     let h = AppState.imageObj.naturalHeight || AppState.imageObj.height;
     stage.width(w);
@@ -98,24 +87,15 @@ function updateBackgroundImage() {
     layer.add(AppState.bgKonvaImage);
     AppState.bgKonvaImage.moveToBottom();
     layer.draw();
-    log("DEBUG", "[canvas] updateBackgroundImage: background set (actual size)", {
-      imgW: w, imgH: h
-    });
     dumpLayerState(layer, "updateBackgroundImage");
   } else {
-    log("DEBUG", "[canvas] updateBackgroundImage: no imageObj, background cleared");
     dumpLayerState(layer, "updateBackgroundImage");
   }
-  log("TRACE", "[canvas] updateBackgroundImage exit");
 }
 
 // --- Selection state sanitization ---
 function sanitizeSelection() {
-  log("TRACE", "[canvas] sanitizeSelection entry");
-  if (!AppState.konvaLayer) {
-    log("TRACE", "[canvas] sanitizeSelection exit (no layer)");
-    return;
-  }
+  if (!AppState.konvaLayer) return;
   AppState.selectedShapes = (AppState.selectedShapes || []).filter(
     s => !!s && AppState.konvaLayer.findOne(node => node === s)
   );
@@ -124,33 +104,23 @@ function sanitizeSelection() {
   } else {
     AppState.selectedShape = null;
   }
-  log("TRACE", "[canvas] sanitizeSelection exit");
 }
 
 // --- Remove all shape handlers except selection ---
 function removeAllShapeHandlers(shape) {
-  log("TRACE", "[canvas] removeAllShapeHandlers entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   if (shape && typeof shape.off === "function") {
     shape.off('mousedown.shape dragmove.shape dragstart.shape dragend.shape transformstart.shape transformend.shape');
-    // Do NOT call shape.off() without event name!
   }
-  log("TRACE", "[canvas] removeAllShapeHandlers exit");
 }
 
-// --- Central: Attach selection handler (deep logging) ---
+// --- Central: Attach selection handler (logging) ---
 function centralAttachShapeEvents(shape) {
-  log("TRACE", "[canvas] centralAttachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   removeAllShapeHandlers(shape);
-  dumpShapeEventListeners(shape, "before attachSelectionHandlers");
-  // Delegate all selection events to selection.js only!
   attachSelectionHandlers(shape);
-  dumpShapeEventListeners(shape, "after attachSelectionHandlers");
-  log("TRACE", "[canvas] centralAttachShapeEvents exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
 // --- Clamp shape to stage (no change) ---
 function clampShapeToStage(shape) {
-  log("TRACE", "[canvas] clampShapeToStage entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   const stage = AppState.konvaStage;
   let minX, minY, maxX, maxY;
   if (shape._type === "rect") {
@@ -170,12 +140,10 @@ function clampShapeToStage(shape) {
   if (maxY > stage.height()) dy = stage.height() - maxY;
   shape.x(shape.x() + dx);
   shape.y(shape.y() + dy);
-  log("TRACE", "[canvas] clampShapeToStage exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
 // --- Clamp group drag delta (no change) ---
 function clampGroupDragDelta(dx, dy, origPositions) {
-  log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy, origPositions });
   const stage = AppState.konvaStage;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   origPositions.forEach(obj => {
@@ -199,13 +167,11 @@ function clampGroupDragDelta(dx, dy, origPositions) {
   if (maxX > stage.width()) adjDx += stage.width() - maxX;
   if (minY < 0) adjDy += -minY;
   if (maxY > stage.height()) adjDy += stage.height() - maxY;
-  log("TRACE", "[canvas] clampGroupDragDelta exit", { adjDx, adjDy });
   return [adjDx, adjDy];
 }
 
 // --- Selection highlight: draws highlight/bounding box for multi-select
 function updateSelectionHighlight() {
-  log("TRACE", "[canvas] updateSelectionHighlight entry");
   const layer = AppState.konvaLayer;
   if (AppState.groupBoundingBox) { AppState.groupBoundingBox.destroy(); AppState.groupBoundingBox = null; }
   sanitizeSelection();
@@ -215,7 +181,6 @@ function updateSelectionHighlight() {
     layer.draw();
     dumpLayerState(layer, "updateSelectionHighlight (single)");
   } else if (AppState.selectedShapes.length > 1) {
-    // Multi-select: draw group bounding box
     detachTransformer();
     const sel = AppState.selectedShapes;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -247,25 +212,15 @@ function updateSelectionHighlight() {
     layer.draw();
     dumpLayerState(layer, "updateSelectionHighlight (none)");
   }
-  log("TRACE", "[canvas] updateSelectionHighlight exit");
 }
 
 export function buildCanvasPanel(rootElement, container) {
-  log("TRACE", "[canvas] buildCanvasPanel entry", {
-    rootElementType: rootElement?.tagName,
-    containerTitle: container?.title,
-    containerComponentName: container?.componentName
-  });
   try {
     log("INFO", "[canvas] buildCanvasPanel called", {
       rootElementType: rootElement?.tagName,
       containerTitle: container?.title,
       componentName: container?.componentName
     });
-
-    // --- NO UI creation here ---
-    // Only create the Konva stage and layer.
-    // All toolbar and control UI are now in src/toolbar.js.
 
     if (AppState.konvaStage && typeof AppState.konvaStage.destroy === "function") {
       AppState.konvaStage.destroy();
@@ -290,28 +245,21 @@ export function buildCanvasPanel(rootElement, container) {
     AppState.konvaStage = stage;
     AppState.konvaLayer = layer;
 
-    // --- Unselect shapes by clicking on empty background ---
+    // --- Unselect shapes by clicking on empty background ONLY ---
     stage.on("mousedown.unselect touchstart.unselect", function(e) {
-      log("TRACE", "[canvas] stage mousedown.unselect/touchstart.unselect handler FIRED", {
-        targetType: e.target?.className,
-        pointer: e?.evt ? { x: e.evt.clientX, y: e.evt.clientY } : e
-      });
-      if (e.target === stage) {
+      // Only deselect if background is clicked (not a shape)
+      if (e.target && e.target.className === "Stage") {
         AppState.selectedShapes.forEach(deselectShape);
         setSelectedShapes([]);
-        // --- ADDED: Re-attach selection handlers to all shapes after deselect ---
+        // Re-attach selection handlers to all shapes after deselect
         (AppState.shapes || []).forEach(s => {
-          log("TRACE", "[canvas] Re-attaching selection handlers after deselect", { shapeId: s._id });
           attachSelectionHandlers(s);
-          dumpShapeEventListeners(s, "re-attach after deselect");
         });
       }
     });
 
     subscribe((state, details) => {
-      log("TRACE", "[canvas] subscriber fired", { details });
       if (details && details.type === "image") {
-        log("TRACE", "[canvas] subscriber: image update event");
         updateBackgroundImage();
         dumpLayerState(layer, "subscriber:image after update");
         containerDiv.style.width = stage.width() + "px";
@@ -319,26 +267,19 @@ export function buildCanvasPanel(rootElement, container) {
       }
       // --- Listen for shape additions and ensure all shapes are always added to Konva layer ---
       if (details && details.type === "addShape" && details.shape) {
-        log("TRACE", "[canvas] subscriber: addShape event", { shape: details.shape });
         dumpShapeDebug(details.shape, "addShape (canvas subscriber)");
         // Only add shape if not already present in layer
         const alreadyPresent = AppState.konvaLayer.findOne(node => node === details.shape);
-        log("TRACE", "[canvas] addShape: alreadyPresent?", alreadyPresent);
         if (AppState.konvaLayer && !alreadyPresent) {
           AppState.konvaLayer.add(details.shape);
           AppState.konvaLayer.draw();
-          log("INFO", `[canvas] Shape added to Konva layer`, details.shape);
-          dumpLayerState(AppState.konvaLayer, "addShape after add");
-          // Attach selection handlers only via selection.js (centralized)
           centralAttachShapeEvents(details.shape);
         } else {
-          log("DEBUG", "[canvas] Shape not added to Konva layer (already present or not a Konva object)", details.shape);
           dumpLayerState(AppState.konvaLayer, "addShape (already present)");
         }
       }
       // Optionally: handle shape removal logic here if needed
       if (details && details.type === "selection") {
-        log("TRACE", "[canvas] subscriber: selection event");
         updateSelectionHighlight();
         dumpLayerState(layer, "subscriber:selection after update");
       }
@@ -356,13 +297,7 @@ export function buildCanvasPanel(rootElement, container) {
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
     alert("CanvasPanel ERROR: " + e.message);
-    log("TRACE", "[canvas] buildCanvasPanel exit (error)");
     throw e;
   }
-  log("TRACE", "[canvas] buildCanvasPanel exit", {
-    rootElementType: rootElement?.tagName,
-    containerTitle: container?.title,
-    componentName: container?.componentName
-  });
 }
 

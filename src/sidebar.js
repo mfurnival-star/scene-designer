@@ -128,7 +128,7 @@ export function buildSidebarPanel(rootElement, container) {
       if (AppState.selectedShape) {
         const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
         let rows = tabulator.getRows ? tabulator.getRows() : [];
-        log("TRACE", "[sidebar] updateTable selection sync", { selIdx, rowsLength: rows.length });
+        // Only select if row exists and select() is available
         if (selIdx >= 0 && rows[selIdx] && typeof rows[selIdx].select === "function") {
           rows[selIdx].select();
           log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx, selectedShapeId: AppState.selectedShape._id });
@@ -140,7 +140,7 @@ export function buildSidebarPanel(rootElement, container) {
           else log("WARN", "[sidebar] updateTable: Cannot select row", { selIdx });
         }
       } else {
-        // Robustly clear all selection (Tabulator v5+)
+        // Clear all selection
         let rows = tabulator.getRows ? tabulator.getRows() : [];
         rows.forEach(r => {
           if (typeof r.deselect === "function") r.deselect();
