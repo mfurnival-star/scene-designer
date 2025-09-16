@@ -136,3 +136,4 @@ export function updateTransformer() {
   attachTransformerForShape(shape);
   log("TRACE", "[transformer] updateTransformer exit (attached)");
 }
+

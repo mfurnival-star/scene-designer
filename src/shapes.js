@@ -127,3 +127,4 @@ export function makeCircleShape(x, y, r) {
   log("TRACE", "[shapes] makeCircleShape exit");
   return circle;
 }
+

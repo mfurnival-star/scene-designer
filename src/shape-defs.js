@@ -56,3 +56,4 @@ export function getShapeDef(shapeOrType) {
     : shapeOrType?._type;
   return SHAPE_DEFS[type] || null;
 }
+

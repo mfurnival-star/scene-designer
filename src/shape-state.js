@@ -135,3 +135,4 @@ function safeShapeSummary(shape) {
     y: typeof shape.y === "function" ? shape.y() : shape.y
   };
 }
+

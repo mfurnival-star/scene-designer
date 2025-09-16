@@ -187,8 +187,9 @@ export function buildCanvasToolbarPanel(rootElement, container) {
       const w = AppState.settings?.defaultRectWidth || 50;
       const h = AppState.settings?.defaultRectHeight || 30;
       const r = AppState.settings?.defaultCircleRadius || 15;
-      const x = (stage?.width() || 600) / 2;
-      const y = (stage?.height() || 400) / 2;
+      // UPDATED: Use default shape start X/Y percent from settings if available
+      const x = (stage?.width() || 600) * ((AppState.settings?.shapeStartXPercent ?? 50) / 100);
+      const y = (stage?.height() || 400) * ((AppState.settings?.shapeStartYPercent ?? 50) / 100);
       if (type === "rect") {
         shape = makeRectShape(x - w / 2, y - h / 2, w, h);
       } else if (type === "circle") {
@@ -246,3 +247,4 @@ export function buildCanvasToolbarPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
+
