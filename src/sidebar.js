@@ -1,7 +1,7 @@
 /**
  * sidebar.js
  * -----------------------------------------------------------
- * Shape Table/List Panel for Scene Designer (Fabric.js Migration, Deep TRACE Logging)
+ * Shape Table/List Panel for Scene Designer (Fabric.js Migration, Deep TRACE Logging, Tabulator v6.x)
  * - Tabulator-based shape table (ESM only, no globals).
  * - Displays a live-updating table of all shapes in AppState.shapes (Fabric.js objects).
  * - Columns: Label, Type, X, Y, W, H, Lock status.
@@ -9,14 +9,14 @@
  * - All state via AppState.
  * - Logging via log.js.
  * - TRACE-level logging for all key entry/exit, table update, selection, and row events.
- * - Tabulator selection logic robust for v5+, no selectRow error.
+ * - Refactored for Tabulator v6.x (Full build), with proper row selection API.
  * -----------------------------------------------------------
  */
 
 import { AppState, subscribe } from './state.js';
 import { setSelectedShape } from './selection.js';
 import { log } from './log.js';
-import { Tabulator } from 'tabulator-tables';
+import { TabulatorFull as Tabulator } from 'tabulator-tables';
 
 /**
  * Build the sidebar panel (Tabulator shape table).
@@ -84,6 +84,7 @@ export function buildSidebarPanel(rootElement, container) {
     }
 
     log("DEBUG", "[sidebar] Instantiating Tabulator table", { tableDiv });
+
     let tabulator = new Tabulator(tableDiv, {
       data: [],
       layout: "fitColumns",
@@ -193,4 +194,3 @@ export function buildSidebarPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
-
