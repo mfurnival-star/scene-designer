@@ -20,7 +20,7 @@ import { getShapeDef } from './shape-defs.js';
  * Attach Fabric.js controls to a shape (single selection only).
  * Always removes previous controls and adds new ones.
  * Called only by selection.js.
- * @param {fabric.Object|fabric.Group} shape
+ * @param {Object|Group} shape
  */
 export function attachTransformerForShape(shape) {
   log("TRACE", "[transformer] attachTransformerForShape entry", { shape });

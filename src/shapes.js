@@ -35,7 +35,7 @@ export function makePointShape(x, y) {
   });
 
   // Fabric.js doesn't have groups with hit areas; use a transparent circle as hit area
-  const hitCircle = new fabric.Circle({
+  const hitCircle = new Circle({
     left: x - hitRadius,
     top: y - hitRadius,
     radius: hitRadius,
@@ -46,7 +46,7 @@ export function makePointShape(x, y) {
   });
 
   // Halo for visual feedback
-  const halo = new fabric.Circle({
+  const halo = new Circle({
     left: x - haloRadius,
     top: y - haloRadius,
     radius: haloRadius,
@@ -59,17 +59,17 @@ export function makePointShape(x, y) {
   });
 
   // Crosshair lines
-  const crossH = new fabric.Line(
+  const crossH = new Line(
     [x - crossLen / 2, y, x + crossLen / 2, y],
     { stroke: strokeColor, strokeWidth: 2.5, selectable: false, evented: false }
   );
-  const crossV = new fabric.Line(
+  const crossV = new Line(
     [x, y - crossLen / 2, x, y + crossLen / 2],
     { stroke: strokeColor, strokeWidth: 2.5, selectable: false, evented: false }
   );
 
   // Fabric group for point shape
-  const pointGroup = new fabric.Group([hitCircle, halo, crossH, crossV], {
+  const pointGroup = new Group([hitCircle, halo, crossH, crossV], {
     left: x,
     top: y,
     selectable: true,
@@ -112,7 +112,7 @@ export function makeRectShape(x, y, w, h) {
     strokeColor, fillColor
   });
 
-  const rect = new fabric.Rect({
+  const rect = new Rect({
     left: x,
     top: y,
     width: w,
@@ -159,7 +159,7 @@ export function makeCircleShape(x, y, r) {
     strokeColor, fillColor
   });
 
-  const circle = new fabric.Circle({
+  const circle = new Circle({
     left: x - r,
     top: y - r,
     radius: r,
