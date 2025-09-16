@@ -10,6 +10,7 @@
  * - Fabric.js migration: all canvas and shape logic are now Fabric.js-based.
  * -----------------------------------------------------------
  */
+import './fabric-test.js';
 
 import { log } from './log.js';
 // Optionally import layout.js if you want the Golden Layout bootstrap:
