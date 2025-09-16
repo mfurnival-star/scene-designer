@@ -5,9 +5,9 @@
  * - Handles single and multi-shape selection state.
  * - Updates and syncs selection data in AppState.
  * - Integrates per-shape state machine from shape-state.js for robust state transitions.
+ * - Integrates per-shape config from shape-defs.js for robust transformer/anchors.
  * - Exports selection API for use by sidebar, toolbar, and canvas modules.
  * - Logs all selection changes and user actions at appropriate log levels.
- * - Adheres to SCENE_DESIGNER_MANIFESTO.md.
  * - TRACE-level logging for all function entry/exit (diagnostic).
  * -----------------------------------------------------------
  */
@@ -16,10 +16,11 @@ import { AppState } from './state.js';
 import { log } from './log.js';
 import { updateTransformer } from './transformer.js';
 import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
+import { getShapeDef } from './shape-defs.js';
 
 /**
  * Set the currently selected shape (single selection).
- * Integrates per-shape state machine.
+ * Integrates per-shape state machine and config.
  * @param {Object|null} shape - Shape object or null to clear.
  */
 export function setSelectedShape(shape) {
@@ -36,16 +37,21 @@ export function setSelectedShape(shape) {
   // Set new selection and state
   AppState.selectedShape = shape;
   AppState.selectedShapes = shape ? [shape] : [];
-  if (shape) selectShape(shape);
+  if (shape) {
+    selectShape(shape);
+    // Ensure edit mode is fully enabled (anchors, transformer, etc)
+    updateTransformer();
+  } else {
+    updateTransformer();
+  }
   log("INFO", "[selection] Single shape selected", { id: shape?._id, type: shape?._type });
   notifySelectionChanged();
-  updateTransformer();
   log("TRACE", "[selection] setSelectedShape exit");
 }
 
 /**
  * Set the current multi-selection.
- * Integrates per-shape state machine.
+ * Integrates per-shape state machine and config.
  * @param {Array} arr - Array of shape objects.
  */
 export function setSelectedShapes(arr) {
@@ -64,12 +70,12 @@ export function setSelectedShapes(arr) {
     setMultiSelected(shape, newArr.length > 1);
     if (newArr.length === 1) selectShape(shape);
   });
+  updateTransformer(); // always update transformer on selection change
   log("INFO", "[selection] Multi-selection changed", {
     ids: AppState.selectedShapes.map(s => s._id),
     types: AppState.selectedShapes.map(s => s._type)
   });
   notifySelectionChanged();
-  updateTransformer();
   log("TRACE", "[selection] setSelectedShapes exit");
 }
 
@@ -95,8 +101,8 @@ export function deselectAll() {
   }
   AppState.selectedShape = null;
   AppState.selectedShapes = [];
-  notifySelectionChanged();
   updateTransformer();
+  notifySelectionChanged();
   log("TRACE", "[selection] deselectAll exit");
 }
 
@@ -123,7 +129,7 @@ function notifySelectionChanged() {
 
 /**
  * Attach selection event handlers to a shape.
- * Integrates per-shape state machine.
+ * Integrates per-shape state machine and config.
  * @param {Object} shape - Shape object to attach handlers to.
  */
 export function attachSelectionHandlers(shape) {
@@ -188,11 +194,7 @@ export function getSelectedShape() {
   return result;
 }
 
-// --- Self-test log ---
-// (Removed top-level INFO log to avoid logging before settings and log level are loaded.)
-// log("INFO", "[selection] selection.js module loaded and ready.");
-
-// Optionally attach to window for debugging (remove in production!)
+// Attach for debugging (remove in production!)
 if (typeof window !== "undefined") {
   window.setSelectedShape = setSelectedShape;
   window.setSelectedShapes = setSelectedShapes;

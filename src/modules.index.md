@@ -14,6 +14,7 @@ toolbar.js
 shapes.js
 transformer.js
 shape-state.js
+shape-defs.js
 ```
 
 ---
@@ -64,6 +65,7 @@ shape-state.js
 - **transformer.js**  
   Shape transformer/resize logic for Konva shapes:
   - Centralized attach/detach/configure of Konva.Transformers for all shape types.
+  - All per-shape config (anchors, rotate, keepRatio) from shape-defs.js.
   - Rectangle: 8 anchors (corners + sides), resize freely.
   - Circle: 4 anchors (corners only), aspect ratio enforced (circle stays circle).
   - Point: no anchors/transform (not resizeable).
@@ -74,6 +76,12 @@ shape-state.js
   Per-shape state machine module:
   - Exports: `initShapeState`, `setShapeState`, `selectShape`, `deselectShape`, `startDraggingShape`, `stopDraggingShape`, `lockShape`, `unlockShape`, `setMultiSelected`, `isShapeInState`.
   - Used by shapes.js, canvas.js, selection.js, transformer.js for all robust state transitions.
+
+- **shape-defs.js**  
+  Centralized per-shape definition/config for Scene Designer.
+  - All shape types and their edit/transform properties in one place.
+  - Used by transformer.js, shapes.js, canvas.js, etc.
+  - Easy to extend for new shape types or features.
 
 ---
 **Instructions:**  
