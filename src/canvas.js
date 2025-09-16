@@ -15,13 +15,12 @@
  * Use default import and destructure classes from 'fabric'.
  */
 
-import fabric from 'fabric';
-console.log("fabric import:", fabric);
-console.log("fabric.Canvas:", fabric.Canvas);
-console.log("typeof fabric.Canvas:", typeof fabric.Canvas);
 
 import fabric from 'fabric';
 const { Canvas, Rect, Circle, Line, Group, Image } = fabric;
+console.log("fabric import:", fabric);
+console.log("fabric.Canvas:", fabric.Canvas);
+console.log("typeof fabric.Canvas:", typeof fabric.Canvas);
 
 import {
   AppState,
