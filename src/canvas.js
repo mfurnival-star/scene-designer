@@ -284,6 +284,13 @@ export function buildCanvasPanel(rootElement, container) {
     AppState.konvaStage = stage;
     AppState.konvaLayer = layer;
 
+    // --- ADDED: Unselect shapes by clicking on empty background ---
+    stage.on("mousedown.unselect touchstart.unselect", function(e) {
+      if (e.target === stage) {
+        setSelectedShapes([]);
+      }
+    });
+
     subscribe((state, details) => {
       log("TRACE", "[canvas] subscriber fired", { details });
       if (details && details.type === "image") {
@@ -346,3 +353,4 @@ export function buildCanvasPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
+
