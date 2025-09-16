@@ -11,7 +11,7 @@
  * -----------------------------------------------------------
  */
 
-import { fabric } from 'fabric';
+import { Canvas, Rect, Circle, Line, Group, Image } from 'fabric';
 import { log } from './log.js';
 import { attachSelectionHandlers } from './selection.js';
 import { setShapeState } from './shape-state.js';

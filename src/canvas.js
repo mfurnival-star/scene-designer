@@ -12,7 +12,7 @@
  * -----------------------------------------------------------
  */
 
-import { fabric } from 'fabric';
+import { Canvas, Rect, Circle, Line, Group, Image } from 'fabric';
 import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes, subscribe } from './state.js';
 import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
