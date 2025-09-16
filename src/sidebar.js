@@ -9,7 +9,8 @@
  * - All state via AppState.
  * - Logging via log.js.
  * - Logging policy: Use INFO for user actions, DEBUG for updates, ERROR for UI problems.
- * - TRACE-level logging for function entry/exit and row selection diagnostics.
+ * - Reduced TRACE-level logging; only key entry/exit and selection diagnostics.
+ * - Tabulator selection logic robust for v5+, no selectRow error.
  * -----------------------------------------------------------
  */
 
@@ -82,7 +83,7 @@ export function buildSidebarPanel(rootElement, container) {
       };
     }
 
-    log("TRACE", "[sidebar] Instantiating Tabulator table", { tableDiv });
+    log("DEBUG", "[sidebar] Instantiating Tabulator table", { tableDiv });
     let tabulator = new Tabulator(tableDiv, {
       data: [],
       layout: "fitColumns",
@@ -130,12 +131,12 @@ export function buildSidebarPanel(rootElement, container) {
         if (selIdx >= 0 && rows[selIdx] && typeof rows[selIdx].select === "function") {
           rows[selIdx].select();
           log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx });
-        } else if (typeof tabulator.selectRow === "function") {
-          // Fallback for Tabulator v4/v5: select by index
-          tabulator.selectRow(selIdx);
-          log("DEBUG", "[sidebar] updateTable: selectRow fallback", { selIdx });
         } else {
-          log("WARN", "[sidebar] updateTable: Cannot select row", { selIdx });
+          // Robust fallback: deselect all, then try to select by data match
+          rows.forEach(r => { if (typeof r.deselect === "function") r.deselect(); });
+          const row = rows.find(r => r.getData && r.getData().idx === selIdx);
+          if (row && typeof row.select === "function") row.select();
+          else log("WARN", "[sidebar] updateTable: Cannot select row", { selIdx });
         }
       } else {
         // Robustly clear all selection (Tabulator v5+)
@@ -174,3 +175,4 @@ export function buildSidebarPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
+

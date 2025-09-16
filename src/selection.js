@@ -1,13 +1,14 @@
 /**
  * selection.js
  * -----------------------------------------------------------
- * Centralized Shape Selection Logic for Scene Designer (Refactored)
- * - Manages single and multi-shape selection state.
- * - Solely responsible for transformer lifecycle (attach/detach/update).
- * - Integrates per-shape state machine from shape-state.js for robust state transitions.
- * - Integrates per-shape config from shape-defs.js for transformer/anchors.
- * - Exports selection API for all panels and canvas.
- * - Logging via log.js. TRACE level is extremely verbose for deep diagnostics.
+ * Centralized Shape Selection Logic for Scene Designer (Manifesto-Compliant, Prelayout Patterns Applied)
+ * - Manages single/multi-shape selection state.
+ * - Sole authority for transformer lifecycle (attach/detach/update).
+ * - Integrates shape state machine (shape-state.js).
+ * - Integrates per-shape config (shape-defs.js).
+ * - Always attaches selection event handlers; never removes except on shape destroy.
+ * - Always re-attaches transformer on selection, even if selecting same shape.
+ * - TRACE logging only for key entry/exit/events.
  * -----------------------------------------------------------
  */
 
@@ -20,49 +21,30 @@ import { getShapeDef } from './shape-defs.js';
 /**
  * Set the currently selected shape (single selection).
  * Always runs full selection logic, even if shape is already selected.
- * TRACE logs for before/after, reference checks, stack trace if needed.
- * Only selection.js manages transformer lifecycle.
  * @param {Object|null} shape - Shape object or null to clear.
  */
 export function setSelectedShape(shape) {
-  log("TRACE", "[selection] setSelectedShape ENTRY", {
+  log("DEBUG", "[selection] setSelectedShape", {
     incomingShapeId: shape?._id,
     incomingShapeType: shape?._type,
-    incomingShapeLabel: shape?._label,
     prevSelectedShapeId: AppState.selectedShape?._id,
-    prevSelectedShapeType: AppState.selectedShape?._type,
-    prevSelectedShapeLabel: AppState.selectedShape?._label,
-    prevSelectedShapeRefEq: AppState.selectedShape === shape
+    prevSelectedShapeType: AppState.selectedShape?._type
   });
 
-  // Deselect previous selection (always, even if selecting same shape)
+  // Always deselect previous selection, even if reselecting
   if (AppState.selectedShape && typeof deselectShape === "function") {
     deselectShape(AppState.selectedShape);
   }
 
-  // Set new selection and state
   AppState.selectedShape = shape;
   AppState.selectedShapes = shape ? [shape] : [];
-  log("TRACE", "[selection] setSelectedShape: Assigned new selectedShape(s)", {
-    newSelectedShapeId: AppState.selectedShape?._id,
-    newSelectedShapeType: AppState.selectedShape?._type,
-    newSelectedShapeLabel: AppState.selectedShape?._label,
-    selectedShapes: AppState.selectedShapes.map(s => s?._id)
-  });
 
   if (shape) {
     selectShape(shape);
-    // Attach transformer for single unlocked, editable shape
+
+    // Always attach transformer for valid shapes; never skip if same shape
     const def = getShapeDef(shape);
-    log("DEBUG", "[selection] getShapeDef", {
-      def,
-      editable: def && def.editable,
-      locked: shape.locked
-    });
     if (def && def.editable && !shape.locked) {
-      log("INFO", "[selection] Attaching transformer", {
-        shapeId: shape._id, shapeType: shape._type, shapeLabel: shape._label
-      });
       attachTransformerForShape(shape);
     } else {
       detachTransformer();
@@ -71,33 +53,23 @@ export function setSelectedShape(shape) {
     detachTransformer();
   }
 
-  log("INFO", "[selection] Single shape selected", {
-    id: shape?._id, type: shape?._type, label: shape?._label
-  });
-
   notifySelectionChanged();
-
-  log("TRACE", "[selection] setSelectedShape EXIT", {
-    selectedShapeId: AppState.selectedShape?._id,
-    selectedShapes: AppState.selectedShapes.map(s => s?._id)
-  });
 }
 
 /**
  * Set the current multi-selection.
- * TRACE logs for entry, shape refs, after state.
- * Only selection.js manages transformer lifecycle.
  * @param {Array} arr - Array of shape objects.
  */
 export function setSelectedShapes(arr) {
-  log("TRACE", "[selection] setSelectedShapes ENTRY", {
+  log("DEBUG", "[selection] setSelectedShapes", {
     arrTypes: arr && arr.map ? arr.map(s => s?._type) : [],
     arrIds: arr && arr.map ? arr.map(s => s?._id) : [],
     prevSelectedShapes: AppState.selectedShapes && AppState.selectedShapes.map ? AppState.selectedShapes.map(s => s?._id) : []
   });
+
   const newArr = Array.isArray(arr) ? arr : [];
 
-  // Deselect previous selection (always, ensures robust transformer logic)
+  // Always deselect previous selection
   if (AppState.selectedShapes && Array.isArray(AppState.selectedShapes)) {
     AppState.selectedShapes.forEach(s => {
       if (!newArr.includes(s)) {
@@ -106,13 +78,8 @@ export function setSelectedShapes(arr) {
     });
   }
 
-  // Set new selection and state
   AppState.selectedShapes = newArr;
   AppState.selectedShape = newArr.length === 1 ? newArr[0] : null;
-  log("TRACE", "[selection] setSelectedShapes: Assigned selectedShape(s)", {
-    selectedShapeId: AppState.selectedShape?._id,
-    selectedShapes: AppState.selectedShapes.map(s => s?._id)
-  });
 
   newArr.forEach((shape, idx) => {
     setMultiSelected(shape, newArr.length > 1);
@@ -122,14 +89,7 @@ export function setSelectedShapes(arr) {
   // Transformer only for single unlocked, editable shape
   if (newArr.length === 1 && newArr[0] && !newArr[0].locked) {
     const def = getShapeDef(newArr[0]);
-    log("DEBUG", "[selection] getShapeDef", {
-      def,
-      editable: def && def.editable
-    });
     if (def && def.editable) {
-      log("INFO", "[selection] Attaching transformer", {
-        shapeId: newArr[0]._id, shapeType: newArr[0]._type
-      });
       attachTransformerForShape(newArr[0]);
     } else {
       detachTransformer();
@@ -138,40 +98,20 @@ export function setSelectedShapes(arr) {
     detachTransformer();
   }
 
-  log("INFO", "[selection] Multi-selection changed", {
-    ids: AppState.selectedShapes.map(s => s._id),
-    types: AppState.selectedShapes.map(s => s._type)
-  });
-
   notifySelectionChanged();
-
-  log("TRACE", "[selection] setSelectedShapes EXIT", {
-    selectedShapeId: AppState.selectedShape?._id,
-    selectedShapes: AppState.selectedShapes.map(s => s?._id)
-  });
 }
 
 /**
  * Select all shapes currently in AppState.
  */
 export function selectAllShapes() {
-  log("DEBUG", "[selection] selectAllShapes ENTRY", {
-    allShapes: AppState.shapes.map(s => ({ id: s._id, type: s._type, label: s._label }))
-  });
   setSelectedShapes(AppState.shapes.slice());
-  log("DEBUG", "[selection] selectAllShapes EXIT");
 }
 
 /**
  * Deselect all shapes.
- * TRACE logs for before/after.
- * Only selection.js manages transformer lifecycle.
  */
 export function deselectAll() {
-  log("DEBUG", "[selection] deselectAll ENTRY", {
-    prevSelectedShapeId: AppState.selectedShape?._id,
-    prevSelectedShapes: AppState.selectedShapes.map(s => s?._id)
-  });
   if (AppState.selectedShapes && Array.isArray(AppState.selectedShapes)) {
     AppState.selectedShapes.forEach(s => deselectShape(s));
   }
@@ -179,21 +119,12 @@ export function deselectAll() {
   AppState.selectedShapes = [];
   detachTransformer();
   notifySelectionChanged();
-  log("DEBUG", "[selection] deselectAll EXIT", {
-    selectedShape: AppState.selectedShape,
-    selectedShapes: AppState.selectedShapes
-  });
 }
 
 /**
  * Notify subscribers of selection change.
- * TRACE logs for entry/exit, shape refs.
  */
 function notifySelectionChanged() {
-  log("TRACE", "[selection] notifySelectionChanged ENTRY", {
-    selectedShapeId: AppState.selectedShape?._id,
-    selectedShapes: AppState.selectedShapes.map(s => s?._id)
-  });
   if (typeof AppState._subscribers === "object" && Array.isArray(AppState._subscribers)) {
     AppState._subscribers.forEach(fn => {
       try {
@@ -203,75 +134,38 @@ function notifySelectionChanged() {
       }
     });
   }
-  log("TRACE", "[selection] notifySelectionChanged EXIT");
 }
 
 /**
  * Attach selection event handlers to a shape.
- * TRACE logs for handler wiring, handler firing, pointer event details, shape reference.
- * Only calls selection.js APIs, never transformer directly.
+ * Always attaches; never removes except on shape destroy.
+ * Pointer event bubbling blocked for robustness.
  * @param {Object} shape - Shape object to attach handlers to.
  */
 export function attachSelectionHandlers(shape) {
-  log("TRACE", "[selection] attachSelectionHandlers ENTRY", {
-    shapeId: shape?._id,
-    shapeType: shape?._type,
-    shapeLabel: shape?._label,
-    refInAppStateShapes: Array.isArray(AppState.shapes) ? AppState.shapes.includes(shape) : false
-  });
   if (!shape || typeof shape.on !== "function") {
     log("WARN", "[selection] attachSelectionHandlers: Not a valid shape", { shape });
-    log("TRACE", "[selection] attachSelectionHandlers EXIT (not valid)");
     return;
   }
-  // Remove old handlers to avoid duplicate listeners
+  // Remove only previous mousedown.selection handler to avoid duplicates
   shape.off("mousedown.selection");
   shape.on("mousedown.selection", function(evt) {
-    const pointer = evt.evt
-      ? { x: evt.evt.clientX, y: evt.evt.clientY, type: evt.evt.type }
-      : {};
+    // Block event bubbling for robustness (legacy pattern)
+    if (evt && evt.cancelBubble !== undefined) evt.cancelBubble = true;
 
-    log("DEBUG", "[selection] Shape mousedown.selection handler FIRED", {
-      eventType: pointer.type,
-      pointer,
-      shapeId: shape._id,
-      shapeType: shape._type,
-      shapeLabel: shape._label,
-      shapeRefEq: AppState.shapes.includes(shape),
-      selectedShapes: AppState.selectedShapes.map(s => s._id),
-      selectedShape: AppState.selectedShape?._id
-    });
-
+    // Ctrl/Meta for multi-select toggle
     if (evt.evt && (evt.evt.ctrlKey || evt.evt.metaKey)) {
-      // Toggle multi-selection if control/meta key held
       const idx = AppState.selectedShapes.indexOf(shape);
       if (idx === -1) {
-        const newArr = [...AppState.selectedShapes, shape];
-        log("TRACE", "[selection] Shape mousedown.selection: Adding to multi-selection", {
-          newArr: newArr.map(s => s?._id)
-        });
-        setSelectedShapes(newArr);
+        setSelectedShapes([...AppState.selectedShapes, shape]);
       } else {
         const newArr = AppState.selectedShapes.slice();
         newArr.splice(idx, 1);
-        log("TRACE", "[selection] Shape mousedown.selection: Removing from multi-selection", {
-          newArr: newArr.map(s => s?._id)
-        });
         setSelectedShapes(newArr);
       }
     } else {
-      log("DEBUG", "[selection] Shape mousedown.selection: Single select", {
-        shapeId: shape._id,
-        shapeType: shape._type,
-        shapeLabel: shape._label
-      });
-      setSelectedShape(shape);
+      setSelectedShape(shape); // Always triggers full selection logic, even if same shape
     }
-  });
-  log("TRACE", "[selection] attachSelectionHandlers EXIT", {
-    shapeId: shape?._id,
-    shapeType: shape?._type,
-    shapeLabel: shape?._label
   });
 }
 
@@ -311,5 +205,3 @@ if (typeof window !== "undefined") {
   window.getSelectedShapes = getSelectedShapes;
   window.attachSelectionHandlers = attachSelectionHandlers;
 }
-
-
