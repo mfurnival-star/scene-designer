@@ -55,7 +55,7 @@ function updateBackgroundImage() {
   if (AppState.imageObj) {
     const imgObj = AppState.imageObj;
     // Fabric.js image object
-    fabric.Image.fromURL(imgObj.src || AppState.imageURL, function(img) {
+    Image.fromURL(imgObj.src || AppState.imageURL, function(img) {
       img.set({
         left: 0,
         top: 0,
@@ -160,7 +160,7 @@ function updateSelectionHighlight() {
       maxY = Math.max(maxY, bottom);
     }
     // Draw bounding box
-    const box = new fabric.Rect({
+    const box = new Rect({
       left: minX - 4,
       top: minY - 4,
       width: maxX - minX + 8,
@@ -210,7 +210,7 @@ export function buildCanvasPanel(rootElement, container) {
     rootElement.appendChild(containerDiv);
 
     // Fabric.js canvas
-    const canvas = new fabric.Canvas(containerDiv, {
+    const canvas = new Canvas(containerDiv, {
       width,
       height,
       selection: true,
