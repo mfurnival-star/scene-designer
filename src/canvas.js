@@ -1,7 +1,7 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Konva Panel (Refactored)
+ * Scene Designer – Canvas/Konva Panel (Refactored + Deep TRACE Logging)
  * - Modern ES module for all canvas, image, and shape logic.
  * - NO UI creation or controls here: all toolbar, image upload, and server image logic are now only in src/toolbar.js.
  * - Handles Konva stage/layer, creation, deletion, duplication, selection, lock, drag, and transform.
@@ -9,6 +9,7 @@
  * - Imports all dependencies as ES modules.
  * - All state flows via AppState.
  * - Logging via log.js.
+ * - DEEP TRACE logging for all handler attach, layer state, selection events.
  * -----------------------------------------------------------
  */
 
@@ -48,10 +49,21 @@ function dumpLayerState(layer, tag = "") {
   log("TRACE", `[canvas] ${tag} layer children`, {
     count: children.length,
     types: children.map(n => n.className || n.constructor?.name || typeof n),
-    labels: children.map(n => n._label || n._type || n.className || n.constructor?.name)
+    labels: children.map(n => n._label || n._type || n.className || n.constructor?.name),
+    listeningStates: children.map(n => n.listening && typeof n.listening === "function" ? n.listening() : n.listening)
   });
 }
 
+// Extra: Dump event listeners for every shape (diagnostic)
+function dumpShapeEventListeners(shape, tag = "") {
+  log("TRACE", `[canvas] ${tag} eventListeners`, {
+    shapeId: shape?._id,
+    shapeType: shape?._type,
+    eventListeners: shape?.eventListeners
+  });
+}
+
+// --- Background image logic (no change) ---
 function updateBackgroundImage() {
   log("TRACE", "[canvas] updateBackgroundImage entry");
   const layer = AppState.konvaLayer;
@@ -97,6 +109,7 @@ function updateBackgroundImage() {
   log("TRACE", "[canvas] updateBackgroundImage exit");
 }
 
+// --- Selection state sanitization ---
 function sanitizeSelection() {
   log("TRACE", "[canvas] sanitizeSelection entry");
   if (!AppState.konvaLayer) {
@@ -114,23 +127,28 @@ function sanitizeSelection() {
   log("TRACE", "[canvas] sanitizeSelection exit");
 }
 
+// --- Remove all shape handlers except selection ---
 function removeAllShapeHandlers(shape) {
   log("TRACE", "[canvas] removeAllShapeHandlers entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   if (shape && typeof shape.off === "function") {
     shape.off('mousedown.shape dragmove.shape dragstart.shape dragend.shape transformstart.shape transformend.shape');
+    // Do NOT call shape.off() without event name!
   }
   log("TRACE", "[canvas] removeAllShapeHandlers exit");
 }
 
-// --- NO: Attach shape events here. Only attach selection events via selection.js ---
+// --- Central: Attach selection handler (deep logging) ---
 function centralAttachShapeEvents(shape) {
   log("TRACE", "[canvas] centralAttachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   removeAllShapeHandlers(shape);
+  dumpShapeEventListeners(shape, "before attachSelectionHandlers");
   // Delegate all selection events to selection.js only!
   attachSelectionHandlers(shape);
+  dumpShapeEventListeners(shape, "after attachSelectionHandlers");
   log("TRACE", "[canvas] centralAttachShapeEvents exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
+// --- Clamp shape to stage (no change) ---
 function clampShapeToStage(shape) {
   log("TRACE", "[canvas] clampShapeToStage entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   const stage = AppState.konvaStage;
@@ -155,6 +173,7 @@ function clampShapeToStage(shape) {
   log("TRACE", "[canvas] clampShapeToStage exit", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
 }
 
+// --- Clamp group drag delta (no change) ---
 function clampGroupDragDelta(dx, dy, origPositions) {
   log("TRACE", "[canvas] clampGroupDragDelta entry", { dx, dy, origPositions });
   const stage = AppState.konvaStage;
@@ -273,9 +292,19 @@ export function buildCanvasPanel(rootElement, container) {
 
     // --- Unselect shapes by clicking on empty background ---
     stage.on("mousedown.unselect touchstart.unselect", function(e) {
+      log("TRACE", "[canvas] stage mousedown.unselect/touchstart.unselect handler FIRED", {
+        targetType: e.target?.className,
+        pointer: e?.evt ? { x: e.evt.clientX, y: e.evt.clientY } : e
+      });
       if (e.target === stage) {
         AppState.selectedShapes.forEach(deselectShape);
         setSelectedShapes([]);
+        // --- ADDED: Re-attach selection handlers to all shapes after deselect ---
+        (AppState.shapes || []).forEach(s => {
+          log("TRACE", "[canvas] Re-attaching selection handlers after deselect", { shapeId: s._id });
+          attachSelectionHandlers(s);
+          dumpShapeEventListeners(s, "re-attach after deselect");
+        });
       }
     });
 

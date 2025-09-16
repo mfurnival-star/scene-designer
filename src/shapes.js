@@ -7,7 +7,7 @@
  * - All shapes have selection event handlers from selection.js and shape-state.js.
  * - Handles per-shape config, label, lock, and transformer events.
  * - No global variables, no window.* usage.
- * - Logging via log.js.
+ * - Logging via log.js (DEEP TRACE logging for creation and handler attachment).
  * -----------------------------------------------------------
  */
 

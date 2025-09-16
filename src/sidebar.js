@@ -1,15 +1,14 @@
 /**
  * sidebar.js
  * -----------------------------------------------------------
- * Shape Table/List Panel for Scene Designer (Golden Layout)
+ * Shape Table/List Panel for Scene Designer (Golden Layout, Deep TRACE Logging)
  * - Tabulator-based shape table (ESM only, no globals).
  * - Displays a live-updating table of all shapes in AppState.shapes.
  * - Columns: Label, Type, X, Y, W, H, Lock status.
  * - Clicking a row selects the corresponding shape (single selection for now).
  * - All state via AppState.
  * - Logging via log.js.
- * - Logging policy: Use INFO for user actions, DEBUG for updates, ERROR for UI problems.
- * - Reduced TRACE-level logging; only key entry/exit and selection diagnostics.
+ * - TRACE-level logging for all key entry/exit, table update, selection, and row events.
  * - Tabulator selection logic robust for v5+, no selectRow error.
  * -----------------------------------------------------------
  */
@@ -33,7 +32,7 @@ export function buildSidebarPanel(rootElement, container) {
     log("INFO", "[sidebar] buildSidebarPanel called (Tabulator shape table)", {
       rootElementType: rootElement?.tagName,
       containerTitle: container?.title,
-      containerComponentName: container?.componentName
+      componentName: container?.componentName
     });
 
     // Render container for Tabulator
@@ -100,12 +99,13 @@ export function buildSidebarPanel(rootElement, container) {
       ],
       selectable: 1,
       rowClick: function (e, row) {
-        const idx = row.getData().idx;
-        log("DEBUG", "[sidebar] rowClick", {
-          idx,
-          shape: AppState.shapes[idx],
+        log("TRACE", "[sidebar] rowClick handler FIRED", {
+          eventType: e.type,
+          idx: row.getData().idx,
+          shape: AppState.shapes[row.getData().idx],
           rowData: row.getData()
         });
+        const idx = row.getData().idx;
         if (AppState.shapes[idx]) {
           setSelectedShape(AppState.shapes[idx]);
           log("INFO", "[sidebar] Shape selected via rowClick", {
@@ -120,7 +120,7 @@ export function buildSidebarPanel(rootElement, container) {
 
     // --- Robust updateTable: syncs selection and shape rows ---
     const updateTable = () => {
-      log("DEBUG", "[sidebar] updateTable ENTRY");
+      log("TRACE", "[sidebar] updateTable ENTRY");
       const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
       tabulator.replaceData(data);
 
@@ -128,9 +128,10 @@ export function buildSidebarPanel(rootElement, container) {
       if (AppState.selectedShape) {
         const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
         let rows = tabulator.getRows ? tabulator.getRows() : [];
+        log("TRACE", "[sidebar] updateTable selection sync", { selIdx, rowsLength: rows.length });
         if (selIdx >= 0 && rows[selIdx] && typeof rows[selIdx].select === "function") {
           rows[selIdx].select();
-          log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx });
+          log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx, selectedShapeId: AppState.selectedShape._id });
         } else {
           // Robust fallback: deselect all, then try to select by data match
           rows.forEach(r => { if (typeof r.deselect === "function") r.deselect(); });
@@ -146,10 +147,11 @@ export function buildSidebarPanel(rootElement, container) {
         });
         log("DEBUG", "[sidebar] updateTable: All rows deselected");
       }
-      log("DEBUG", "[sidebar] updateTable EXIT");
+      log("TRACE", "[sidebar] updateTable EXIT");
     };
 
     tabulator.on("tableBuilt", () => {
+      log("TRACE", "[sidebar] Tabulator tableBuilt event");
       updateTable();
       // Subscribe after built to avoid early calls
       var unsub = subscribe(updateTable);
@@ -158,6 +160,7 @@ export function buildSidebarPanel(rootElement, container) {
         container.on("destroy", () => {
           unsub && unsub();
           tabulator.destroy();
+          log("INFO", "[sidebar] Sidebar panel destroyed");
         });
       }
     });
