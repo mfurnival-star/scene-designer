@@ -1,7 +1,7 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Konva Panel
+ * Scene Designer – Canvas/Konva Panel (Refactored)
  * - Modern ES module for all canvas, image, and shape logic.
  * - NO UI creation or controls here: all toolbar, image upload, and server image logic are now only in src/toolbar.js.
  * - Handles Konva stage/layer, creation, deletion, duplication, selection, lock, drag, and transform.
@@ -17,6 +17,7 @@ import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes
 import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
 import { getShapeState, setShapeState, selectShape, deselectShape, startDraggingShape, stopDraggingShape } from './shape-state.js';
+import { setSelectedShape } from './selection.js';
 
 // --- Utility: Dump shape diagnostic info for debugging ---
 function dumpShapeDebug(shape, tag = "") {
@@ -132,12 +133,8 @@ function attachShapeEvents(shape) {
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape.locked) return;
-    selectShape(shape);
-    setSelectedShapes([shape]);
+    setSelectedShape(shape);  // Use selection.js API
     updateSelectionHighlight();
-    // --- Ensure transformer and edit mode are enabled on selection ---
-    updateTransformer();
-    attachTransformerForShape(shape);
   });
 
   // Drag start -- set state
@@ -229,18 +226,19 @@ function clampGroupDragDelta(dx, dy, origPositions) {
   return [adjDx, adjDy];
 }
 
-// --- Selection highlight: uses shape state machine to show correct UI ---
+// --- Selection highlight: draws highlight/bounding box for multi-select
 function updateSelectionHighlight() {
   log("TRACE", "[canvas] updateSelectionHighlight entry");
   const layer = AppState.konvaLayer;
   if (AppState.groupBoundingBox) { AppState.groupBoundingBox.destroy(); AppState.groupBoundingBox = null; }
   sanitizeSelection();
 
+  // Single selection, unlocked: do not draw highlight box (transformer is shown by selection.js)
   if (AppState.selectedShapes.length === 1 && !AppState.selectedShapes[0].locked) {
-    updateTransformer();
     layer.draw();
     dumpLayerState(layer, "updateSelectionHighlight (single)");
   } else if (AppState.selectedShapes.length > 1) {
+    // Multi-select: draw group bounding box
     detachTransformer();
     const sel = AppState.selectedShapes;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -344,11 +342,6 @@ export function buildCanvasPanel(rootElement, container) {
           AppState.konvaLayer.draw();
           log("INFO", `[canvas] Shape added to Konva layer`, details.shape);
           dumpLayerState(AppState.konvaLayer, "addShape after add");
-          // Attach transformer for single selection, if shape is selectable
-          if (!details.shape.locked && details.shape._type !== "point") {
-            log("TRACE", "[canvas] addShape: attaching transformer", { shape: details.shape });
-            attachTransformerForShape(details.shape);
-          }
           // Attach selection and drag/transform handlers (always!)
           attachShapeEvents(details.shape);
         } else {
@@ -360,7 +353,6 @@ export function buildCanvasPanel(rootElement, container) {
       if (details && details.type === "selection") {
         log("TRACE", "[canvas] subscriber: selection event");
         updateSelectionHighlight();
-        updateTransformer();
         dumpLayerState(layer, "subscriber:selection after update");
       }
     });

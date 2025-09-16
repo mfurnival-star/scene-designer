@@ -1,35 +1,31 @@
 /**
  * selection.js
  * -----------------------------------------------------------
- * Shape Selection Logic for Scene Designer
- * - Handles single and multi-shape selection state.
- * - Updates and syncs selection data in AppState.
+ * Centralized Shape Selection Logic for Scene Designer (Refactored)
+ * - Manages single and multi-shape selection state.
+ * - Solely responsible for transformer lifecycle (attach/detach/update).
  * - Integrates per-shape state machine from shape-state.js for robust state transitions.
- * - Integrates per-shape config from shape-defs.js for robust transformer/anchors.
- * - Ensures that selecting a shape always enables edit mode (transformer, drag, anchors) as allowed.
- * - Exports selection API for use by sidebar, toolbar, and canvas modules.
- * - Logs all selection changes and user actions at appropriate log levels.
- * - TRACE-level logging for all function entry/exit (diagnostic).
+ * - Integrates per-shape config from shape-defs.js for transformer/anchors.
+ * - Exports selection API for all panels and canvas.
+ * - Logging via log.js.
  * -----------------------------------------------------------
  */
 
 import { AppState } from './state.js';
 import { log } from './log.js';
-import { updateTransformer, attachTransformerForShape, detachTransformer } from './transformer.js';
+import { attachTransformerForShape, detachTransformer } from './transformer.js';
 import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
 import { getShapeDef } from './shape-defs.js';
 
 /**
  * Set the currently selected shape (single selection).
- * Integrates per-shape state machine and config.
- * Always enables edit mode (transformer, drag, anchors) if allowed.
+ * Only selection.js manages transformer lifecycle.
  * @param {Object|null} shape - Shape object or null to clear.
  */
 export function setSelectedShape(shape) {
   log("TRACE", "[selection] setSelectedShape entry", { shape });
-  // Always enable transformer/edit mode, even if reselecting the same shape
   // Deselect previous selection
-  if (AppState.selectedShape && typeof deselectShape === "function") {
+  if (AppState.selectedShape && AppState.selectedShape !== shape && typeof deselectShape === "function") {
     deselectShape(AppState.selectedShape);
   }
   // Set new selection and state
@@ -37,15 +33,14 @@ export function setSelectedShape(shape) {
   AppState.selectedShapes = shape ? [shape] : [];
   if (shape) {
     selectShape(shape);
-    // Ensure edit mode is fully enabled (anchors, transformer, etc)
-    updateTransformer();
-    // If shape is editable, force transformer re-attach for robustness
+    // Attach transformer for single unlocked, editable shape
     const def = getShapeDef(shape);
     if (def && def.editable && !shape.locked) {
       attachTransformerForShape(shape);
+    } else {
+      detachTransformer();
     }
   } else {
-    updateTransformer();
     detachTransformer();
   }
   log("INFO", "[selection] Single shape selected", { id: shape?._id, type: shape?._type });
@@ -55,7 +50,7 @@ export function setSelectedShape(shape) {
 
 /**
  * Set the current multi-selection.
- * Integrates per-shape state machine and config.
+ * Only selection.js manages transformer lifecycle.
  * @param {Array} arr - Array of shape objects.
  */
 export function setSelectedShapes(arr) {
@@ -74,14 +69,15 @@ export function setSelectedShapes(arr) {
     setMultiSelected(shape, newArr.length > 1);
     if (newArr.length === 1) selectShape(shape);
   });
-  // Always update transformer on selection change
+  // Transformer only for single unlocked, editable shape
   if (newArr.length === 1 && newArr[0] && !newArr[0].locked) {
     const def = getShapeDef(newArr[0]);
     if (def && def.editable) {
       attachTransformerForShape(newArr[0]);
+    } else {
+      detachTransformer();
     }
   } else {
-    updateTransformer();
     detachTransformer();
   }
   log("INFO", "[selection] Multi-selection changed", {
@@ -104,7 +100,7 @@ export function selectAllShapes() {
 
 /**
  * Deselect all shapes.
- * Integrates per-shape state machine.
+ * Only selection.js manages transformer lifecycle.
  */
 export function deselectAll() {
   log("TRACE", "[selection] deselectAll entry");
@@ -114,7 +110,6 @@ export function deselectAll() {
   }
   AppState.selectedShape = null;
   AppState.selectedShapes = [];
-  updateTransformer();
   detachTransformer();
   notifySelectionChanged();
   log("TRACE", "[selection] deselectAll exit");
@@ -143,7 +138,7 @@ function notifySelectionChanged() {
 
 /**
  * Attach selection event handlers to a shape.
- * Integrates per-shape state machine and config.
+ * Only calls selection.js APIs, never transformer directly.
  * @param {Object} shape - Shape object to attach handlers to.
  */
 export function attachSelectionHandlers(shape) {
