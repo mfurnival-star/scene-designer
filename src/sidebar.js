@@ -52,7 +52,7 @@ export function buildSidebarPanel(rootElement, container) {
     }
 
     function shapeToRow(shape, idx) {
-      let { _label, _type, locked } = shape;
+      let { _label, _type, locked, _id } = shape;
       let x = 0, y = 0, w = "", h = "";
       if (_type === "rect") {
         x = Math.round(shape.left ?? shape.x ?? 0);
@@ -72,6 +72,7 @@ export function buildSidebarPanel(rootElement, container) {
       }
       return {
         idx,
+        id: _id || `shape_${idx}`,
         label: _label || "",
         type: _type,
         x,
@@ -98,10 +99,12 @@ export function buildSidebarPanel(rootElement, container) {
         { title: "Lock", field: "locked", width: 48, hozAlign: "center" }
       ],
       selectable: 1,
+      // Use rowClick to select shape
       rowClick: function (e, row) {
         log("TRACE", "[sidebar] rowClick handler FIRED", {
           eventType: e.type,
           idx: row.getData().idx,
+          id: row.getData().id,
           shape: AppState.shapes[row.getData().idx],
           rowData: row.getData()
         });
@@ -110,7 +113,8 @@ export function buildSidebarPanel(rootElement, container) {
           setSelectedShape(AppState.shapes[idx]);
           log("INFO", "[sidebar] Shape selected via rowClick", {
             selectedShapeLabel: AppState.shapes[idx]._label,
-            selectedShapeType: AppState.shapes[idx]._type
+            selectedShapeType: AppState.shapes[idx]._type,
+            id: AppState.shapes[idx]._id
           });
         } else {
           log("WARN", "[sidebar] rowClick: No shape found at idx", { idx, shape: AppState.shapes[idx] });
@@ -126,18 +130,29 @@ export function buildSidebarPanel(rootElement, container) {
 
       // Selection sync: ensure selected row is highlighted
       if (AppState.selectedShape) {
-        const selIdx = AppState.shapes.indexOf(AppState.selectedShape);
-        let rows = tabulator.getRows ? tabulator.getRows() : [];
-        // Only select if row exists and select() is available
-        if (selIdx >= 0 && rows[selIdx] && typeof rows[selIdx].select === "function") {
-          rows[selIdx].select();
-          log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx, selectedShapeLabel: AppState.selectedShape._label });
+        const selectedShape = AppState.selectedShape;
+        let foundRow = null;
+        // Try to find row by unique id
+        if (selectedShape._id) {
+          foundRow = tabulator.getRow(selectedShape._id);
+        }
+        // Fallback: try by idx
+        if (!foundRow) {
+          const selIdx = AppState.shapes.indexOf(selectedShape);
+          let rows = tabulator.getRows ? tabulator.getRows() : [];
+          foundRow = rows[selIdx];
+        }
+        if (foundRow && typeof foundRow.select === "function") {
+          foundRow.select();
+          log("DEBUG", "[sidebar] updateTable: Row selected", {
+            selectedShapeLabel: selectedShape._label,
+            id: selectedShape._id
+          });
         } else {
-          // Robust fallback: deselect all, then try to select by data match
-          rows.forEach(r => { if (typeof r.deselect === "function") r.deselect(); });
-          const row = rows.find(r => r.getData && r.getData().idx === selIdx);
-          if (row && typeof row.select === "function") row.select();
-          else log("WARN", "[sidebar] updateTable: Cannot select row", { selIdx });
+          log("WARN", "[sidebar] updateTable: Cannot select row by id or idx", {
+            selectedShapeLabel: selectedShape._label,
+            id: selectedShape._id
+          });
         }
       } else {
         // Clear all selection
