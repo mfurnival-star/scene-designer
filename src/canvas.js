@@ -16,9 +16,6 @@ import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes
 import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
 
-let bgKonvaImage = null;
-let groupBoundingBox = null;
-
 /**
  * Utility: Dump shape diagnostic info for debugging.
  */
@@ -62,9 +59,9 @@ function updateBackgroundImage() {
     log("WARN", "[canvas] updateBackgroundImage: no konvaLayer yet");
     return;
   }
-  if (bgKonvaImage) {
-    bgKonvaImage.destroy();
-    bgKonvaImage = null;
+  if (AppState.bgKonvaImage) {
+    AppState.bgKonvaImage.destroy();
+    AppState.bgKonvaImage = null;
     layer.draw();
   }
   if (AppState.imageObj) {
@@ -78,7 +75,7 @@ function updateBackgroundImage() {
     stage.width(w);
     stage.height(h);
 
-    bgKonvaImage = new Konva.Image({
+    AppState.bgKonvaImage = new Konva.Image({
       image: AppState.imageObj,
       x: 0,
       y: 0,
@@ -86,8 +83,8 @@ function updateBackgroundImage() {
       height: h,
       listening: false
     });
-    layer.add(bgKonvaImage);
-    bgKonvaImage.moveToBottom();
+    layer.add(AppState.bgKonvaImage);
+    AppState.bgKonvaImage.moveToBottom();
     layer.draw();
     log("DEBUG", "[canvas] updateBackgroundImage: background set (actual size)", {
       imgW: w, imgH: h
@@ -129,14 +126,14 @@ function attachShapeEvents(shape) {
   log("TRACE", "[canvas] attachShapeEvents entry", shape && shape._id ? { _id: shape._id, _type: shape._type } : shape);
   removeAllShapeHandlers(shape);
 
+  // Ensure shapes are selectable by tap/click (reselect after unselect)
   shape.on('mousedown.shape', (e) => {
     log("DEBUG", "[canvas] mousedown.shape event", shape && shape._id ? { _id: shape._id, _type: shape._type } : { shape });
     if (!shape || !AppState.konvaLayer.findOne(node => node === shape)) return;
     sanitizeSelection();
     if (shape.locked) return;
-    if (!AppState.selectedShapes.includes(shape)) {
-      setSelectedShapes([shape]);
-    }
+    // Always select shape, even if it's already selected (reselect after unselect)
+    setSelectedShapes([shape]);
     updateSelectionHighlight();
   });
 
@@ -162,9 +159,12 @@ function clampShapeToStage(shape) {
   if (shape._type === "rect") {
     minX = shape.x(); minY = shape.y();
     maxX = minX + shape.width(); maxY = minY + shape.height();
-  } else {
+  } else if (shape._type === "circle") {
     minX = shape.x() - shape.radius(); minY = shape.y() - shape.radius();
     maxX = shape.x() + shape.radius(); maxY = shape.y() + shape.radius();
+  } else if (shape._type === "point") {
+    minX = shape.x(); minY = shape.y();
+    maxX = shape.x(); maxY = shape.y();
   }
   let dx = 0, dy = 0;
   if (minX < 0) dx = -minX;
@@ -186,9 +186,12 @@ function clampGroupDragDelta(dx, dy, origPositions) {
     if (shape._type === "rect") {
       bx = obj.x + dx; by = obj.y + dy;
       bx2 = bx + shape.width(); by2 = by + shape.height();
-    } else {
+    } else if (shape._type === "circle") {
       bx = obj.x + dx - shape.radius(); by = obj.y + dy - shape.radius();
       bx2 = obj.x + dx + shape.radius(); by2 = obj.y + dx + shape.radius();
+    } else if (shape._type === "point") {
+      bx = obj.x + dx; by = obj.y + dy;
+      bx2 = bx; by2 = by;
     }
     minX = Math.min(minX, bx); minY = Math.min(minY, by);
     maxX = Math.max(maxX, bx2); maxY = Math.max(maxY, by2);
@@ -205,7 +208,7 @@ function clampGroupDragDelta(dx, dy, origPositions) {
 function updateSelectionHighlight() {
   log("TRACE", "[canvas] updateSelectionHighlight entry");
   const layer = AppState.konvaLayer;
-  if (groupBoundingBox) { groupBoundingBox.destroy(); groupBoundingBox = null; }
+  if (AppState.groupBoundingBox) { AppState.groupBoundingBox.destroy(); AppState.groupBoundingBox = null; }
   sanitizeSelection();
 
   if (AppState.selectedShapes.length === 1 && !AppState.selectedShapes[0].locked) {
@@ -220,20 +223,23 @@ function updateSelectionHighlight() {
       let bx, by, bx2, by2;
       if (s._type === "rect") {
         bx = s.x(); by = s.y(); bx2 = bx + s.width(); by2 = by + s.height();
-      } else {
+      } else if (s._type === "circle") {
         bx = s.x() - s.radius(); by = s.y() - s.radius();
         bx2 = s.x() + s.radius(); by2 = s.y() + s.radius();
+      } else if (s._type === "point") {
+        bx = s.x(); by = s.y();
+        bx2 = bx; by2 = by;
       }
       minX = Math.min(minX, bx); minY = Math.min(minY, by);
       maxX = Math.max(maxX, bx2); maxY = Math.max(maxY, by2);
     }
-    groupBoundingBox = new Konva.Rect({
+    AppState.groupBoundingBox = new Konva.Rect({
       x: minX - 4, y: minY - 4,
       width: maxX - minX + 8, height: maxY - minY + 8,
       stroke: sel.some(s => s.locked) ? "#e53935" : "#2176ff",
       strokeWidth: 3, dash: [8, 5], listening: false
     });
-    layer.add(groupBoundingBox);
+    layer.add(AppState.groupBoundingBox);
     layer.draw();
     dumpLayerState(layer, "updateSelectionHighlight (multi)");
   } else {
@@ -284,7 +290,7 @@ export function buildCanvasPanel(rootElement, container) {
     AppState.konvaStage = stage;
     AppState.konvaLayer = layer;
 
-    // --- ADDED: Unselect shapes by clicking on empty background ---
+    // --- Unselect shapes by clicking on empty background ---
     stage.on("mousedown.unselect touchstart.unselect", function(e) {
       if (e.target === stage) {
         setSelectedShapes([]);
@@ -317,6 +323,8 @@ export function buildCanvasPanel(rootElement, container) {
             log("TRACE", "[canvas] addShape: attaching transformer", { shape: details.shape });
             attachTransformerForShape(details.shape);
           }
+          // Attach selection and drag/transform handlers (always!)
+          attachShapeEvents(details.shape);
         } else {
           log("DEBUG", "[canvas] Shape not added to Konva layer (already present or not a Konva object)", details.shape);
           dumpLayerState(AppState.konvaLayer, "addShape (already present)");
@@ -353,4 +361,3 @@ export function buildCanvasPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
-
