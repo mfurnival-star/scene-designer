@@ -13,7 +13,6 @@
  */
 
 import { log } from './log.js';
-import Konva from 'konva'; // For instanceof checks
 
 // Canonical state singleton
 export const AppState = {
@@ -27,9 +26,6 @@ export const AppState = {
   shapes: [],            // Array of shape objects (point, rect, circle, etc.)
   selectedShape: null,   // The currently selected shape (single select)
   selectedShapes: [],    // Array of selected shapes (multiselect)
-  transformer: null,     // Konva.Transformer for single select
-  konvaStage: null,      // Konva.Stage instance
-  konvaLayer: null,      // Konva.Layer instance
   konvaDiv: null,        // Canvas container div
 
   // Drag/Group/Multi-Select
@@ -52,11 +48,6 @@ function dumpShapeDebug(shape, tag = "") {
   log("TRACE", `[state] ${tag} shape diagnostic`, {
     typeofShape: typeof shape,
     constructorName: shape?.constructor?.name,
-    isKonva: shape instanceof Konva.Shape,
-    isGroup: shape instanceof Konva.Group,
-    isRect: shape instanceof Konva.Rect,
-    isCircle: shape instanceof Konva.Circle,
-    isObject: shape && typeof shape === "object" && !(shape instanceof Konva.Shape),
     attrs: shape?.attrs,
     className: shape?.className,
     _type: shape?._type,
