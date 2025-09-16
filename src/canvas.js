@@ -335,3 +335,4 @@ export function buildCanvasPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
+

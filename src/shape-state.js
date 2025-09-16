@@ -35,6 +35,18 @@ export function setShapeState(shape, newState) {
 }
 
 /**
+ * Get current shape state.
+ * @param {Object} shape
+ * @returns {string}
+ */
+export function getShapeState(shape) {
+  log("TRACE", "[shape-state] getShapeState entry", { shape });
+  const state = shape._state || "default";
+  log("TRACE", "[shape-state] getShapeState exit", { state });
+  return state;
+}
+
+/**
  * Mark shape as selected.
  * @param {Object} shape
  */
@@ -142,3 +154,4 @@ function safeShapeSummary(shape) {
     radius: shape.radius
   };
 }
+
