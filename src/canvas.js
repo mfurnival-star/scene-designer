@@ -12,15 +12,10 @@
  * -----------------------------------------------------------
  *
  * NOTE: Fabric.js npm package (v5.x) is UMD-only (no named ESM exports).
- * Use default import and destructure classes from 'fabric'.
+ * Use ES module wrapper and named imports from './fabric-wrapper.js'.
  */
 
-
 import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
-const { Canvas, Rect, Circle, Line, Group, Image } = fabric;
-console.log("fabric import:", fabric);
-console.log("fabric.Canvas:", fabric.Canvas);
-console.log("typeof fabric.Canvas:", typeof fabric.Canvas);
 
 import {
   AppState,
@@ -344,3 +339,4 @@ export function buildCanvasPanel(rootElement, container) {
     componentName: container?.componentName
   });
 }
+
