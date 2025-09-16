@@ -1,9 +1,9 @@
 /**
  * sidebar.js
  * -----------------------------------------------------------
- * Shape Table/List Panel for Scene Designer (Golden Layout, Deep TRACE Logging)
+ * Shape Table/List Panel for Scene Designer (Fabric.js Migration, Deep TRACE Logging)
  * - Tabulator-based shape table (ESM only, no globals).
- * - Displays a live-updating table of all shapes in AppState.shapes.
+ * - Displays a live-updating table of all shapes in AppState.shapes (Fabric.js objects).
  * - Columns: Label, Type, X, Y, W, H, Lock status.
  * - Clicking a row selects the corresponding shape (single selection for now).
  * - All state via AppState.
@@ -55,18 +55,18 @@ export function buildSidebarPanel(rootElement, container) {
       let { _label, _type, locked } = shape;
       let x = 0, y = 0, w = "", h = "";
       if (_type === "rect") {
-        x = Math.round(shape.x());
-        y = Math.round(shape.y());
-        w = Math.round(shape.width());
-        h = Math.round(shape.height());
+        x = Math.round(shape.left ?? shape.x ?? 0);
+        y = Math.round(shape.top ?? shape.y ?? 0);
+        w = Math.round(shape.width ?? shape.width ?? 0);
+        h = Math.round(shape.height ?? shape.height ?? 0);
       } else if (_type === "circle") {
-        x = Math.round(shape.x());
-        y = Math.round(shape.y());
-        w = Math.round(shape.radius());
-        h = Math.round(shape.radius());
+        x = Math.round(shape.left ?? shape.x ?? 0);
+        y = Math.round(shape.top ?? shape.y ?? 0);
+        w = Math.round(shape.radius ?? shape.radius ?? 0);
+        h = Math.round(shape.radius ?? shape.radius ?? 0);
       } else if (_type === "point") {
-        x = Math.round(shape.x());
-        y = Math.round(shape.y());
+        x = Math.round(shape.left ?? shape.x ?? 0);
+        y = Math.round(shape.top ?? shape.y ?? 0);
         w = "";
         h = "";
       }
@@ -109,7 +109,7 @@ export function buildSidebarPanel(rootElement, container) {
         if (AppState.shapes[idx]) {
           setSelectedShape(AppState.shapes[idx]);
           log("INFO", "[sidebar] Shape selected via rowClick", {
-            selectedShapeId: AppState.shapes[idx]._id,
+            selectedShapeLabel: AppState.shapes[idx]._label,
             selectedShapeType: AppState.shapes[idx]._type
           });
         } else {
@@ -131,7 +131,7 @@ export function buildSidebarPanel(rootElement, container) {
         // Only select if row exists and select() is available
         if (selIdx >= 0 && rows[selIdx] && typeof rows[selIdx].select === "function") {
           rows[selIdx].select();
-          log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx, selectedShapeId: AppState.selectedShape._id });
+          log("DEBUG", "[sidebar] updateTable: Row selected", { selIdx, selectedShapeLabel: AppState.selectedShape._label });
         } else {
           // Robust fallback: deselect all, then try to select by data match
           rows.forEach(r => { if (typeof r.deselect === "function") r.deselect(); });

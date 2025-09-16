@@ -1,8 +1,8 @@
 /**
  * shapes.js
  * -----------------------------------------------------------
- * Scene Designer – Shape Factory Module (ESM ONLY)
- * - Centralizes all Konva shape construction and event attachment.
+ * Scene Designer – Shape Factory Module (Fabric.js Migration, ESM ONLY)
+ * - Centralizes all Fabric.js shape construction and event attachment.
  * - Exports: makePointShape, makeRectShape, makeCircleShape.
  * - All shapes have selection event handlers from selection.js and shape-state.js.
  * - Handles per-shape config, label, lock, and transformer events.
@@ -11,19 +11,19 @@
  * -----------------------------------------------------------
  */
 
-import Konva from 'konva';
+import { fabric } from 'fabric';
 import { log } from './log.js';
 import { attachSelectionHandlers } from './selection.js';
 import { setShapeState } from './shape-state.js';
 import { AppState } from './state.js';
 
 /**
- * Make a point shape (crosshair/halo/transparent hit area).
+ * Make a point shape (crosshair/halo/transparent hit area, for annotation).
  */
 export function makePointShape(x, y) {
   log("TRACE", "[shapes] makePointShape entry", { x, y });
 
-  // Read settings for point shape visuals
+  // Settings for point visuals
   const hitRadius = AppState.settings?.pointHitRadius ?? 16;
   const haloRadius = AppState.settings?.pointHaloRadius ?? 12;
   const crossLen = AppState.settings?.pointCrossLen ?? 14;
@@ -34,72 +34,68 @@ export function makePointShape(x, y) {
     hitRadius, haloRadius, crossLen, strokeColor, fillColor
   });
 
-  const group = new Konva.Group({ x, y, draggable: true });
-
-  // Invisible hit area for easy selection/tap
-  const hitCircle = new Konva.Circle({
-    x: 0,
-    y: 0,
+  // Fabric.js doesn't have groups with hit areas; use a transparent circle as hit area
+  const hitCircle = new fabric.Circle({
+    left: x - hitRadius,
+    top: y - hitRadius,
     radius: hitRadius,
     fill: "#fff",
     opacity: 0,
-    listening: true
+    selectable: true,
+    evented: true
   });
 
-  // Halo (faint circle for visibility)
-  const halo = new Konva.Circle({
-    x: 0,
-    y: 0,
+  // Halo for visual feedback
+  const halo = new fabric.Circle({
+    left: x - haloRadius,
+    top: y - haloRadius,
     radius: haloRadius,
     stroke: strokeColor,
     strokeWidth: 1.5,
     fill: fillColor,
     opacity: 0.4,
-    listening: false
+    selectable: false,
+    evented: false
   });
 
-  // Crosshairs
-  const crossH = new Konva.Line({
-    points: [-crossLen / 2, 0, crossLen / 2, 0],
-    stroke: strokeColor,
-    strokeWidth: 2.5,
-    lineCap: 'round',
-    listening: false
+  // Crosshair lines
+  const crossH = new fabric.Line(
+    [x - crossLen / 2, y, x + crossLen / 2, y],
+    { stroke: strokeColor, strokeWidth: 2.5, selectable: false, evented: false }
+  );
+  const crossV = new fabric.Line(
+    [x, y - crossLen / 2, x, y + crossLen / 2],
+    { stroke: strokeColor, strokeWidth: 2.5, selectable: false, evented: false }
+  );
+
+  // Fabric group for point shape
+  const pointGroup = new fabric.Group([hitCircle, halo, crossH, crossV], {
+    left: x,
+    top: y,
+    selectable: true,
+    evented: true
   });
 
-  const crossV = new Konva.Line({
-    points: [0, -crossLen / 2, 0, crossLen / 2],
-    stroke: strokeColor,
-    strokeWidth: 2.5,
-    lineCap: 'round',
-    listening: false
-  });
-
-  group.add(hitCircle);
-  group.add(halo);
-  group.add(crossH);
-  group.add(crossV);
-
-  group._type = 'point';
-  group._label = 'Point';
-  group.locked = false;
+  pointGroup._type = 'point';
+  pointGroup._label = 'Point';
+  pointGroup.locked = false;
 
   log("TRACE", "[shapes] makePointShape: before attachSelectionHandlers", {
-    group,
-    type: group._type,
-    label: group._label,
+    pointGroup,
+    type: pointGroup._type,
+    label: pointGroup._label,
   });
-  attachSelectionHandlers(group);
+  attachSelectionHandlers(pointGroup);
   log("TRACE", "[shapes] makePointShape: after attachSelectionHandlers", {
-    group,
-    type: group._type,
-    label: group._label,
+    pointGroup,
+    type: pointGroup._type,
+    label: pointGroup._label,
   });
 
-  setShapeState(group, 'default');
-  log("TRACE", "[shapes] makePointShape exit", { group });
+  setShapeState(pointGroup, 'default');
+  log("TRACE", "[shapes] makePointShape exit", { pointGroup });
 
-  return group;
+  return pointGroup;
 }
 
 /**
@@ -116,15 +112,16 @@ export function makeRectShape(x, y, w, h) {
     strokeColor, fillColor
   });
 
-  const rect = new Konva.Rect({
-    x: x,
-    y: y,
+  const rect = new fabric.Rect({
+    left: x,
+    top: y,
     width: w,
     height: h,
     stroke: strokeColor,
     strokeWidth: 1,
     fill: fillColor,
-    draggable: true
+    selectable: true,
+    evented: true
   });
   rect._type = 'rect';
   rect._label = 'Rect';
@@ -162,14 +159,15 @@ export function makeCircleShape(x, y, r) {
     strokeColor, fillColor
   });
 
-  const circle = new Konva.Circle({
-    x: x,
-    y: y,
+  const circle = new fabric.Circle({
+    left: x - r,
+    top: y - r,
     radius: r,
     stroke: strokeColor,
     strokeWidth: 1,
     fill: fillColor,
-    draggable: true
+    selectable: true,
+    evented: true
   });
   circle._type = 'circle';
   circle._label = 'Circle';

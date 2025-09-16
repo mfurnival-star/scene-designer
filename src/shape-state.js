@@ -1,7 +1,7 @@
 /**
  * shape-state.js
  * -----------------------------------------------------------
- * Scene Designer – Per-Shape State Machine (ESM ONLY)
+ * Scene Designer – Per-Shape State Machine (Fabric.js Migration, ESM ONLY)
  * - Centralizes all shape state transitions: selected, dragging, locked, multi-selected.
  * - Used by shapes.js, canvas.js, selection.js, transformer.js for robust state flows.
  * - No globals, no window.* usage.
@@ -13,7 +13,7 @@ import { log } from './log.js';
 
 /**
  * Initialize shape state on creation.
- * @param {Object} shape
+ * @param {Object} shape - Fabric.js object or group
  */
 export function initShapeState(shape) {
   log("TRACE", "[shape-state] initShapeState entry", { shape });
@@ -82,6 +82,9 @@ export function lockShape(shape) {
   log("TRACE", "[shape-state] lockShape entry", { shape });
   setShapeState(shape, 'locked');
   shape.locked = true;
+  // Fabric.js: disable drag/resize/selection
+  shape.selectable = false;
+  shape.evented = false;
   log("TRACE", "[shape-state] lockShape exit");
 }
 
@@ -93,6 +96,8 @@ export function unlockShape(shape) {
   log("TRACE", "[shape-state] unlockShape entry", { shape });
   setShapeState(shape, 'default');
   shape.locked = false;
+  shape.selectable = true;
+  shape.evented = true;
   log("TRACE", "[shape-state] unlockShape exit");
 }
 
@@ -127,12 +132,13 @@ function safeShapeSummary(shape) {
   if (!shape) return shape;
   return {
     type: shape._type,
-    id: shape._id,
     label: shape._label,
     state: shape._state,
     locked: shape.locked,
-    x: typeof shape.x === "function" ? shape.x() : shape.x,
-    y: typeof shape.y === "function" ? shape.y() : shape.y
+    left: shape.left,
+    top: shape.top,
+    width: shape.width,
+    height: shape.height,
+    radius: shape.radius
   };
 }
-

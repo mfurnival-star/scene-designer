@@ -33,10 +33,10 @@ shape-defs.js
   Centralized AppState singleton and state management.
 
 - **canvas.js**  
-  Konva canvas and shape creation APIs.
+  Canvas and shape creation APIs (now Fabric.js-based after migration).
 
 - **selection.js**  
-  Shape selection logic and mutators.
+  Shape selection logic and mutators (Fabric.js adaptation).
 
 - **sidebar.js**  
   Shape table/list panel (Golden Layout, Tabulator implementation as of latest revision).
@@ -59,16 +59,14 @@ shape-defs.js
 - **shapes.js**  
   Shape factory module:  
   - Exports `makePointShape(x, y)`, `makeRectShape(x, y, w, h)`, `makeCircleShape(x, y, r)` (future).  
-  - Centralizes all Konva shape construction, selection logic, and property/event attachment.  
+  - Centralizes all Fabric.js shape construction, selection logic, and property/event attachment.  
   - Used by toolbar, canvas, sidebar, and all shape-creation features.
 
 - **transformer.js**  
-  Shape transformer/resize logic for Konva shapes:
-  - Centralized attach/detach/configure of Konva.Transformers for all shape types.
-  - All per-shape config (anchors, rotate, keepRatio) from shape-defs.js.
-  - Rectangle: 8 anchors (corners + sides), resize freely.
-  - Circle: 4 anchors (corners only), aspect ratio enforced (circle stays circle).
-  - Point: no anchors/transform (not resizeable).
+  Shape transformer/resize logic for Fabric.js shapes:
+  - Centralized attach/detach/configure of object controls for all shape types.
+  - Rectangle: resize/rotate as allowed, aspect ratio enforced for circle.
+  - Point: no controls/transform (not resizable).
   - Invoked by canvas.js and consumes AppState, selection.
   - All logging via log.js.
 
