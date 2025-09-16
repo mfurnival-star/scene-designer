@@ -12,7 +12,9 @@
  * -----------------------------------------------------------
  */
 
-import { Canvas, Rect, Circle, Line, Group, Image } from 'fabric';
+import fabric from 'fabric';
+const { Canvas, Rect, Circle, Line, Group, Image } = fabric;
+
 import {
   AppState,
   setShapes,
