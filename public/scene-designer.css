@@ -1,0 +1,158 @@
+/* scene-designer.css
+   -----------------------------------------------------------
+   Scene Designer – Golden Layout & Minimal Layout Sizing Fixes
+   - Ensures #gl-root and layout containers fill the viewport.
+   - Fixes panel and stack sizes for Golden Layout and minilayout.js.
+   - Applies robust sizing for all panels, toolbar, sidebar, canvas, settings.
+   - No global overrides; only targets layout containers and panels.
+   -----------------------------------------------------------
+*/
+
+/* Ensure html/body take full height and no margin */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Root container for Golden Layout and minilayout */
+#gl-root {
+  height: 100vh;
+  width: 100vw;
+  min-height: 600px;
+  min-width: 900px;
+  position: relative;
+  background: #f7f9fc;
+  overflow: hidden;
+}
+
+/* Golden Layout main container */
+.lm_goldenlayout {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Golden Layout stacks, rows, columns, panels */
+.lm_item {
+  min-width: 100px;
+  min-height: 80px;
+}
+
+/* Panel content container: sidebar, canvas, settings, error log */
+.lm_content {
+  height: 100% !important;
+  width: 100% !important;
+  overflow: auto;
+}
+
+/* Canvas div */
+#fabric-canvas-div {
+  width: 100%;
+  height: 100%;
+  background: #f7f9fc;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: auto;
+}
+
+/* Toolbar container */
+#canvas-toolbar-container {
+  width: 100%;
+  min-height: 44px;
+  background: #f8f8fa;
+  border-bottom: 1px solid #bbb;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+/* Sidebar panel */
+#sidebar-panel-container {
+  width: 100%;
+  height: 100%;
+  background: #f4f8ff;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* Settings panel */
+#settings-panel-container {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* Error log panel */
+#error-log-panel-container {
+  width: 100%;
+  height: 100%;
+  background: #222;
+  color: #fff;
+  font-family: monospace;
+  font-size: 0.98em;
+  overflow: auto;
+  position: relative;
+}
+
+#error-log-content {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 8px 8px 32px 8px;
+  user-select: text;
+  cursor: pointer;
+}
+
+/* Minilayout panels (if using minilayout.js) */
+.minilayout-panel {
+  box-sizing: border-box;
+  min-width: 80px;
+  min-height: 40px;
+  border: 1px solid #d3e2f9;
+  background: #f7f9fc;
+  margin: 1px;
+  display: flex;
+  flex-direction: column;
+}
+.minilayout-panel-header {
+  background: #e9f1ff;
+  font-size: 1em;
+  padding: 4px 8px;
+  border-bottom: 1px solid #d3e2f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.minilayout-panel-body {
+  background: #fff;
+  flex: 1 1 0;
+  overflow: auto;
+  padding: 0;
+}
+.minilayout-panel-component {
+  min-width: 120px;
+  min-height: 80px;
+  flex: 1 1 0;
+}
+
+/* Responsive tweaks for small screens */
+@media (max-width: 900px), (max-height: 600px) {
+  #gl-root {
+    min-width: 360px;
+    min-height: 320px;
+  }
+  .lm_goldenlayout,
+  .minilayout-panel,
+  .lm_content {
+    min-width: 60px;
+    min-height: 40px;
+  }
+}
+
