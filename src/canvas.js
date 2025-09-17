@@ -164,6 +164,19 @@ export function buildCanvasPanel({ element, title, componentName }) {
       }
     });
 
+    // --- NEW: on canvas panel creation, ensure all shapes are drawn ---
+    if (Array.isArray(AppState.shapes) && AppState.shapes.length > 0) {
+      log("DEBUG", "[canvas] Syncing existing shapes to canvas on panel build");
+      AppState.shapes.forEach(shape => {
+        if (AppState.fabricCanvas && !AppState.fabricCanvas.getObjects().includes(shape)) {
+          AppState.fabricCanvas.add(shape);
+          attachSelectionHandlers(shape);
+          dumpFabricDebug(shape, "canvas panel build (sync existing)");
+        }
+      });
+      AppState.fabricCanvas.renderAll();
+    }
+
     // Subscribe to AppState for image and shape changes
     subscribe((state, details) => {
       log("TRACE", "[canvas] subscriber callback FIRED", { state, details });
@@ -205,3 +218,4 @@ export function buildCanvasPanel({ element, title, componentName }) {
     componentName
   });
 }
+
