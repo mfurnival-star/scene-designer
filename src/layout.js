@@ -17,7 +17,8 @@ import { buildCanvasPanel } from './canvas.js';
 import { buildSettingsPanel, loadSettings } from './settings.js';
 import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
 import { buildCanvasToolbarPanel } from './toolbar.js';
-import { AppState, getSetting, subscribe } from './state.js';
+// FIXED: Remove invalid import of AppState, only import actual exports
+import { getSetting, subscribe } from './state.js';
 import { log } from './log.js';
 import { setSettingAndSave } from './settings.js';
 
@@ -206,3 +207,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initial layout build
   rebuildLayout(showErrorLogPanelSetting);
 });
+
