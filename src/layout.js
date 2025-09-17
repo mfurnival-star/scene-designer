@@ -126,13 +126,13 @@ function rebuildLayout(includeErrorLogPanel) {
               type: 'component',
               componentName: 'CanvasToolbarPanel',
               title: 'Toolbar',
-              height: 8
+              height: 18
             },
             {
               type: 'component',
               componentName: 'CanvasPanel',
               title: 'Canvas',
-              height: 92
+              height: 82
             }
           ]
         },
