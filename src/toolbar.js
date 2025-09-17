@@ -1,200 +1,250 @@
 /**
- * sidebar.js
+ * toolbar.js
  * -----------------------------------------------------------
- * Shape Table/List Panel for Scene Designer (Fabric.js Migration, Deep TRACE Logging, Tabulator v6.x)
- * - Tabulator-based shape table (ESM only, no globals).
- * - Displays a live-updating table of all shapes in AppState.shapes (Fabric.js objects).
- * - Columns: Label, Type, X, Y, W, H, Lock status.
- * - Clicking a row selects the corresponding shape (single selection for now).
- * - All state via AppState.
- * - Logging via log.js.
- * - TRACE-level logging for all key entry/exit, table update, selection, and row events.
- * - Refactored for Tabulator v6.x (Full build), with proper row selection API.
- * - MiniLayout API: panel factory accepts single object argument ({ element, title, componentName }).
+ * Scene Designer – Modular Toolbar UI Factory (ESM ONLY)
+ * - Factory for all toolbar controls: image upload, server image select, shape type, shape actions.
+ * - ES module only, all dependencies imported.
+ * - No direct use of window.*, no legacy code.
+ * - All logic for image upload and shape creation is routed via state.js and shapes.js.
+ * - Logging via log.js at appropriate levels.
+ * - MiniLayout compliance: panel factory expects { element, title, componentName } argument.
  * -----------------------------------------------------------
  */
 
-import { AppState, subscribe } from './state.js';
-import { setSelectedShape } from './selection.js';
 import { log } from './log.js';
-import { TabulatorFull as Tabulator } from 'tabulator-tables';
+import { makePointShape, makeRectShape, makeCircleShape } from './shapes.js';
+import { addShape, setImage, AppState } from './state.js';
+import { setSelectedShapes, selectAllShapes } from './selection.js';
+
+const TOOLBAR_STYLE = `
+  #canvas-toolbar-container {
+    width: 100%;
+    min-height: 44px;
+    background: #f8f8fa;
+    border-bottom: 1px solid #bbb;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+  #canvas-toolbar-container .toolbar-btn,
+  #canvas-toolbar-container select {
+    font-size: 1em;
+    font-family: inherit;
+    border: 1px solid #888;
+    background: #fff;
+    color: #222;
+    border-radius: 3px;
+    padding: 5px 12px;
+    margin: 0 2px 2px 0;
+    outline: none;
+    box-shadow: none;
+    transition: background 0.15s;
+    cursor: pointer;
+    min-width: 48px;
+    min-height: 32px;
+  }
+  #canvas-toolbar-container .toolbar-btn:hover {
+    background: #e8eff8;
+  }
+  #canvas-toolbar-container input[type="file"] {
+    display: none;
+  }
+  #canvas-toolbar-container label[for="toolbar-image-upload"] {
+    display: inline-block;
+    font-size: 1em;
+    border: 1px solid #888;
+    background: #fff;
+    color: #222;
+    border-radius: 3px;
+    padding: 6px 16px;
+    margin: 0 2px 2px 0;
+    cursor: pointer;
+    min-width: 48px;
+    min-height: 32px;
+    outline: none;
+    box-shadow: none;
+    transition: background 0.15s;
+  }
+  #canvas-toolbar-container label[for="toolbar-image-upload"]:hover {
+    background: #e8eff8;
+  }
+`;
 
 /**
- * Build the sidebar panel (Tabulator shape table).
- * MiniLayout-compliant: accepts { element, title, componentName }.
+ * Build the canvas toolbar panel.
+ * - All UI events are handled here.
+ * - Only the toolbar panel creates the controls.
+ * - All events are routed via ES module APIs.
+ * - MiniLayout compliance: accepts { element, title, componentName }.
  */
-export function buildSidebarPanel({ element, title, componentName }) {
-  log("TRACE", "[sidebar] buildSidebarPanel ENTRY", {
+export function buildCanvasToolbarPanel({ element, title, componentName }) {
+  log("TRACE", "[toolbar] buildCanvasToolbarPanel entry", {
     elementType: element?.tagName,
     title,
     componentName
   });
 
+  // Inject toolbar styles (once per document)
+  if (typeof document !== "undefined" && !document.getElementById("scene-designer-toolbar-style")) {
+    const style = document.createElement("style");
+    style.id = "scene-designer-toolbar-style";
+    style.textContent = TOOLBAR_STYLE;
+    document.head.appendChild(style);
+  }
+
   try {
-    log("INFO", "[sidebar] buildSidebarPanel called (Tabulator shape table)", {
+    log("INFO", "[toolbar] buildCanvasToolbarPanel called", {
       elementType: element?.tagName,
       title,
       componentName
     });
 
-    // Render container for Tabulator
+    // Toolbar HTML (image controls + shape controls, standard/classic buttons, responsive)
     element.innerHTML = `
-      <div id="sidebar-panel-container" style="width:100%;height:100%;background:#f4f8ff;display:flex;flex-direction:column;overflow:auto;">
-        <div style="padding:10px 8px 4px 8px;font-weight:bold;font-size:1.2em;color:#0057d8;">
-          Shape List
-        </div>
-        <div id="tabulator-table-div" style="flex:1 1 0;overflow:auto;"></div>
+      <div id="canvas-toolbar-container">
+        <label for="toolbar-image-upload" title="Upload image">Upload Image</label>
+        <input type="file" id="toolbar-image-upload" accept="image/*">
+        <select id="toolbar-server-image-select" title="Choose server image">
+          <option value="">[Server image]</option>
+          <option value="sample1.png">sample1.png</option>
+          <option value="sample2.png">sample2.png</option>
+        </select>
+        <span style="margin-left:8px;">Shape:</span>
+        <select id="toolbar-shape-type-select">
+          <option value="point">Point</option>
+          <option value="rect">Rectangle</option>
+          <option value="circle">Circle</option>
+        </select>
+        <button id="toolbar-add-shape-btn" class="toolbar-btn">Add</button>
+        <button id="toolbar-delete-shape-btn" class="toolbar-btn">Delete</button>
+        <button id="toolbar-duplicate-shape-btn" class="toolbar-btn">Duplicate</button>
+        <button id="toolbar-select-all-btn" class="toolbar-btn">Select All</button>
+        <button id="toolbar-lock-btn" class="toolbar-btn">Lock</button>
+        <button id="toolbar-unlock-btn" class="toolbar-btn">Unlock</button>
       </div>
     `;
 
-    const tableDiv = element.querySelector('#tabulator-table-div');
-    if (!tableDiv) {
-      log("ERROR", "[sidebar] tabulator-table-div not found in DOM");
-      return;
-    }
+    // Query toolbar elements
+    const imageUploadInput = element.querySelector('#toolbar-image-upload');
+    const imageUploadLabel = element.querySelector('label[for="toolbar-image-upload"]');
+    const serverImageSelect = element.querySelector('#toolbar-server-image-select');
+    const shapeTypeSelect = element.querySelector('#toolbar-shape-type-select');
+    const addShapeBtn = element.querySelector('#toolbar-add-shape-btn');
+    const deleteShapeBtn = element.querySelector('#toolbar-delete-shape-btn');
+    const duplicateShapeBtn = element.querySelector('#toolbar-duplicate-shape-btn');
+    const selectAllBtn = element.querySelector('#toolbar-select-all-btn');
+    const lockBtn = element.querySelector('#toolbar-lock-btn');
+    const unlockBtn = element.querySelector('#toolbar-unlock-btn');
 
-    function shapeToRow(shape, idx) {
-      let { _label, _type, locked, _id } = shape;
-      let x = 0, y = 0, w = "", h = "";
-      if (_type === "rect") {
-        x = Math.round(shape.left ?? shape.x ?? 0);
-        y = Math.round(shape.top ?? shape.y ?? 0);
-        w = Math.round(shape.width ?? shape.width ?? 0);
-        h = Math.round(shape.height ?? shape.height ?? 0);
-      } else if (_type === "circle") {
-        x = Math.round(shape.left ?? shape.x ?? 0);
-        y = Math.round(shape.top ?? shape.y ?? 0);
-        w = Math.round(shape.radius ?? shape.radius ?? 0);
-        h = Math.round(shape.radius ?? shape.radius ?? 0);
-      } else if (_type === "point") {
-        x = Math.round(shape.left ?? shape.x ?? 0);
-        y = Math.round(shape.top ?? shape.y ?? 0);
-        w = "";
-        h = "";
-      }
-      return {
-        idx,
-        id: _id || `shape_${idx}`,
-        label: _label || "",
-        type: _type,
-        x,
-        y,
-        w,
-        h,
-        locked: locked ? "🔒" : ""
+    // --- IMAGE UPLOAD ---
+    imageUploadLabel.addEventListener('click', (e) => {
+      imageUploadInput.value = ""; // Clear previous file, so no filename shows
+      imageUploadInput.click();
+    });
+    imageUploadInput.addEventListener('change', function (e) {
+      log("INFO", "[toolbar] Image upload changed", e);
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new window.FileReader();
+      reader.onload = function (ev) {
+        const imgObj = new window.Image();
+        imgObj.onload = function () {
+          setImage(ev.target.result, imgObj);
+          log("INFO", "[toolbar] Image loaded and set via setImage (upload)", { url: ev.target.result });
+        };
+        imgObj.src = ev.target.result;
       };
-    }
+      reader.readAsDataURL(file);
+      // Clear server select
+      if (serverImageSelect) serverImageSelect.value = "";
+      // Remove filename from label (cannot show filename in label)
+    });
 
-    log("DEBUG", "[sidebar] Instantiating Tabulator table", { tableDiv });
+    // --- SERVER IMAGE SELECT ---
+    serverImageSelect.addEventListener('change', function (e) {
+      log("INFO", "[toolbar] Server image select changed", e);
+      const filename = e.target.value;
+      if (!filename) {
+        setImage(null, null);
+        return;
+      }
+      const imgObj = new window.Image();
+      imgObj.onload = function () {
+        setImage('./images/' + filename, imgObj);
+        log("INFO", "[toolbar] Server image loaded and set via setImage", { url: './images/' + filename });
+      };
+      imgObj.src = './images/' + filename;
+      // Clear file upload
+      if (imageUploadInput) imageUploadInput.value = "";
+    });
 
-    let tabulator = new Tabulator(tableDiv, {
-      data: [],
-      layout: "fitColumns",
-      movableColumns: false,
-      height: "100%",
-      columns: [
-        { title: "Label", field: "label", widthGrow: 2 },
-        { title: "Type", field: "type", widthGrow: 1 },
-        { title: "X", field: "x", width: 54, hozAlign: "right" },
-        { title: "Y", field: "y", width: 54, hozAlign: "right" },
-        { title: "W", field: "w", width: 54, hozAlign: "right" },
-        { title: "H", field: "h", width: 54, hozAlign: "right" },
-        { title: "Lock", field: "locked", width: 48, hozAlign: "center" }
-      ],
-      selectable: 1,
-      // Use rowClick to select shape
-      rowClick: function (e, row) {
-        log("TRACE", "[sidebar] rowClick handler FIRED", {
-          eventType: e.type,
-          idx: row.getData().idx,
-          id: row.getData().id,
-          shape: AppState.shapes[row.getData().idx],
-          rowData: row.getData()
-        });
-        const idx = row.getData().idx;
-        if (AppState.shapes[idx]) {
-          setSelectedShape(AppState.shapes[idx]);
-          log("INFO", "[sidebar] Shape selected via rowClick", {
-            selectedShapeLabel: AppState.shapes[idx]._label,
-            selectedShapeType: AppState.shapes[idx]._type,
-            id: AppState.shapes[idx]._id
-          });
-        } else {
-          log("WARN", "[sidebar] rowClick: No shape found at idx", { idx, shape: AppState.shapes[idx] });
-        }
+    // --- ADD SHAPE BUTTON ---
+    addShapeBtn.addEventListener('click', () => {
+      const type = shapeTypeSelect.value;
+      let shape = null;
+      const stage = AppState.konvaStage;
+      const w = AppState.settings?.defaultRectWidth || 50;
+      const h = AppState.settings?.defaultRectHeight || 30;
+      const r = AppState.settings?.defaultCircleRadius || 15;
+      // UPDATED: Use default shape start X/Y percent from settings if available
+      const x = (stage?.width() || 600) * ((AppState.settings?.shapeStartXPercent ?? 50) / 100);
+      const y = (stage?.height() || 400) * ((AppState.settings?.shapeStartYPercent ?? 50) / 100);
+      if (type === "rect") {
+        shape = makeRectShape(x - w / 2, y - h / 2, w, h);
+      } else if (type === "circle") {
+        shape = makeCircleShape(x, y, r);
+      } else if (type === "point") {
+        shape = makePointShape(x, y);
+      }
+      if (shape) {
+        addShape(shape); // Only add shape via state API; do not touch Konva layer here
+        setSelectedShapes([shape]);
+        log("INFO", `[toolbar] Added ${type} shape via shapes.js`, shape);
       }
     });
 
-    // --- Robust updateTable: syncs selection and shape rows ---
-    const updateTable = () => {
-      log("TRACE", "[sidebar] updateTable ENTRY");
-      const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
-      tabulator.replaceData(data);
-
-      // Selection sync: ensure selected row is highlighted
-      if (AppState.selectedShape) {
-        const selectedShape = AppState.selectedShape;
-        let foundRow = null;
-        // Try to find row by unique id
-        if (selectedShape._id) {
-          foundRow = tabulator.getRow(selectedShape._id);
-        }
-        // Fallback: try by idx
-        if (!foundRow) {
-          const selIdx = AppState.shapes.indexOf(selectedShape);
-          let rows = tabulator.getRows ? tabulator.getRows() : [];
-          foundRow = rows[selIdx];
-        }
-        if (foundRow && typeof foundRow.select === "function") {
-          foundRow.select();
-          log("DEBUG", "[sidebar] updateTable: Row selected", {
-            selectedShapeLabel: selectedShape._label,
-            id: selectedShape._id
-          });
-        } else {
-          log("WARN", "[sidebar] updateTable: Cannot select row by id or idx", {
-            selectedShapeLabel: selectedShape._label,
-            id: selectedShape._id
-          });
-        }
-      } else {
-        // Clear all selection
-        let rows = tabulator.getRows ? tabulator.getRows() : [];
-        rows.forEach(r => {
-          if (typeof r.deselect === "function") r.deselect();
-        });
-        log("DEBUG", "[sidebar] updateTable: All rows deselected");
-      }
-      log("TRACE", "[sidebar] updateTable EXIT");
-    };
-
-    tabulator.on("tableBuilt", () => {
-      log("TRACE", "[sidebar] Tabulator tableBuilt event");
-      updateTable();
-      // Subscribe after built to avoid early calls
-      var unsub = subscribe(updateTable);
-      // Clean up on destroy
-      // MiniLayout: container may provide an on("destroy") API for panel cleanup.
-      if (typeof element.on === "function") {
-        element.on("destroy", () => {
-          unsub && unsub();
-          tabulator.destroy();
-          log("INFO", "[sidebar] Sidebar panel destroyed");
-        });
-      }
+    // --- DELETE SHAPE BUTTON ---
+    deleteShapeBtn.addEventListener('click', () => {
+      log("INFO", "[toolbar] Delete button clicked (handled externally)");
+      // Deletion logic handled elsewhere (sidebar/canvas)
     });
 
-    log("INFO", "[sidebar] Sidebar panel fully initialized (Tabulator shape table)");
+    // --- DUPLICATE SHAPE BUTTON ---
+    duplicateShapeBtn.addEventListener('click', () => {
+      log("INFO", "[toolbar] Duplicate button clicked (handled externally)");
+      // Duplication logic handled elsewhere (sidebar/canvas)
+    });
+
+    // --- SELECT ALL BUTTON ---
+    selectAllBtn.addEventListener('click', () => {
+      selectAllShapes();
+      log("INFO", "[toolbar] Select All button clicked");
+    });
+
+    // --- LOCK/UNLOCK BUTTONS ---
+    lockBtn.addEventListener('click', () => {
+      log("INFO", "[toolbar] Lock button clicked (handled externally)");
+      // Lock logic handled elsewhere (sidebar/canvas)
+    });
+    unlockBtn.addEventListener('click', () => {
+      log("INFO", "[toolbar] Unlock button clicked (handled externally)");
+      // Unlock logic handled elsewhere (sidebar/canvas)
+    });
+
+    log("INFO", "[toolbar] Toolbar panel fully initialized (image + shape controls, ESM only)");
+
   } catch (e) {
-    log("ERROR", "[sidebar] buildSidebarPanel ERROR (Tabulator)", e);
-    alert("SidebarPanel ERROR: " + e.message);
+    log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
+    alert("ToolbarPanel ERROR: " + e.message);
+    log("TRACE", "[toolbar] buildCanvasToolbarPanel exit (error)");
     throw e;
   }
 
-  log("TRACE", "[sidebar] buildSidebarPanel EXIT", {
+  log("TRACE", "[toolbar] buildCanvasToolbarPanel exit", {
     elementType: element?.tagName,
     title,
     componentName
   });
 }
-
