@@ -205,9 +205,8 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     // --- DELETE SHAPE BUTTON ---
     deleteShapeBtn.addEventListener('click', () => {
       log("INFO", "[toolbar] Delete button clicked");
-      // Defensive: resolve selected shapes from AppState.shapes (in case references changed)
-      const allShapes = AppState.shapes || [];
-      const selected = (AppState.selectedShapes || []).map(s => allShapes.find(sh => sh === s)).filter(s => s && !s.locked);
+      // Use direct references. Only delete unlocked shapes currently selected.
+      const selected = (AppState.selectedShapes || []).filter(s => !s.locked);
       if (!selected.length) {
         log("INFO", "[toolbar] Delete button: No unlocked shapes selected");
         return;
