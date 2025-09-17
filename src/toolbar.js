@@ -12,8 +12,8 @@
  */
 
 import { log } from './log.js';
-import { makePointShape, makeRectShape, makeCircleShape } from './shapes.js';
-import { addShape, setImage, AppState } from './state.js';
+import { makePointShape, makeRectShape, makeCircleShape, setStrokeWidthForSelectedShapes } from './shapes.js';
+import { addShape, setImage, AppState, removeShape } from './state.js';
 import { setSelectedShapes, selectAllShapes } from './selection.js';
 
 const TOOLBAR_STYLE = `
@@ -201,14 +201,30 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       if (shape) {
         addShape(shape); // Only add shape via state API; do not touch Konva layer here
         setSelectedShapes([shape]);
+        // Always set stroke width to 1px for new shapes
+        setStrokeWidthForSelectedShapes(1);
         log("INFO", `[toolbar] Added ${type} shape via shapes.js`, shape);
       }
     });
 
     // --- DELETE SHAPE BUTTON ---
     deleteShapeBtn.addEventListener('click', () => {
-      log("INFO", "[toolbar] Delete button clicked (handled externally)");
-      // Deletion logic handled elsewhere (sidebar/canvas)
+      log("INFO", "[toolbar] Delete button clicked");
+      // Delete selected and unlocked shapes
+      const selected = (AppState.selectedShapes || []).filter(s => !s.locked);
+      if (!selected.length) {
+        log("INFO", "[toolbar] Delete button: No unlocked shapes selected");
+        return;
+      }
+      selected.forEach(shape => {
+        removeShape(shape);
+        // Also remove from Fabric.js canvas if present
+        if (AppState.fabricCanvas) {
+          AppState.fabricCanvas.remove(shape);
+        }
+      });
+      setSelectedShapes([]);
+      log("INFO", "[toolbar] Deleted selected unlocked shapes", { count: selected.length });
     });
 
     // --- DUPLICATE SHAPE BUTTON ---
