@@ -7,6 +7,7 @@
  * - Exports: buildCanvasPanel({ element, title, componentName })
  * - Panel factory for MiniLayout; renders the main canvas panel.
  * - Logging via log.js at TRACE/DEBUG/INFO.
+ * - Refactored: Image always at top left, canvas/container sized to image, scrollbars as needed.
  * -----------------------------------------------------------
  */
 
@@ -39,8 +40,10 @@ function dumpFabricDebug(obj, tag = "") {
 /**
  * Background image logic.
  * Draws image as non-selectable, non-evented Fabric object.
+ * Resizes canvas and container to match image size.
+ * Ensures scrollbars if image/canvas is larger than visible panel.
  */
-function updateBackgroundImage() {
+function updateBackgroundImage(containerDiv, element) {
   log("TRACE", "[canvas] updateBackgroundImage ENTRY");
   const canvas = AppState.fabricCanvas;
   if (!canvas) {
@@ -67,8 +70,17 @@ function updateBackgroundImage() {
         hasControls: false,
         hoverCursor: 'default'
       });
+      // Resize Fabric.js canvas and container to image size
       canvas.setWidth(img.width);
       canvas.setHeight(img.height);
+      containerDiv.style.width = img.width + "px";
+      containerDiv.style.height = img.height + "px";
+      // Panel body: scrollbars if needed
+      if (element) {
+        element.style.overflow = "auto";
+        element.style.width = "100%";
+        element.style.height = "100%";
+      }
       AppState.bgFabricImage = img;
       canvas.add(img);
       img.moveTo(0); // send to bottom
@@ -102,23 +114,31 @@ export function buildCanvasPanel({ element, title, componentName }) {
       AppState.fabricCanvas.dispose();
       log("DEBUG", "[canvas] buildCanvasPanel: previous canvas disposed");
     }
+    // Use default width/height for initial render (will resize to image when image loads)
     const width = AppState.settings?.canvasMaxWidth || 600;
     const height = AppState.settings?.canvasMaxHeight || 400;
 
-    // --- Create a <canvas> element and pass it to Fabric.js ---
+    // --- Create a <div> container for Fabric.js canvas, with overflow: auto for scrollbars ---
     const containerDiv = document.createElement('div');
     containerDiv.id = "fabric-canvas-div";
     containerDiv.style.position = "relative";
     containerDiv.style.width = width + "px";
     containerDiv.style.height = height + "px";
+    containerDiv.style.overflow = "auto"; // enable scrollbars if needed
+    containerDiv.style.background = "#f7f9fc";
     element.innerHTML = "";
+    element.style.overflow = "auto";
     element.appendChild(containerDiv);
 
+    // Create the <canvas> element for Fabric.js
     const canvasEl = document.createElement('canvas');
     canvasEl.id = "fabric-main-canvas";
     canvasEl.width = width;
     canvasEl.height = height;
     canvasEl.style.display = "block";
+    canvasEl.style.position = "absolute";
+    canvasEl.style.left = "0";
+    canvasEl.style.top = "0";
     containerDiv.appendChild(canvasEl);
 
     // Fabric.js canvas: must pass the <canvas> element, not a <div>
@@ -149,9 +169,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
       log("TRACE", "[canvas] subscriber callback FIRED", { state, details });
       if (details && details.type === "image") {
         log("DEBUG", "[canvas] subscriber: image change detected", { details });
-        updateBackgroundImage();
-        containerDiv.style.width = canvas.width + "px";
-        containerDiv.style.height = canvas.height + "px";
+        updateBackgroundImage(containerDiv, element);
       }
       if (details && details.type === "addShape" && details.shape) {
         dumpFabricDebug(details.shape, "addShape (canvas subscriber)");
@@ -171,9 +189,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
 
     if (AppState.imageObj) {
       log("TRACE", "[canvas] buildCanvasPanel: AppState.imageObj present, loading background image");
-      updateBackgroundImage();
-      containerDiv.style.width = canvas.width + "px";
-      containerDiv.style.height = canvas.height + "px";
+      updateBackgroundImage(containerDiv, element);
     }
 
     log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, no UI controls)");
