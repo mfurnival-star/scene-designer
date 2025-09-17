@@ -116,14 +116,7 @@
     "getSetting"
   ],
   "toolbar.js": [
-    "setSelectedShape",
-    "setSelectedShapes",
-    "selectAllShapes",
-    "deselectAll",
-    "attachSelectionHandlers",
-    "isShapeSelected",
-    "getSelectedShapes",
-    "getSelectedShape"
+    "buildCanvasToolbarPanel"
   ],
   "transformer.js": [
     "attachTransformerForShape",
