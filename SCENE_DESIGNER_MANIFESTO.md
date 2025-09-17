@@ -1,138 +1,99 @@
-# Scene Designer: ES Modules Engineering Manifesto
+# Scene Designer – Engineering & Review Instructions (Zustand Refactor Edition)
 
-> **Reference:**  
-> This document is the single source of truth for Scene Designer architecture, engineering practices, review, and file delivery.  
-> All contributors must adhere to these rules for all code, documentation, and review.
+These instructions are binding for all development, code review, and delivery in the Scene Designer project.
 
 ---
 
-## 1. Vision
+## 1. **ES Module Enforcement**
 
-Build a modular, professional, maintainable scene annotation tool for ADB automation using only ES modules for all code and dependencies.
-
----
-
-## 2. ES Module & Import/Export Policy
-
-- **All project code and dependencies must use ES module syntax (`import`/`export`).**
-- **No file may reference any global (`window.*`) variable, function, or library (e.g., `window.Konva`, `window.Pickr`).**
-    - If a library is needed, it must be imported as an ES module.
-    - CDN/global scripts (e.g., `<script src="...">`) are forbidden for anything used in code.
-- **Every cross-file dependency must be imported explicitly.**
-    - If a file needs a function, it must be exported from its source and imported where used.
-    - If an import is not exported by the source, update the source to export it, or update the importing file to use the correct source.
-- **No global state is permitted except for the exported `AppState` from `state.js`.**
-- **All cross-module communication must be via ES module imports/exports.**
+- All code must use ES module syntax for imports and exports.
+- No use of `window.*`, global variables, or global libraries.
+- External dependencies (e.g. Fabric.js, Tweakpane, Tabulator) must be imported as ES modules.
+- **No CDN/global scripts.** All dependencies must be installed via npm and imported.
 
 ---
 
-## 3. Centralized Architecture & Engineering Structure (2025 Update)
+## 2. **Import/Export Consistency**
 
-**Scene Designer now uses a modular, layered architecture:**
-
-1. **AppState as the single source of truth**  
-   All state (shapes, selection, transformer, settings) flows through the exported `AppState` object in `state.js`.  
-   All modules interact via AppState and exported setter/getter functions only.
-
-2. **Selection & Transformer Logic Centralization**  
-   - All selection logic is managed in `selection.js`.
-   - Only selection.js can trigger transformer lifecycle (attach/detach/update) in `transformer.js`.
-   - Highlights (single, multi-select) are decoupled from transformer logic.
-
-3. **Decoupled UI Panels**  
-   - UI panels (sidebar, settings, toolbar) only interact via AppState, state mutators, and selection APIs.
-   - No direct DOM manipulation outside designated UI modules.
-
-4. **Per-shape Config & State Machines**  
-   - Each shape type and transform mode defined in `shape-defs.js`.
-   - Per-shape state transitions handled by `shape-state.js`.
-
-5. **File Delivery & Review Workflow**  
-   - All code delivery, review, and requests operate on full files, never snippets or diffs.
-   - File delivery follows a strict, numbered, one-at-a-time workflow (see below).
+- Every import must be satisfied by a real export in the source file.
+- Update the source or import as needed to ensure consistency.
+- Enforce for all code changes and file deliveries.
+- **State management uses exported functions and the Zustand-style store from `state.js`.**
+    - **Do not import or reference a singleton `AppState` object.**
+    - Use `getState()`, mutators, and the exported `sceneDesignerStore` object.
 
 ---
 
-## 4. File Delivery, Review, and Change Policy (Numbered, Ordered Delivery)
+## 3. **File Delivery and Review Workflow**
 
-- **All code requests, reviews, and deliveries must be for full files, never code snippets or diffs.**
-- **All deliveries and reviews must comply with the explicit file-by-file workflow:**
-    1. **List all files that require changes up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...)**.
+- **All code delivery, review, and requests operate on complete files only (never snippets).**
+- **File-by-file delivery workflow:**
+    1. **List all files to be delivered up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...).**
     2. **Deliver each file, one at a time, in the order listed.**
-    3. **After each file, state the name and number of the next file to expect, e.g., "Next file: 2. sidebar.js".**
-    4. **Wait for explicit user confirmation ("next", "ready", etc.) before delivering the next file.**
-    5. **Keep a list of remaining files and their numbers in each reply until all are delivered.**
-    6. **After all files are delivered, explicitly confirm completion (e.g., "All done – refactor complete.")**
-- **Update `src/modules.index.md` if modules are added/removed/renamed.**
-- **All code delivery, review, and requests operate on complete files, never snippets.**
+    3. **After each file, state the name and number of the next file to expect (e.g., "Next file: 2. sidebar.js").**
+    4. **Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.**
+    5. **Keep a running list of remaining files and their numbers in each reply until all are delivered.**
+    6. **After all files, explicitly confirm completion (e.g., "All files delivered. Refactor complete.").**
+- **If a module is added, removed, or renamed, update `src/modules.index.md` accordingly.**
 
 ---
 
-## 5. File Size and Splitting Policy
+## 4. **File Size Policy and Splitting**
 
-- **No single file should exceed approximately 350 lines.**
-- **If a file grows beyond 350 lines, it must be split into logically separated ES module files (e.g., `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).**
-- **Each part should be ≤350 lines if possible.**
-- **When splitting:**
-    - Prefer splitting by logical concern (core logic, UI/panel, data, helpers, etc).
-    - Each split file must have a clear summary comment at the top.
-    - Update all imports/exports to use the new module parts.
-    - Update `src/modules.index.md` to reflect all new files.
-    - Document the split in the commit or pull request summary.
-- **File splitting is mandatory for all new code and for any refactoring where a file exceeds this size.**
-- **Do not split arbitrarily—ensure each file remains logically cohesive and independently testable.**
-
----
-
-## 6. Logging Policy (MANDATORY)
-
-- **All modules must use the shared logger, `log()`, with standardized log levels:**
-    - `ERROR` – Unexpected or fatal failures
-    - `WARN` – Recoverable or suspicious situations
-    - `INFO` – Major app events, module/component init, user actions
-    - `DEBUG` – Internal state changes, logic flow, useful during development
-    - `TRACE` – Function entry/exit, extremely verbose, for deep diagnostics (rarely used)
-- **Logging must always be via ES module import, never via global.**
-- **No direct use of `console.log` except inside the logger implementation itself.**
-- **All key state changes, user actions, and panel/component inits must be logged at INFO or DEBUG as appropriate.**
-- **TRACE is expected to be very noisy and is reserved for deep diagnostics only.**
-- **Every future module or code addition must follow this logging policy.**
+- No single file should exceed approximately 350 lines.
+- If a file does, it must be split into logical ES module parts (e.g. `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).
+- Each part should be ≤350 lines if possible.
+- When splitting:
+    - Prefer splitting by logical concern (core, UI, data, helpers, etc).
+    - Each part must begin with a summary comment.
+    - Update all imports/exports to use new modules.
+    - Update `src/modules.index.md` to list all new files.
+    - Document the split in the PR/commit summary.
+- This policy is mandatory for all new code and for any refactoring of large files.
+- Do not split arbitrarily—each file must remain logically cohesive and independently testable.
 
 ---
 
-## 7. Documentation & API Contract
+## 5. **Logging and Documentation**
 
-- **Every module/file starts with a JSDoc-style or Markdown comment summarizing:**
-    - Its responsibilities
-    - Exports
-    - Dependencies
-- **All cross-module usage is via explicit, documented ES module imports/exports.**
-- **All new modules must adhere to this documentation standard.**
-
----
-
-## 8. File and Module Structure
-
-- All logic is organized into ES module files under `src/`.
-- Each module:
-    - Exports only what is necessary.
-    - Imports dependencies explicitly using ES module syntax.
-    - May depend on the central `AppState` from `state.js`.
-    - **Must not import or use any window/global variable, function, or library.**
-- All library dependencies (e.g., Konva, Pickr, Golden Layout) must be installed as npm packages and imported as ES modules.
-- **No reliance on CDN scripts or window-attached properties is permitted.**
+- Use the shared logger (`log()`) from `log.js` with proper log levels and tags.
+    - `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE` (TRACE is very verbose and rarely used).
+- Never use `console.log` directly except inside the logger implementation.
+- Every module/file must begin with a comment summarizing purpose, exports, and dependencies.
+- All cross-module communication must use ES module imports/exports.
 
 ---
 
-## 9. Example: ES Module Import/Export Pattern
+## 6. **State Management (Zustand-style, 2025 Update)**
+
+- **All state flows through exported functions and the store object in `state.js`.**
+    - Use `getState()` to access the current state object.
+    - Use mutators like `setShapes`, `addShape`, `removeShape`, etc.
+    - Subscribe to state changes via `sceneDesignerStore.subscribe(fn)`.
+    - Do **not** import a singleton `AppState` object.
+    - Example:
+        ```js
+        import { getState, setShapes } from "./state.js";
+        // Usage: getState().shapes
+        ```
+
+---
+
+## 7. **Example (Good/Bad)**
 
 ```js
-// Good:
-import Konva from "konva";
+// Good
+import { getState, setShapes } from "./state.js";
 import { buildSidebarPanel } from "./sidebar.js";
 
-// Bad:
-const stage = new window.Konva.Stage(...);   // ❌ Not allowed
-window.Pickr.create(...);                    // ❌ Not allowed
-import { something } from "./notExportedHere.js"; // ❌ Not allowed if not actually exported
+// Bad
+import { AppState } from "./state.js";              // ❌ Not allowed (no AppState export)
+const stage = new window.Konva.Stage(...);          // ❌ Not allowed
+window.Pickr.create(...);                           // ❌ Not allowed
+import { something } from "./notExportedHere.js";   // ❌ Not allowed if not actually exported
+```
+
+---
+
+Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
 

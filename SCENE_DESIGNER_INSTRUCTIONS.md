@@ -8,7 +8,7 @@ These instructions are binding for all development, code review, and delivery in
 
 - All code must use ES module syntax for imports and exports.
 - No use of window.*, global variables, or global libraries.
-- External dependencies (e.g. Konva, Pickr, Golden Layout) must be imported as ES modules.
+- External dependencies (e.g., Konva, Pickr, Golden Layout) must be imported as ES modules.
 
 ---
 
@@ -22,31 +22,30 @@ These instructions are binding for all development, code review, and delivery in
 
 ## 3. **File Delivery and Review Workflow**
 
-- **All code delivery, review, and requests operate on complete files only (never snippets).**
-- **File-by-file delivery workflow:**
-    1. **List all files to be delivered up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...).**
-    2. **Deliver each file, one at a time, in the order listed.**
-    3. **After each file, state the name and number of the next file to expect (e.g., "Next file: 2. sidebar.js").**
-    4. **Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.**
-    5. **Keep a running list of remaining files and their numbers in each reply until all are delivered.**
-    6. **After all files, explicitly confirm completion (e.g., "All files delivered. Refactor complete.").**
-- **If a module is added, removed, or renamed, update `src/modules.index.md` accordingly.**
+- All code delivery, review, and requests operate on complete files only (never snippets).
+- File-by-file delivery workflow:
+    1. List all files to be delivered up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...).
+    2. Deliver each file, one at a time, in the order listed.
+    3. After each file, state the name and number of the next file to expect (e.g., "Next file: 2. sidebar.js").
+    4. Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.
+    5. Keep a running list of remaining files/numbers in each reply until all are delivered.
+    6. After all files, explicitly confirm completion (e.g., "All files delivered. Refactor complete.").
+- If a module is added, removed, or renamed, update `src/modules.index.md`.
 
 ---
 
 ## 4. **File Size Policy and Splitting**
 
-- No single file should exceed approximately 350 lines.
-- If a file does, it must be split into logical ES module parts (e.g. `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).
+- No single file should exceed ~350 lines.
+- If a file does, split into logical ES module parts (e.g., `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).
 - Each part should be ≤350 lines if possible.
 - When splitting:
-    - Prefer splitting by logical concern (core, UI, data, helpers, etc).
+    - Prefer logical separation (core, UI, data, helpers, etc).
     - Each part must begin with a summary comment.
     - Update all imports/exports to use new modules.
     - Update `src/modules.index.md` to list all new files.
     - Document the split in the PR/commit summary.
 - This policy is mandatory for all new code and for any refactoring of large files.
-- Do not split arbitrarily—each file must remain logically cohesive and independently testable.
 
 ---
 
@@ -76,4 +75,3 @@ import { foo } from "./notExportedHere.js";  // ❌ Not allowed if not exported
 ---
 
 Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
-
