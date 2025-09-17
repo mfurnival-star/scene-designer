@@ -216,13 +216,20 @@ export function buildCanvasPanel({ element, title, componentName }) {
       log("DEBUG", "[canvas] buildCanvasPanel: No shapes to sync on init");
     }
 
-    // Subscribe to store for image and shape changes
+    // Subscribe to store for image and shape changes (FILTERED)
     log("TRACE", "[canvas] Subscribing to store state changes");
+
+    // --- Fix: Only update background image if imageObj or imageURL actually changes ---
+    let prevImageObj = null;
+    let prevImageURL = null;
+
     sceneDesignerStore.subscribe(() => {
       const state = getState();
-      // Image change
-      if (state.imageObj || state.imageURL) {
+      // Only update background image if imageObj or imageURL actually changed
+      if (state.imageObj !== prevImageObj || state.imageURL !== prevImageURL) {
         updateBackgroundImage(containerDiv, element);
+        prevImageObj = state.imageObj;
+        prevImageURL = state.imageURL;
       }
       // Add shapes
       const canvasShapes = state.fabricCanvas?.getObjects() || [];
@@ -251,6 +258,8 @@ export function buildCanvasPanel({ element, title, componentName }) {
     if (getState().imageObj) {
       log("TRACE", "[canvas] buildCanvasPanel: imageObj present, loading background image");
       updateBackgroundImage(containerDiv, element);
+      prevImageObj = getState().imageObj;
+      prevImageURL = getState().imageURL;
     }
 
     log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, no UI controls)");
