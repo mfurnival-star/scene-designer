@@ -9,6 +9,8 @@
  * - Handles per-shape config, label, lock, and transformer events.
  * - No global variables, no window.* usage.
  * - Logging via log.js (DEEP TRACE logging for creation and handler attachment).
+ * - Stroke width: always stays at 1px regardless of scaling or transform.
+ * - Helper for setting line width (for future UI, defaults to 1px).
  * -----------------------------------------------------------
  *
  * NOTE: Fabric.js npm package (v5.x) is UMD-only (no named ESM exports).
@@ -20,10 +22,32 @@ import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
 import { log } from './log.js';
 import { attachSelectionHandlers } from './selection.js';
 import { setShapeState } from './shape-state.js';
-import { AppState } from './state.js';
+import { AppState, removeShape } from './state.js';
 
-function generateShapeId(type = "shape") {
-  return `${type}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+// Default stroke width for all shapes
+let currentStrokeWidth = 1;
+
+/**
+ * Set the stroke width for all selected shapes.
+ * This is a helper for future UI integration.
+ * For now, always sets to 1px.
+ */
+export function setStrokeWidthForSelectedShapes(width = 1) {
+  log("DEBUG", "[shapes] setStrokeWidthForSelectedShapes", { width });
+  currentStrokeWidth = width;
+  (AppState.selectedShapes || []).forEach(shape => {
+    if (shape._type === 'rect' || shape._type === 'circle') {
+      shape.set({ strokeWidth: width });
+    } else if (shape._type === 'point') {
+      // For points: update crosshair and halo lines if present
+      if (shape._objects && Array.isArray(shape._objects)) {
+        shape._objects.forEach(obj => {
+          if (obj.type === 'line') obj.set({ strokeWidth: width });
+        });
+      }
+    }
+  });
+  if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
 }
 
 /**
@@ -60,7 +84,7 @@ export function makePointShape(x, y) {
     top: y - haloRadius,
     radius: haloRadius,
     stroke: strokeColor,
-    strokeWidth: 1.5,
+    strokeWidth: currentStrokeWidth,
     fill: fillColor,
     opacity: 0.4,
     selectable: false,
@@ -70,11 +94,11 @@ export function makePointShape(x, y) {
   // Crosshair lines
   const crossH = new Line(
     [x - crossLen / 2, y, x + crossLen / 2, y],
-    { stroke: strokeColor, strokeWidth: 2.5, selectable: false, evented: false }
+    { stroke: strokeColor, strokeWidth: currentStrokeWidth, selectable: false, evented: false }
   );
   const crossV = new Line(
     [x, y - crossLen / 2, x, y + crossLen / 2],
-    { stroke: strokeColor, strokeWidth: 2.5, selectable: false, evented: false }
+    { stroke: strokeColor, strokeWidth: currentStrokeWidth, selectable: false, evented: false }
   );
 
   // Fabric group for point shape
@@ -130,7 +154,7 @@ export function makeRectShape(x, y, w, h) {
     width: w,
     height: h,
     stroke: strokeColor,
-    strokeWidth: 1,
+    strokeWidth: currentStrokeWidth,
     fill: fillColor,
     selectable: true,
     evented: true
@@ -179,7 +203,7 @@ export function makeCircleShape(x, y, r) {
     top: y - r,
     radius: r,
     stroke: strokeColor,
-    strokeWidth: 1,
+    strokeWidth: currentStrokeWidth,
     fill: fillColor,
     selectable: true,
     evented: true
@@ -207,5 +231,21 @@ export function makeCircleShape(x, y, r) {
   log("TRACE", "[shapes] makeCircleShape EXIT", { circle });
 
   return circle;
+}
+
+/**
+ * Ensure all selected shapes keep strokeWidth at 1px after transform.
+ * This should be called after any scaling/transform event.
+ */
+export function fixStrokeWidthAfterTransform() {
+  log("DEBUG", "[shapes] fixStrokeWidthAfterTransform called");
+  setStrokeWidthForSelectedShapes(1);
+}
+
+/**
+ * Helper for generating unique shape IDs.
+ */
+function generateShapeId(type = "shape") {
+  return `${type}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
 }
 

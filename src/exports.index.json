@@ -92,9 +92,11 @@
     "isShapeInState"
   ],
   "shapes.js": [
+    "setStrokeWidthForSelectedShapes",
     "makePointShape",
     "makeRectShape",
-    "makeCircleShape"
+    "makeCircleShape",
+    "fixStrokeWidthAfterTransform"
   ],
   "sidebar.js": [
     "buildSidebarPanel"
