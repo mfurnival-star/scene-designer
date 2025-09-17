@@ -102,17 +102,21 @@
     "buildSidebarPanel"
   ],
   "state.js": [
-    "initShapeState",
-    "setShapeState",
-    "getShapeState",
-    "selectShape",
-    "deselectShape",
-    "startDraggingShape",
-    "stopDraggingShape",
-    "lockShape",
-    "unlockShape",
-    "setMultiSelected",
-    "isShapeInState"
+    "getState",
+    "setShapes",
+    "setSelectedShapes",
+    "addShape",
+    "removeShape",
+    "setImage",
+    "setFabricCanvas",
+    "setBgFabricImage",
+    "setSettings",
+    "setSetting",
+    "getSetting",
+    "setSceneName",
+    "setSceneLogic",
+    "subscribe",
+    "sceneDesignerStore"
   ],
   "toolbar.js": [
     "buildCanvasToolbarPanel"
