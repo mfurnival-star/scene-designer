@@ -7,7 +7,6 @@ canvas.js
 selection.js
 sidebar.js
 settings.js
-layout.js
 errorlog.js
 main.js
 toolbar.js
@@ -16,8 +15,10 @@ transformer.js
 shape-state.js
 shape-defs.js
 minilayout.js
+minilayout-ui.js
 minilayout.demo.js
 minilayout.css
+minilayout.DOCS.md
 ```
 
 ---
@@ -42,19 +43,16 @@ minilayout.css
   Shape selection logic and mutators (Fabric.js adaptation).
 
 - **sidebar.js**  
-  Shape table/list panel (Golden Layout, Tabulator implementation as of latest revision).
+  Shape table/list panel (Tabulator implementation, ESM only).
 
 - **settings.js**  
-  Settings registry, persistence (via localForage), and UI panel (GL, Tweakpane+Pickr).
-
-- **layout.js**  
-  Golden Layout bootstrapping and panel registration.
+  Settings registry, persistence (via localForage), and UI panel (Tweakpane+Pickr).
 
 - **errorlog.js**  
-  Error log panel (Golden Layout), log sink for all error/info/debug messages.
+  Error log panel, log sink for all error/info/debug messages.
 
 - **main.js**  
-  App entry point (if NOT using Golden Layout).
+  App entry point (MiniLayout bootstrapping).
 
 - **toolbar.js**  
   Modular toolbar UI element factory (button, dropdown, color swatch, text input), ESM only.
@@ -87,13 +85,20 @@ minilayout.css
 - **minilayout.js**  
   Native layout manager: robust row/column/stack API, dynamic add/remove/reinsert, close/destroy, resize, splitter support, tab/stack, settings sync, full event API.
 
+- **minilayout-ui.js**  
+  Advanced UI helpers for MiniLayout: splitter bars, tab styling, animated transitions, accessibility.
+
 - **minilayout.demo.js**  
   Demo entrypoint for MiniLayout: panel factory registration, dynamic add/remove demo, logging of all events.
 
 - **minilayout.css**  
   Styles for MiniLayout: panels, splitters, tabs, transitions, responsive layout.
 
+- **minilayout.DOCS.md**  
+  Documentation and API reference for MiniLayout (native layout engine).
+
 ---
 
 **Instructions:**  
 Keep this file updated per SCENE_DESIGNER_MANIFESTO.md.
+

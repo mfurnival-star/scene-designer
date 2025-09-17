@@ -1,18 +1,20 @@
 /**
  * main.js
  * -----------------------------------------------------------
- * Scene Designer – App Entry Point (ESM-only, Fabric.js migration ready)
- * - Entry point for classic index.html fallback or non-Golden Layout boot.
+ * Scene Designer – App Entry Point (ESM-only, MiniLayout Migration)
+ * - Entry point for index.html (classic or Vite).
+ * - Loads MiniLayout-based layout manager (no Golden Layout).
  * - No global logToBox, no legacy color picker, no stray DOM mutation.
  * - No direct use of window.* except for attaching debugging helpers (if needed).
  * - No console.log except inside logger.
  * - Logs module/script load at INFO.
  * - Fabric.js migration: all canvas and shape logic are now Fabric.js-based.
+ * - MiniLayout: Panels, splitters, tabs, error log, etc.
  * -----------------------------------------------------------
  */
 
 import { log } from './log.js';
-// Optionally import layout.js if you want the Golden Layout bootstrap:
+// Import MiniLayout bootstrapper:
 import './layout.js';
 
 // (Optional) Attach for debugging; remove for production
