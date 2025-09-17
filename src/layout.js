@@ -4,6 +4,11 @@
  * MiniLayout App Bootstrapper for Scene Designer
  * Exports: showErrorLogPanel, hideErrorLogPanel, setErrorLogPanelVisible, isErrorLogPanelOpen
  * Dependencies: minilayout.js, log.js, state.js, settings.js, errorlog.js, sidebar.js, canvas.js, toolbar.js
+ *
+ * MiniLayout Compliance:
+ * - All panel/component factories registered expect a single object argument:
+ *   { element, title, componentName }
+ * - No legacy Golden Layout patterns or multi-argument panel factories.
  */
 
 import { MiniLayout } from './minilayout.js';
@@ -160,7 +165,7 @@ function rebuildLayout(includeErrorLogPanel) {
 
   layout = new MiniLayout(panelLayout, mlRoot);
 
-  // Panel/component registration
+  // Panel/component registration (MiniLayout expects single object arg: { element, title, componentName })
   layout.registerComponent('SidebarPanel', buildSidebarPanel);
   layout.registerComponent('CanvasToolbarPanel', buildCanvasToolbarPanel);
   layout.registerComponent('CanvasPanel', buildCanvasPanel);

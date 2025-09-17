@@ -1,7 +1,7 @@
 /**
  * errorlog.js
  * -----------------------------------------------------------
- * Error Log Panel (Golden Layout) for Scene Designer
+ * Error Log Panel (MiniLayout) for Scene Designer
  * - Displays all log messages routed via log.js at all levels.
  * - ES module only, no window/global code.
  * - Supports click/tap-to-copy: clicking anywhere in the panel copies all visible log text to clipboard.
@@ -15,18 +15,17 @@ import { log, LOG_LEVELS, safeStringify, registerLogSink } from "./log.js";
 
 /**
  * Build the Error Log Panel
- * @param {HTMLElement} rootElement - The Golden Layout container element.
- * @param {Object} container - Golden Layout container (unused, for future).
+ * MiniLayout-compliant: accepts { element, title, componentName }
  */
-export function buildErrorLogPanel(rootElement, container) {
+export function buildErrorLogPanel({ element, title, componentName }) {
   log("TRACE", "[errorlog] buildErrorLogPanel entry", {
-    rootElementType: rootElement?.tagName,
-    containerTitle: container?.title,
-    containerComponentName: container?.componentName
+    elementType: element?.tagName,
+    title,
+    componentName
   });
 
   // Main panel container HTML
-  rootElement.innerHTML = `
+  element.innerHTML = `
     <div id="error-log-panel-container" style="width:100%;height:100%;background:#222;color:#fff;font-family:monospace;font-size:0.98em;overflow:auto;position:relative;">
       <div id="error-log-content" style="width:100%;height:100%;overflow:auto;padding:8px 8px 32px 8px;user-select:text;-webkit-user-select:text;cursor:pointer;">
         <div style="color:#aaa;font-size:1em;padding-bottom:4px;">Error log – click or tap to copy all logs</div>
@@ -35,9 +34,9 @@ export function buildErrorLogPanel(rootElement, container) {
       </div>
     </div>
   `;
-  const contentDiv = rootElement.querySelector("#error-log-content");
-  const linesDiv = rootElement.querySelector("#error-log-lines");
-  const copiedMsgDiv = rootElement.querySelector("#error-log-copied-msg");
+  const contentDiv = element.querySelector("#error-log-content");
+  const linesDiv = element.querySelector("#error-log-lines");
+  const copiedMsgDiv = element.querySelector("#error-log-copied-msg");
 
   // --- Click/tap-to-copy logic, cross-platform (iPhone/Android/desktop) ---
   function copyErrorLogToClipboard() {
@@ -150,9 +149,9 @@ export function buildErrorLogPanel(rootElement, container) {
   log("INFO", "[errorlog] Error Log panel initialized (click/tap to copy enabled)");
 
   log("TRACE", "[errorlog] buildErrorLogPanel exit", {
-    rootElementType: rootElement?.tagName,
-    containerTitle: container?.title,
-    containerComponentName: container?.componentName
+    elementType: element?.tagName,
+    title,
+    componentName
   });
 }
 
@@ -165,4 +164,3 @@ export function registerErrorLogSink() {
   // No-op: errorLogSink already registered in buildErrorLogPanel
   log("TRACE", "[errorlog] registerErrorLogSink exit");
 }
-

@@ -10,6 +10,7 @@
  * - Logging via log.js.
  * - TRACE-level logging for all key entry/exit, table update, selection, and row events.
  * - Refactored for Tabulator v6.x (Full build), with proper row selection API.
+ * - MiniLayout API: panel factory accepts single object argument ({ element, title, componentName }).
  * -----------------------------------------------------------
  */
 
@@ -20,23 +21,24 @@ import { TabulatorFull as Tabulator } from 'tabulator-tables';
 
 /**
  * Build the sidebar panel (Tabulator shape table).
+ * MiniLayout-compliant: accepts { element, title, componentName }.
  */
-export function buildSidebarPanel(rootElement, container) {
+export function buildSidebarPanel({ element, title, componentName }) {
   log("TRACE", "[sidebar] buildSidebarPanel ENTRY", {
-    rootElementType: rootElement?.tagName,
-    containerTitle: container?.title,
-    containerComponentName: container?.componentName
+    elementType: element?.tagName,
+    title,
+    componentName
   });
 
   try {
     log("INFO", "[sidebar] buildSidebarPanel called (Tabulator shape table)", {
-      rootElementType: rootElement?.tagName,
-      containerTitle: container?.title,
-      componentName: container?.componentName
+      elementType: element?.tagName,
+      title,
+      componentName
     });
 
     // Render container for Tabulator
-    rootElement.innerHTML = `
+    element.innerHTML = `
       <div id="sidebar-panel-container" style="width:100%;height:100%;background:#f4f8ff;display:flex;flex-direction:column;overflow:auto;">
         <div style="padding:10px 8px 4px 8px;font-weight:bold;font-size:1.2em;color:#0057d8;">
           Shape List
@@ -45,7 +47,7 @@ export function buildSidebarPanel(rootElement, container) {
       </div>
     `;
 
-    const tableDiv = rootElement.querySelector('#tabulator-table-div');
+    const tableDiv = element.querySelector('#tabulator-table-div');
     if (!tableDiv) {
       log("ERROR", "[sidebar] tabulator-table-div not found in DOM");
       return;
@@ -172,8 +174,9 @@ export function buildSidebarPanel(rootElement, container) {
       // Subscribe after built to avoid early calls
       var unsub = subscribe(updateTable);
       // Clean up on destroy
-      if (container && typeof container.on === "function") {
-        container.on("destroy", () => {
+      // MiniLayout: container may provide an on("destroy") API for panel cleanup.
+      if (typeof element.on === "function") {
+        element.on("destroy", () => {
           unsub && unsub();
           tabulator.destroy();
           log("INFO", "[sidebar] Sidebar panel destroyed");
@@ -189,8 +192,9 @@ export function buildSidebarPanel(rootElement, container) {
   }
 
   log("TRACE", "[sidebar] buildSidebarPanel EXIT", {
-    rootElementType: rootElement?.tagName,
-    containerTitle: container?.title,
-    componentName: container?.componentName
+    elementType: element?.tagName,
+    title,
+    componentName
   });
 }
+

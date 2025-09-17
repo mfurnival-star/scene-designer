@@ -304,32 +304,39 @@ function updateConsoleInterceptionFromSettings(settings) {
   log("TRACE", "[settings] updateConsoleInterceptionFromSettings exit");
 }
 
-export function buildSettingsPanel(rootElement, container) {
+/**
+ * Build the settings panel (MiniLayout-compliant).
+ * Accepts: { element, title, componentName }
+ */
+export function buildSettingsPanel({ element, title, componentName }) {
   log("DEBUG", "[settings] buildSettingsPanel: TOP OF FUNCTION", {
     PaneType: typeof Pane,
-    Pane
+    Pane,
+    elementType: element?.tagName,
+    title,
+    componentName
   });
   log("TRACE", "[settings] buildSettingsPanel entry", {
-    rootElementType: rootElement?.tagName,
-    containerTitle: container?.title,
-    containerComponentName: container?.componentName
+    elementType: element?.tagName,
+    title,
+    componentName
   });
   try {
     log("INFO", "[settings] buildSettingsPanel called", {
-      rootElementType: rootElement?.tagName,
-      containerTitle: container?.title,
-      containerComponentName: container?.componentName
+      elementType: element?.tagName,
+      title,
+      componentName
     });
-    if (!rootElement) {
-      log("ERROR", "[settings] buildSettingsPanel: rootElement is null or undefined");
+    if (!element) {
+      log("ERROR", "[settings] buildSettingsPanel: element is null or undefined");
       alert("Settings panel root element not found! (No content will be shown)");
       return;
     }
-    if (rootElement.offsetParent === null) {
-      log("ERROR", "[settings] buildSettingsPanel: rootElement is not visible (may be hidden)");
+    if (element.offsetParent === null) {
+      log("ERROR", "[settings] buildSettingsPanel: element is not visible (may be hidden)");
     }
     if (typeof Pane !== "function") {
-      rootElement.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed: Tweakpane (Pane) not loaded as ES module.<br>
+      element.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed: Tweakpane (Pane) not loaded as ES module.<br>
       Check your webpack and npm dependencies: tweakpane@4.x must be imported as <code>import { Pane } from 'tweakpane'</code>.</div>`;
       log("ERROR", "[settings] Pane (Tweakpane) is not a constructor/function! Check import.");
       return;
@@ -340,15 +347,15 @@ export function buildSettingsPanel(rootElement, container) {
         settingsPOJO[reg.key] = AppState.settings[reg.key];
       }
       log("DEBUG", "[settings] buildSettingsPanel: settingsPOJO for Tweakpane", settingsPOJO);
-      rootElement.innerHTML = `
+      element.innerHTML = `
         <div id="settings-panel-container" style="width:100%;height:100%;background:#fff;display:flex;flex-direction:column;overflow:auto;">
           <div id="tweakpane-fields-div" style="flex:1 1 0;overflow:auto;padding:0 8px 8px 8px;"></div>
         </div>
       `;
-      const fieldsDiv = rootElement.querySelector("#tweakpane-fields-div");
+      const fieldsDiv = element.querySelector("#tweakpane-fields-div");
       if (!fieldsDiv) {
         log("ERROR", "[settings] tweakpane-fields-div not found in DOM");
-        rootElement.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed to render (missing tweakpane-fields-div)</div>`;
+        element.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed to render (missing tweakpane-fields-div)</div>`;
         return;
       }
       let pane;
@@ -407,13 +414,16 @@ export function buildSettingsPanel(rootElement, container) {
       buildPanel();
     }).catch((e) => {
       log("ERROR", "[settings] Error in loadSettings().then for buildSettingsPanel", e);
-      rootElement.innerHTML = `<div style="color:red;padding:2em;">Settings failed to load: ${e.message}</div>`;
+      element.innerHTML = `<div style="color:red;padding:2em;">Settings failed to load: ${e.message}</div>`;
     });
   } catch (e) {
     log("ERROR", "[settings] buildSettingsPanel ERROR", e);
     alert("SettingsPanel ERROR: " + e.message + (e && e.stack ? "\n\n" + e.stack : ""));
     throw e;
   }
+  log("TRACE", "[settings] buildSettingsPanel exit", {
+    elementType: element?.tagName,
+    title,
+    componentName
+  });
 }
-
-
