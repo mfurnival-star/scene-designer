@@ -208,5 +208,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   rebuildLayout(showErrorLogPanelSetting);
 });
 
-// Export control functions for settings.js
-export { isErrorLogPanelOpen };
+// Only export each symbol once:
+export {
+  showErrorLogPanel,
+  hideErrorLogPanel,
+  setErrorLogPanelVisible,
+  isErrorLogPanelOpen
+};
