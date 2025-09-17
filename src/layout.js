@@ -2,15 +2,6 @@
  * layout.js
  * -----------------------------------------------------------
  * MiniLayout App Bootstrapper for Scene Designer
- * - Sets up all panels using MiniLayout (row/column/stack config, splitters, tabs).
- * - Panels: Sidebar, CanvasToolbar, Canvas, Settings, ErrorLog (dynamically shown/hidden).
- * - Error Log panel is included on startup if AppState.settings.showErrorLogPanel is true.
- * - Supports live show/hide of Error Log panel in response to settings.
- * - No use of window.* or global log boxes: all logs routed to ErrorLogPanel via ES module.
- * - Logging via log.js.
- * - Logging policy: Use INFO for panel registration, user-visible events, and layout lifecycle; DEBUG for internal state; ERROR for problems.
- * - TRACE-level entry/exit logging for all functions.
- * -----------------------------------------------------------
  * Exports: showErrorLogPanel, hideErrorLogPanel, setErrorLogPanelVisible, isErrorLogPanelOpen
  * Dependencies: minilayout.js, log.js, state.js, settings.js, errorlog.js, sidebar.js, canvas.js, toolbar.js
  */
@@ -75,7 +66,9 @@ export function hideErrorLogPanel() {
   log("INFO", "[layout] ErrorLogPanel removed from layout (hideErrorLogPanel)");
 }
 
-// Expose for settings.js to use
+/**
+ * Expose for settings.js to use
+ */
 export function setErrorLogPanelVisible(visible) {
   if (visible) {
     showErrorLogPanel();
@@ -207,11 +200,3 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initial layout build
   rebuildLayout(showErrorLogPanelSetting);
 });
-
-// Only export each symbol once:
-export {
-  showErrorLogPanel,
-  hideErrorLogPanel,
-  setErrorLogPanelVisible,
-  isErrorLogPanelOpen
-};
