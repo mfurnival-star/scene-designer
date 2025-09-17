@@ -131,7 +131,6 @@ export function makePointShape(x, y) {
   pointGroup._id = generateShapeId('point');
 
   log("TRACE", "[shapes] makePointShape: before attachSelectionHandlers", {
-    pointGroup,
     type: pointGroup._type,
     label: pointGroup._label,
     _id: pointGroup._id
@@ -145,14 +144,17 @@ export function makePointShape(x, y) {
   });
 
   log("TRACE", "[shapes] makePointShape: after attachSelectionHandlers", {
-    pointGroup,
     type: pointGroup._type,
     label: pointGroup._label,
     _id: pointGroup._id
   });
 
   setShapeState(pointGroup, 'default');
-  log("TRACE", "[shapes] makePointShape EXIT", { pointGroup });
+  log("TRACE", "[shapes] makePointShape EXIT", {
+    type: pointGroup._type,
+    label: pointGroup._label,
+    _id: pointGroup._id
+  });
 
   return pointGroup;
 }
@@ -188,7 +190,6 @@ export function makeRectShape(x, y, w, h) {
   rect._id = generateShapeId('rect');
 
   log("TRACE", "[shapes] makeRectShape: before attachSelectionHandlers", {
-    rect,
     type: rect._type,
     label: rect._label,
     _id: rect._id
@@ -202,14 +203,17 @@ export function makeRectShape(x, y, w, h) {
   });
 
   log("TRACE", "[shapes] makeRectShape: after attachSelectionHandlers", {
-    rect,
     type: rect._type,
     label: rect._label,
     _id: rect._id
   });
 
   setShapeState(rect, 'default');
-  log("TRACE", "[shapes] makeRectShape EXIT", { rect });
+  log("TRACE", "[shapes] makeRectShape EXIT", {
+    type: rect._type,
+    label: rect._label,
+    _id: rect._id
+  });
 
   return rect;
 }
@@ -244,7 +248,6 @@ export function makeCircleShape(x, y, r) {
   circle._id = generateShapeId('circle');
 
   log("TRACE", "[shapes] makeCircleShape: before attachSelectionHandlers", {
-    circle,
     type: circle._type,
     label: circle._label,
     _id: circle._id
@@ -258,14 +261,17 @@ export function makeCircleShape(x, y, r) {
   });
 
   log("TRACE", "[shapes] makeCircleShape: after attachSelectionHandlers", {
-    circle,
     type: circle._type,
     label: circle._label,
     _id: circle._id
   });
 
   setShapeState(circle, 'default');
-  log("TRACE", "[shapes] makeCircleShape EXIT", { circle });
+  log("TRACE", "[shapes] makeCircleShape EXIT", {
+    type: circle._type,
+    label: circle._label,
+    _id: circle._id
+  });
 
   return circle;
 }
@@ -276,3 +282,4 @@ export function makeCircleShape(x, y, r) {
 function generateShapeId(type = "shape") {
   return `${type}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
 }
+

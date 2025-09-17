@@ -18,44 +18,6 @@ import { attachSelectionHandlers } from './selection.js';
 import { setShapeState, selectShape, deselectShape } from './shape-state.js';
 
 /**
- * Utility: Dump Fabric object diagnostic info for debugging.
- */
-function dumpFabricDebug(obj, tag = "") {
-  log("DEBUG", `[canvas][${tag}] fabric diagnostic`, {
-    typeofObj: typeof obj,
-    isFabricObj: !!(obj && obj.type),
-    type: obj?.type,
-    _type: obj?._type,
-    label: obj?._label,
-    state: obj?._state,
-    locked: obj?.locked,
-    left: obj?.left,
-    top: obj?.top,
-    width: obj?.width,
-    height: obj?.height,
-    radius: obj?.radius,
-    selectable: obj?.selectable,
-    evented: obj?.evented,
-    keys: obj ? Object.keys(obj) : []
-  });
-}
-
-/**
- * Utility: Dump AppState shapes array.
- */
-function dumpAppStateShapes(tag = "") {
-  log("TRACE", `[canvas][${tag}] AppState.shapes:`, 
-    Array.isArray(AppState.shapes) ? AppState.shapes.map((s,i)=>({
-      idx: i,
-      type: s?._type,
-      label: s?._label,
-      id: s?._id,
-      locked: s?.locked
-    })) : AppState.shapes
-  );
-}
-
-/**
  * Background image logic.
  * Draws image as non-selectable, non-evented Fabric object.
  * Resizes canvas and container to match image size.
@@ -103,7 +65,9 @@ function updateBackgroundImage(containerDiv, element) {
       canvas.add(img);
       img.moveTo(0); // send to bottom
       canvas.renderAll();
-      dumpFabricDebug(img, "updateBackgroundImage");
+      log("DEBUG", "[canvas] updateBackgroundImage: image added", {
+        type: img.type, width: img.width, height: img.height
+      });
       log("TRACE", "[canvas] updateBackgroundImage EXIT (image loaded)");
     });
   } else {
@@ -183,21 +147,30 @@ export function buildCanvasPanel({ element, title, componentName }) {
       }
     });
 
-    // --- DEEP TRACE: on canvas panel creation, ensure all shapes are drawn ---
+    // --- Sync shapes on canvas panel creation ---
     log("TRACE", "[canvas] buildCanvasPanel: Syncing shapes on init");
-    dumpAppStateShapes("on panel build");
     if (Array.isArray(AppState.shapes) && AppState.shapes.length > 0) {
       log("DEBUG", "[canvas] Syncing existing shapes to canvas on panel build");
       AppState.shapes.forEach((shape, idx) => {
-        log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} sync`, { shape });
-        dumpFabricDebug(shape, `sync ${idx}`);
+        log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} sync`, {
+          type: shape?._type,
+          label: shape?._label,
+          id: shape?._id
+        });
         if (AppState.fabricCanvas && !AppState.fabricCanvas.getObjects().includes(shape)) {
           AppState.fabricCanvas.add(shape);
           attachSelectionHandlers(shape);
-          log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} added to canvas`);
-          dumpAppStateShapes(`after adding shape ${idx}`);
+          log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} added to canvas`, {
+            type: shape?._type,
+            label: shape?._label,
+            id: shape?._id
+          });
         } else {
-          log("WARN", `[canvas] buildCanvasPanel: Shape ${idx} already on canvas or canvas missing`, { shape });
+          log("WARN", `[canvas] buildCanvasPanel: Shape ${idx} already on canvas or canvas missing`, {
+            type: shape?._type,
+            label: shape?._label,
+            id: shape?._id
+          });
         }
       });
       AppState.fabricCanvas.renderAll();
@@ -210,34 +183,54 @@ export function buildCanvasPanel({ element, title, componentName }) {
     log("TRACE", "[canvas] Subscribing to AppState changes");
     subscribe((state, details) => {
       log("TRACE", "[canvas] subscriber callback FIRED", { state, details });
-      dumpAppStateShapes("in subscriber");
       if (details && details.type === "image") {
         log("DEBUG", "[canvas] subscriber: image change detected", { details });
         updateBackgroundImage(containerDiv, element);
       }
       if (details && details.type === "addShape" && details.shape) {
-        dumpFabricDebug(details.shape, "addShape (canvas subscriber)");
-        log("DEBUG", "[canvas] subscriber: addShape detected", { details });
+        log("DEBUG", "[canvas] subscriber: addShape detected", {
+          type: details.shape?._type,
+          label: details.shape?._label,
+          id: details.shape?._id
+        });
         if (AppState.fabricCanvas && !AppState.fabricCanvas.getObjects().includes(details.shape)) {
           AppState.fabricCanvas.add(details.shape);
           AppState.fabricCanvas.renderAll();
           attachSelectionHandlers(details.shape);
-          log("DEBUG", "[canvas] addShape: shape added to canvas");
+          log("DEBUG", "[canvas] addShape: shape added to canvas", {
+            type: details.shape?._type,
+            label: details.shape?._label,
+            id: details.shape?._id
+          });
         } else {
-          log("WARN", "[canvas] addShape: Shape already on canvas or canvas missing", { details });
+          log("WARN", "[canvas] addShape: Shape already on canvas or canvas missing", {
+            type: details.shape?._type,
+            label: details.shape?._label,
+            id: details.shape?._id
+          });
         }
-        dumpAppStateShapes("after addShape (subscriber)");
       }
       if (details && details.type === "removeShape" && details.shape) {
-        log("DEBUG", "[canvas] subscriber: removeShape detected", { details });
+        log("DEBUG", "[canvas] subscriber: removeShape detected", {
+          type: details.shape?._type,
+          label: details.shape?._label,
+          id: details.shape?._id
+        });
         if (AppState.fabricCanvas && AppState.fabricCanvas.getObjects().includes(details.shape)) {
           AppState.fabricCanvas.remove(details.shape);
           AppState.fabricCanvas.renderAll();
-          log("DEBUG", "[canvas] removeShape: shape removed from canvas");
+          log("DEBUG", "[canvas] removeShape: shape removed from canvas", {
+            type: details.shape?._type,
+            label: details.shape?._label,
+            id: details.shape?._id
+          });
         } else {
-          log("WARN", "[canvas] removeShape: Shape not found on canvas", { details });
+          log("WARN", "[canvas] removeShape: Shape not found on canvas", {
+            type: details.shape?._type,
+            label: details.shape?._label,
+            id: details.shape?._id
+          });
         }
-        dumpAppStateShapes("after removeShape (subscriber)");
       }
       if (details && details.type === "selection") {
         log("DEBUG", "[canvas] subscriber: selection change detected", { details });

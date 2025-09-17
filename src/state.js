@@ -42,17 +42,21 @@ export const AppState = {
 };
 
 /**
- * Utility: Dump shape diagnostic info for debugging.
+ * Utility: Dump shape summary for debugging (no deep object logging).
  */
 function dumpShapeDebug(shape, tag = "") {
-  log("TRACE", `[state] ${tag} shape diagnostic`, {
+  log("TRACE", `[state] ${tag} shape summary`, {
     typeofShape: typeof shape,
     constructorName: shape?.constructor?.name,
-    attrs: shape?.attrs,
-    className: shape?.className,
     _type: shape?._type,
     _label: shape?._label,
-    keys: shape ? Object.keys(shape) : []
+    left: shape?.left,
+    top: shape?.top,
+    width: shape?.width,
+    height: shape?.height,
+    radius: shape?.radius,
+    locked: shape?.locked,
+    id: shape?._id
   });
 }
 
