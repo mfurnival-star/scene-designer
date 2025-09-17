@@ -16,7 +16,7 @@
 
 import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
 
-import { AppState } from './state.js';
+import { getState } from './state.js';
 import { log } from './log.js';
 import { getShapeDef } from './shape-defs.js';
 
@@ -35,9 +35,9 @@ export function attachTransformerForShape(shape) {
   }
 
   // Remove previous active object if present
-  if (AppState.fabricCanvas) {
-    AppState.fabricCanvas.discardActiveObject();
-    AppState.fabricCanvas.renderAll();
+  if (getState().fabricCanvas) {
+    getState().fabricCanvas.discardActiveObject();
+    getState().fabricCanvas.renderAll();
   }
 
   // Get per-shape config from shape-defs.js
@@ -49,8 +49,8 @@ export function attachTransformerForShape(shape) {
   }
 
   // Set the shape as active object
-  if (AppState.fabricCanvas) {
-    AppState.fabricCanvas.setActiveObject(shape);
+  if (getState().fabricCanvas) {
+    getState().fabricCanvas.setActiveObject(shape);
     // Enable/disable controls per shape definition
     shape.set({
       hasControls: def.resizable && !shape.locked,
@@ -71,7 +71,7 @@ export function attachTransformerForShape(shape) {
         lockUniScaling: false
       });
     }
-    AppState.fabricCanvas.renderAll();
+    getState().fabricCanvas.renderAll();
 
     log("DEBUG", "[transformer] Controls attached (Fabric.js)", {
       shapeType: shape._type,
@@ -88,9 +88,9 @@ export function attachTransformerForShape(shape) {
  */
 export function detachTransformer() {
   log("TRACE", "[transformer] detachTransformer entry");
-  if (AppState.fabricCanvas) {
-    AppState.fabricCanvas.discardActiveObject();
-    AppState.fabricCanvas.renderAll();
+  if (getState().fabricCanvas) {
+    getState().fabricCanvas.discardActiveObject();
+    getState().fabricCanvas.renderAll();
     log("INFO", "[transformer] Controls detached");
   } else {
     log("DEBUG", "[transformer] No canvas to detach controls");
@@ -105,9 +105,9 @@ export function detachTransformer() {
  */
 export function updateTransformer() {
   log("TRACE", "[transformer] updateTransformer entry");
-  const canvas = AppState.fabricCanvas;
+  const canvas = getState().fabricCanvas;
   // Only attach controls for single selection, not locked, not point
-  const sel = AppState.selectedShapes;
+  const sel = getState().selectedShapes;
   if (!canvas || !Array.isArray(sel) || sel.length !== 1 || !sel[0] || sel[0].locked) {
     detachTransformer();
     log("DEBUG", "[transformer] Controls detached (no valid single selection)");
