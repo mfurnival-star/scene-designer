@@ -18,6 +18,24 @@ import { attachSelectionHandlers } from './selection.js';
 import { setShapeState, selectShape, deselectShape } from './shape-state.js';
 
 /**
+ * Move all shapes above the background image (index 0).
+ */
+function moveShapesToFront() {
+  if (!AppState.fabricCanvas) return;
+  const objs = AppState.fabricCanvas.getObjects();
+  if (!objs.length) return;
+  // Find bg image (should be at index 0)
+  const bgImg = AppState.bgFabricImage;
+  objs.forEach((obj) => {
+    if (obj !== bgImg) {
+      // Move all non-image shapes to the top (after bg image)
+      obj.moveTo(AppState.fabricCanvas.getObjects().length - 1);
+    }
+  });
+  AppState.fabricCanvas.renderAll();
+}
+
+/**
  * Background image logic.
  * Draws image as non-selectable, non-evented Fabric object.
  * Resizes canvas and container to match image size.
@@ -63,7 +81,9 @@ function updateBackgroundImage(containerDiv, element) {
       }
       AppState.bgFabricImage = img;
       canvas.add(img);
-      img.moveTo(0); // send to bottom
+      img.moveTo(0); // send to bottom (index 0)
+      // After adding the image, move all shapes above it
+      moveShapesToFront();
       canvas.renderAll();
       log("DEBUG", "[canvas] updateBackgroundImage: image added", {
         type: img.type, width: img.width, height: img.height
@@ -160,6 +180,8 @@ export function buildCanvasPanel({ element, title, componentName }) {
         if (AppState.fabricCanvas && !AppState.fabricCanvas.getObjects().includes(shape)) {
           AppState.fabricCanvas.add(shape);
           attachSelectionHandlers(shape);
+          // Move shape above bg image if present
+          moveShapesToFront();
           log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} added to canvas`, {
             type: shape?._type,
             label: shape?._label,
@@ -195,6 +217,8 @@ export function buildCanvasPanel({ element, title, componentName }) {
         });
         if (AppState.fabricCanvas && !AppState.fabricCanvas.getObjects().includes(details.shape)) {
           AppState.fabricCanvas.add(details.shape);
+          // Move shape above bg image if present
+          moveShapesToFront();
           AppState.fabricCanvas.renderAll();
           attachSelectionHandlers(details.shape);
           log("DEBUG", "[canvas] addShape: shape added to canvas", {
