@@ -206,4 +206,3 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initial layout build
   rebuildLayout(showErrorLogPanelSetting);
 });
-

@@ -1,251 +1,157 @@
 /**
- * state.js
+ * shape-state.js
  * -----------------------------------------------------------
- * Centralized AppState and data model for Scene Designer.
- * - Exports AppState singleton and state management API.
- * - All shape, selection, scene, and settings data live here.
- * - Provides subscribe() for data change listeners.
- * - Mutations only via exported setters and methods.
- * - No global state except the exported AppState.
- * - Adheres to SCENE_DESIGNER_MANIFESTO.md.
- * - Logging: Uses log.js; logs at DEBUG for state changes, TRACE for setter entry/exit if deep tracing is enabled.
+ * Scene Designer – Per-Shape State Machine (Fabric.js Migration, ESM ONLY)
+ * - Centralizes all shape state transitions: selected, dragging, locked, multi-selected.
+ * - Used by shapes.js, canvas.js, selection.js, transformer.js for robust state flows.
+ * - No globals, no window.* usage.
+ * - Logging via log.js.
  * -----------------------------------------------------------
  */
 
 import { log } from './log.js';
 
-// Canonical state singleton
-export const AppState = {
-  // Scene/Canvas
-  imageObj: null,        // Loaded image object
-  imageURL: null,        // Current image URL (local or server)
-  sceneName: '',         // Scene name (for export)
-  sceneLogic: 'AND',     // 'AND' or 'OR'
-
-  // Shape Data
-  shapes: [],            // Array of shape objects (point, rect, circle, etc.)
-  selectedShape: null,   // The currently selected shape (single select)
-  selectedShapes: [],    // Array of selected shapes (multiselect)
-  konvaDiv: null,        // Canvas container div
-
-  // Drag/Group/Multi-Select
-  multiDrag: { moving: false, dragOrigin: null, origPositions: null },
-
-  // UI/Settings
-  settings: {},          // User/configurable settings (populated at load)
-  settingsRegistry: [],  // List of settings keys/metadata
-  logLevel: 'ERROR',     // Current log level (redundant—see settings)
-  logDest: 'console',    // Log destination (console/server/both)
-
-  // Subscribers for state changes
-  _subscribers: [],
-};
-
 /**
- * Utility: Dump shape summary for debugging (no deep object logging).
+ * Initialize shape state on creation.
+ * @param {Object} shape - Fabric.js object or group
  */
-function dumpShapeDebug(shape, tag = "") {
-  log("TRACE", `[state] ${tag} shape summary`, {
-    typeofShape: typeof shape,
-    constructorName: shape?.constructor?.name,
-    _type: shape?._type,
-    _label: shape?._label,
-    left: shape?.left,
-    top: shape?.top,
-    width: shape?.width,
-    height: shape?.height,
-    radius: shape?.radius,
-    locked: shape?.locked,
-    id: shape?._id
-  });
+export function initShapeState(shape) {
+  log("TRACE", "[shape-state] initShapeState entry", { shape });
+  shape._state = "default";
+  log("TRACE", "[shape-state] initShapeState exit");
 }
 
 /**
- * Subscribe to AppState changes.
- * @param {Function} fn - Function to call on state changes.
- * @returns {Function} Unsubscribe function.
+ * Set shape state to a new state.
+ * @param {Object} shape
+ * @param {string} newState
  */
-export function subscribe(fn) {
-  log("TRACE", "[state] subscribe() entry", fn);
-  if (typeof fn !== "function") {
-    log("TRACE", "[state] subscribe() exit (not a function)");
-    return () => {};
-  }
-  AppState._subscribers.push(fn);
-  log("TRACE", "[state] subscribe() exit (subscribed)");
-  return () => {
-    const idx = AppState._subscribers.indexOf(fn);
-    if (idx !== -1) AppState._subscribers.splice(idx, 1);
-    log("TRACE", "[state] unsubscribe() called", fn);
+export function setShapeState(shape, newState) {
+  log("TRACE", "[shape-state] setShapeState entry", { shape, newState });
+  const prevState = shape._state;
+  shape._state = newState;
+  log("DEBUG", "[shape-state] Shape state changed", { shape: safeShapeSummary(shape), prevState, newState });
+  log("TRACE", "[shape-state] setShapeState exit");
+}
+
+/**
+ * Get current shape state.
+ * @param {Object} shape
+ * @returns {string}
+ */
+export function getShapeState(shape) {
+  log("TRACE", "[shape-state] getShapeState entry", { shape });
+  const state = shape._state || "default";
+  log("TRACE", "[shape-state] getShapeState exit", { state });
+  return state;
+}
+
+/**
+ * Mark shape as selected.
+ * @param {Object} shape
+ */
+export function selectShape(shape) {
+  log("TRACE", "[shape-state] selectShape entry", { shape });
+  setShapeState(shape, 'selected');
+  log("TRACE", "[shape-state] selectShape exit");
+}
+
+/**
+ * Mark shape as deselected.
+ * @param {Object} shape
+ */
+export function deselectShape(shape) {
+  log("TRACE", "[shape-state] deselectShape entry", { shape });
+  setShapeState(shape, 'default');
+  log("TRACE", "[shape-state] deselectShape exit");
+}
+
+/**
+ * Mark shape as being dragged.
+ * @param {Object} shape
+ */
+export function startDraggingShape(shape) {
+  log("TRACE", "[shape-state] startDraggingShape entry", { shape });
+  setShapeState(shape, 'dragging');
+  log("TRACE", "[shape-state] startDraggingShape exit");
+}
+
+/**
+ * Mark shape as done dragging (returns to selected).
+ * @param {Object} shape
+ */
+export function stopDraggingShape(shape) {
+  log("TRACE", "[shape-state] stopDraggingShape entry", { shape });
+  setShapeState(shape, 'selected');
+  log("TRACE", "[shape-state] stopDraggingShape exit");
+}
+
+/**
+ * Lock a shape (cannot move, transform, or interact).
+ * @param {Object} shape
+ */
+export function lockShape(shape) {
+  log("TRACE", "[shape-state] lockShape entry", { shape });
+  setShapeState(shape, 'locked');
+  shape.locked = true;
+  // Fabric.js: disable drag/resize/selection
+  shape.selectable = false;
+  shape.evented = false;
+  log("TRACE", "[shape-state] lockShape exit");
+}
+
+/**
+ * Unlock a shape (can move, transform, interact).
+ * @param {Object} shape
+ */
+export function unlockShape(shape) {
+  log("TRACE", "[shape-state] unlockShape entry", { shape });
+  setShapeState(shape, 'default');
+  shape.locked = false;
+  shape.selectable = true;
+  shape.evented = true;
+  log("TRACE", "[shape-state] unlockShape exit");
+}
+
+/**
+ * Mark shape as multi-selected (for multi-select group).
+ * @param {Object} shape
+ * @param {boolean} enable
+ */
+export function setMultiSelected(shape, enable = true) {
+  log("TRACE", "[shape-state] setMultiSelected entry", { shape, enable });
+  setShapeState(shape, enable ? "multi-selected" : "default");
+  log("TRACE", "[shape-state] setMultiSelected exit");
+}
+
+/**
+ * Returns true if shape is in the given state.
+ * @param {Object} shape
+ * @param {string} state
+ * @returns {boolean}
+ */
+export function isShapeInState(shape, state) {
+  log("TRACE", "[shape-state] isShapeInState entry", { shape, state });
+  const result = shape._state === state;
+  log("TRACE", "[shape-state] isShapeInState exit", { result });
+  return result;
+}
+
+/**
+ * Debug summary for logs.
+ */
+function safeShapeSummary(shape) {
+  if (!shape) return shape;
+  return {
+    type: shape._type,
+    label: shape._label,
+    state: shape._state,
+    locked: shape.locked,
+    left: shape.left,
+    top: shape.top,
+    width: shape.width,
+    height: shape.height,
+    radius: shape.radius
   };
-}
-
-/**
- * Notify all subscribers of a change.
- * @param {*} details - Optional change metadata.
- */
-function notifySubscribers(details = {}) {
-  log("TRACE", "[state] notifySubscribers entry", details);
-  for (const fn of AppState._subscribers) {
-    try { fn(AppState, details); }
-    catch (e) { log("ERROR", "[state] Subscriber error", e); }
-  }
-  log("TRACE", "[state] notifySubscribers exit");
-}
-
-/**
- * Set and notify for shapes array.
- * @param {Array} newShapes
- */
-export function setShapes(newShapes) {
-  log("TRACE", "[state] setShapes() entry", newShapes);
-  AppState.shapes = Array.isArray(newShapes) ? newShapes : [];
-  notifySubscribers({ type: "shapes", shapes: AppState.shapes });
-  log("DEBUG", "[state] setShapes: shapes updated", AppState.shapes);
-  log("TRACE", "[state] setShapes() exit");
-}
-
-/**
- * Set selected shapes (multi-select).
- * @param {Array} arr
- */
-export function setSelectedShapes(arr) {
-  log("TRACE", "[state] setSelectedShapes() entry", arr);
-  AppState.selectedShapes = Array.isArray(arr) ? arr : [];
-  AppState.selectedShape = AppState.selectedShapes.length === 1 ? AppState.selectedShapes[0] : null;
-  notifySubscribers({ type: "selection", selectedShapes: AppState.selectedShapes });
-  log("DEBUG", "[state] setSelectedShapes: selection updated", AppState.selectedShapes);
-  log("TRACE", "[state] setSelectedShapes() exit");
-}
-
-/**
- * Add a new shape to shapes array.
- * @param {Object} shape
- */
-export function addShape(shape) {
-  log("TRACE", "[state] addShape() entry", shape);
-  dumpShapeDebug(shape, "addShape entry");
-  if (!shape) {
-    log("TRACE", "[state] addShape() exit (no shape)");
-    return;
-  }
-  AppState.shapes.push(shape);
-  notifySubscribers({ type: "addShape", shape });
-  dumpShapeDebug(shape, "addShape after notify");
-  log("DEBUG", "[state] addShape: shape added", shape);
-  log("TRACE", "[state] addShape() exit");
-}
-
-/**
- * Remove a shape from shapes array.
- * @param {Object} shape
- */
-export function removeShape(shape) {
-  log("TRACE", "[state] removeShape() entry", shape);
-  dumpShapeDebug(shape, "removeShape entry");
-  if (!shape) {
-    log("TRACE", "[state] removeShape() exit (no shape)");
-    return;
-  }
-  AppState.shapes = AppState.shapes.filter(s => s !== shape);
-  notifySubscribers({ type: "removeShape", shape });
-  dumpShapeDebug(shape, "removeShape after notify");
-  log("DEBUG", "[state] removeShape: shape removed", shape);
-  log("TRACE", "[state] removeShape() exit");
-}
-
-/**
- * Set the scene name.
- * @param {String} name
- */
-export function setSceneName(name) {
-  log("TRACE", "[state] setSceneName() entry", name);
-  AppState.sceneName = name || '';
-  notifySubscribers({ type: "sceneName", sceneName: AppState.sceneName });
-  log("DEBUG", "[state] setSceneName: sceneName updated", AppState.sceneName);
-  log("TRACE", "[state] setSceneName() exit");
-}
-
-/**
- * Set scene logic ('AND' or 'OR').
- * @param {String} logic
- */
-export function setSceneLogic(logic) {
-  log("TRACE", "[state] setSceneLogic() entry", logic);
-  AppState.sceneLogic = ['AND', 'OR'].includes(logic) ? logic : 'AND';
-  notifySubscribers({ type: "sceneLogic", sceneLogic: AppState.sceneLogic });
-  log("DEBUG", "[state] setSceneLogic: sceneLogic updated", AppState.sceneLogic);
-  log("TRACE", "[state] setSceneLogic() exit");
-}
-
-/**
- * Set the current image URL and object.
- * @param {String} url
- * @param {HTMLImageElement} [imgObj]
- */
-export function setImage(url, imgObj = null) {
-  log("TRACE", "[state] setImage() entry", { url, imgObj });
-  AppState.imageURL = url || null;
-  AppState.imageObj = imgObj || null;
-  notifySubscribers({ type: "image", imageURL: AppState.imageURL, imageObj: AppState.imageObj });
-  log("DEBUG", "[state] setImage: image updated", { url: AppState.imageURL, imgObj: !!AppState.imageObj });
-  log("TRACE", "[state] setImage() exit");
-}
-
-/**
- * Set settings (copy or merge).
- * @param {Object} settingsObj
- */
-export function setSettings(settingsObj) {
-  log("TRACE", "[state] setSettings() entry", settingsObj);
-  AppState.settings = { ...AppState.settings, ...settingsObj };
-  notifySubscribers({ type: "settings", settings: AppState.settings });
-  log("DEBUG", "[state] setSettings: settings updated", AppState.settings);
-  log("TRACE", "[state] setSettings() exit");
-}
-
-/**
- * Set individual setting key/value.
- * @param {String} key
- * @param {*} value
- */
-export function setSetting(key, value) {
-  log("TRACE", "[state] setSetting() entry", { key, value });
-  AppState.settings[key] = value;
-  notifySubscribers({ type: "setting", key, value });
-  log("DEBUG", "[state] setSetting: setting updated", { key, value });
-  log("TRACE", "[state] setSetting() exit");
-}
-
-/**
- * Get setting by key.
- * @param {String} key
- * @returns {*}
- */
-export function getSetting(key) {
-  log("TRACE", "[state] getSetting() entry", { key });
-  const value = AppState.settings[key];
-  log("TRACE", "[state] getSetting() exit", { value });
-  return value;
-}
-
-// --- Self-test log ---
-// (Removed top-level INFO log to avoid logging before settings and log level are loaded.)
-// log("INFO", "[state] state.js module loaded and ready.");
-
-// Optionally attach to window for debugging (remove in production!)
-if (typeof window !== "undefined") {
-  window.AppState = AppState;
-  window.setShapes = setShapes;
-  window.setSelectedShapes = setSelectedShapes;
-  window.addShape = addShape;
-  window.removeShape = removeShape;
-  window.setSceneName = setSceneName;
-  window.setSceneLogic = setSceneLogic;
-  window.setImage = setImage;
-  window.setSettings = setSettings;
-  window.setSetting = setSetting;
-  window.getSetting = getSetting;
-  window.subscribeAppState = subscribe;
 }
 

@@ -1,11 +1,11 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (ESM ONLY)
+ * Scene Designer – Modular Toolbar UI Factory (ESM ONLY, Zustand Refactor)
  * - Factory for all toolbar controls: image upload, server image select, shape type, shape actions.
  * - ES module only, all dependencies imported.
  * - No direct use of window.*, no legacy code.
- * - All logic for image upload and shape creation is routed via state.js and shapes.js.
+ * - All logic for image upload and shape creation is routed via Zustand store and shapes.js.
  * - Logging via log.js at appropriate levels.
  * - MiniLayout compliance: panel factory expects { element, title, componentName } argument.
  * -----------------------------------------------------------
@@ -13,8 +13,14 @@
 
 import { log } from './log.js';
 import { makePointShape, makeRectShape, makeCircleShape, setStrokeWidthForSelectedShapes } from './shapes.js';
-import { addShape, setImage, AppState, removeShape } from './state.js';
-import { setSelectedShapes, selectAllShapes } from './selection.js';
+import {
+  getState,
+  addShape,
+  setImage,
+  removeShape,
+  setSelectedShapes
+} from './state.js';
+import { selectAllShapes } from './selection.js';
 
 /**
  * Build the canvas toolbar panel.
@@ -182,11 +188,12 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     addShapeBtn.addEventListener('click', () => {
       const type = shapeTypeSelect.value;
       let shape = null;
-      const w = AppState.settings?.defaultRectWidth || 50;
-      const h = AppState.settings?.defaultRectHeight || 30;
-      const r = AppState.settings?.defaultCircleRadius || 15;
-      const x = (AppState.settings?.canvasMaxWidth || 600) * ((AppState.settings?.shapeStartXPercent ?? 50) / 100);
-      const y = (AppState.settings?.canvasMaxHeight || 400) * ((AppState.settings?.shapeStartYPercent ?? 50) / 100);
+      const store = getState();
+      const w = store.settings?.defaultRectWidth || 50;
+      const h = store.settings?.defaultRectHeight || 30;
+      const r = store.settings?.defaultCircleRadius || 15;
+      const x = (store.settings?.canvasMaxWidth || 600) * ((store.settings?.shapeStartXPercent ?? 50) / 100);
+      const y = (store.settings?.canvasMaxHeight || 400) * ((store.settings?.shapeStartYPercent ?? 50) / 100);
       if (type === "rect") {
         shape = makeRectShape(x - w / 2, y - h / 2, w, h);
       } else if (type === "circle") {
@@ -206,15 +213,15 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     deleteShapeBtn.addEventListener('click', () => {
       log("INFO", "[toolbar] Delete button clicked");
       // Use direct references. Only delete unlocked shapes currently selected.
-      const selected = (AppState.selectedShapes || []).filter(s => !s.locked);
+      const selected = (getState().selectedShapes || []).filter(s => !s.locked);
       if (!selected.length) {
         log("INFO", "[toolbar] Delete button: No unlocked shapes selected");
         return;
       }
       selected.forEach(shape => {
         removeShape(shape);
-        if (AppState.fabricCanvas) {
-          AppState.fabricCanvas.remove(shape);
+        if (getState().fabricCanvas) {
+          getState().fabricCanvas.remove(shape);
         }
       });
       setSelectedShapes([]);
@@ -257,3 +264,4 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
+

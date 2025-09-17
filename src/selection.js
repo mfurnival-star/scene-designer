@@ -1,7 +1,7 @@
 /**
  * selection.js
  * -----------------------------------------------------------
- * Centralized Shape Selection Logic for Scene Designer (Fabric.js Migration)
+ * Centralized Shape Selection Logic for Scene Designer (Zustand Migration)
  * - Manages single/multi-shape selection state for Fabric.js objects.
  * - Sole authority for transformer lifecycle (attach/detach/update).
  * - Integrates shape state machine (shape-state.js).
@@ -12,13 +12,17 @@
  * -----------------------------------------------------------
  */
 
-import { AppState } from './state.js';
 import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
 import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
 import { getShapeDef } from './shape-defs.js';
-// --- Import fixStrokeWidthAfterTransform from shapes.js ---
 import { fixStrokeWidthAfterTransform } from './shapes.js';
+
+import {
+  sceneDesignerStore,
+  getState,
+  setSelectedShapes as storeSetSelectedShapes
+} from './state.js';
 
 /**
  * Set the currently selected shape (single selection).
@@ -29,25 +33,27 @@ export function setSelectedShape(shape) {
   log("TRACE", "[selection] setSelectedShape ENTRY", {
     incomingShapeType: shape?._type,
     incomingShapeLabel: shape?._label,
-    prevSelectedShapeType: AppState.selectedShape?._type,
-    prevSelectedShapeLabel: AppState.selectedShape?._label
+    prevSelectedShapeType: getState().selectedShape?._type,
+    prevSelectedShapeLabel: getState().selectedShape?._label
   });
 
   // Always deselect previous selection, even if reselecting
-  if (AppState.selectedShape) {
+  if (getState().selectedShape) {
     log("TRACE", "[selection] setSelectedShape - Deselecting previous shape", {
-      prevSelectedShapeType: AppState.selectedShape?._type,
-      prevSelectedShapeLabel: AppState.selectedShape?._label
+      prevSelectedShapeType: getState().selectedShape?._type,
+      prevSelectedShapeLabel: getState().selectedShape?._label
     });
-    deselectShape(AppState.selectedShape);
+    deselectShape(getState().selectedShape);
   }
 
-  AppState.selectedShape = shape;
-  AppState.selectedShapes = shape ? [shape] : [];
+  sceneDesignerStore.setState({
+    selectedShape: shape,
+    selectedShapes: shape ? [shape] : []
+  });
 
-  log("TRACE", "[selection] setSelectedShape - AppState updated", {
-    selectedShapeType: AppState.selectedShape?._type,
-    selectedShapeLabel: AppState.selectedShape?._label
+  log("TRACE", "[selection] setSelectedShape - State updated", {
+    selectedShapeType: getState().selectedShape?._type,
+    selectedShapeLabel: getState().selectedShape?._label
   });
 
   if (shape) {
@@ -64,7 +70,6 @@ export function setSelectedShape(shape) {
       log("TRACE", "[selection] setSelectedShape - Detaching transformer (not editable or locked)", { shapeLabel: shape._label });
       detachTransformer();
     }
-    // --- FIX: Always enforce 1px stroke width after selection ---
     fixStrokeWidthAfterTransform();
   } else {
     log("TRACE", "[selection] setSelectedShape - No shape, detaching transformer");
@@ -83,14 +88,14 @@ export function setSelectedShapes(arr) {
   log("TRACE", "[selection] setSelectedShapes ENTRY", {
     arrTypes: arr && arr.map ? arr.map(s => s?._type) : [],
     arrLabels: arr && arr.map ? arr.map(s => s?._label) : [],
-    prevSelectedShapes: AppState.selectedShapes && AppState.selectedShapes.map ? AppState.selectedShapes.map(s => s?._label) : []
+    prevSelectedShapes: getState().selectedShapes?.map ? getState().selectedShapes.map(s => s?._label) : []
   });
 
   const newArr = Array.isArray(arr) ? arr : [];
 
   // Always deselect previous selection
-  if (AppState.selectedShapes && Array.isArray(AppState.selectedShapes)) {
-    AppState.selectedShapes.forEach(s => {
+  if (getState().selectedShapes && Array.isArray(getState().selectedShapes)) {
+    getState().selectedShapes.forEach(s => {
       if (!newArr.includes(s)) {
         log("TRACE", "[selection] setSelectedShapes - Deselecting shape", { shapeLabel: s?._label });
         deselectShape(s);
@@ -98,12 +103,14 @@ export function setSelectedShapes(arr) {
     });
   }
 
-  AppState.selectedShapes = newArr;
-  AppState.selectedShape = newArr.length === 1 ? newArr[0] : null;
+  sceneDesignerStore.setState({
+    selectedShapes: newArr,
+    selectedShape: newArr.length === 1 ? newArr[0] : null
+  });
 
-  log("TRACE", "[selection] setSelectedShapes - AppState updated", {
-    selectedShapeLabel: AppState.selectedShape?._label,
-    selectedShapesLabels: AppState.selectedShapes.map(s=>s?._label)
+  log("TRACE", "[selection] setSelectedShapes - State updated", {
+    selectedShapeLabel: getState().selectedShape?._label,
+    selectedShapesLabels: getState().selectedShapes.map(s => s?._label)
   });
 
   newArr.forEach((shape, idx) => {
@@ -126,12 +133,10 @@ export function setSelectedShapes(arr) {
       log("TRACE", "[selection] setSelectedShapes - Detaching transformer (not editable)", { shapeLabel: newArr[0]._label });
       detachTransformer();
     }
-    // --- FIX: Always enforce 1px stroke width after selection ---
     fixStrokeWidthAfterTransform();
   } else {
     log("TRACE", "[selection] setSelectedShapes - Detaching transformer (multi/no selection)");
     detachTransformer();
-    // --- FIX: Always enforce 1px stroke width after selection ---
     fixStrokeWidthAfterTransform();
   }
 
@@ -140,11 +145,12 @@ export function setSelectedShapes(arr) {
 }
 
 /**
- * Select all shapes currently in AppState.
+ * Select all shapes currently in state.
  */
 export function selectAllShapes() {
   log("TRACE", "[selection] selectAllShapes ENTRY");
-  setSelectedShapes(AppState.shapes.slice());
+  const allShapes = getState().shapes.slice();
+  setSelectedShapes(allShapes);
   log("TRACE", "[selection] selectAllShapes EXIT");
 }
 
@@ -153,14 +159,17 @@ export function selectAllShapes() {
  */
 export function deselectAll() {
   log("TRACE", "[selection] deselectAll ENTRY");
-  if (AppState.selectedShapes && Array.isArray(AppState.selectedShapes)) {
-    AppState.selectedShapes.forEach(s => {
+  const stateShapes = getState().selectedShapes;
+  if (stateShapes && Array.isArray(stateShapes)) {
+    stateShapes.forEach(s => {
       log("TRACE", "[selection] deselectAll - Deselecting shape", { shapeLabel: s?._label });
       deselectShape(s);
     });
   }
-  AppState.selectedShape = null;
-  AppState.selectedShapes = [];
+  sceneDesignerStore.setState({
+    selectedShape: null,
+    selectedShapes: []
+  });
   detachTransformer();
   notifySelectionChanged();
   log("TRACE", "[selection] deselectAll EXIT");
@@ -171,18 +180,11 @@ export function deselectAll() {
  */
 function notifySelectionChanged() {
   log("TRACE", "[selection] notifySelectionChanged ENTRY", {
-    selectedShapeLabel: AppState.selectedShape?._label,
-    selectedShapesLabels: AppState.selectedShapes.map(s=>s?._label)
+    selectedShapeLabel: getState().selectedShape?._label,
+    selectedShapesLabels: getState().selectedShapes.map(s => s?._label)
   });
-  if (typeof AppState._subscribers === "object" && Array.isArray(AppState._subscribers)) {
-    AppState._subscribers.forEach(fn => {
-      try {
-        fn(AppState, { type: "selection", selectedShape: AppState.selectedShape, selectedShapes: AppState.selectedShapes });
-      } catch (e) {
-        log("ERROR", "[selection] Subscriber error", e);
-      }
-    });
-  }
+  // Zustand store listeners (if any)
+  // (If you want to implement custom listeners, do so here.)
   log("TRACE", "[selection] notifySelectionChanged EXIT");
 }
 
@@ -217,11 +219,11 @@ export function attachSelectionHandlers(shape) {
     // Ctrl/Meta for multi-select toggle
     if (evt.e && (evt.e.ctrlKey || evt.e.metaKey)) {
       log("TRACE", "[selection] mousedown.selection: multi-select toggle", { shapeLabel: shape._label });
-      const idx = AppState.selectedShapes.indexOf(shape);
+      const idx = getState().selectedShapes.indexOf(shape);
       if (idx === -1) {
-        setSelectedShapes([...AppState.selectedShapes, shape]);
+        setSelectedShapes([...getState().selectedShapes, shape]);
       } else {
-        const newArr = AppState.selectedShapes.slice();
+        const newArr = getState().selectedShapes.slice();
         newArr.splice(idx, 1);
         setSelectedShapes(newArr);
       }
@@ -243,7 +245,7 @@ export function attachSelectionHandlers(shape) {
  */
 export function isShapeSelected(shape) {
   log("TRACE", "[selection] isShapeSelected ENTRY", { shapeLabel: shape?._label });
-  const result = !!shape && AppState.selectedShapes.includes(shape);
+  const result = !!shape && getState().selectedShapes.includes(shape);
   log("TRACE", "[selection] isShapeSelected EXIT", { result });
   return result;
 }
@@ -254,7 +256,7 @@ export function isShapeSelected(shape) {
  */
 export function getSelectedShapes() {
   log("TRACE", "[selection] getSelectedShapes ENTRY");
-  const arr = AppState.selectedShapes;
+  const arr = getState().selectedShapes;
   log("TRACE", "[selection] getSelectedShapes EXIT", { arr });
   return arr;
 }
@@ -265,7 +267,7 @@ export function getSelectedShapes() {
  */
 export function getSelectedShape() {
   log("TRACE", "[selection] getSelectedShape ENTRY");
-  const s = AppState.selectedShape;
+  const s = getState().selectedShape;
   log("TRACE", "[selection] getSelectedShape EXIT", { s });
   return s;
 }

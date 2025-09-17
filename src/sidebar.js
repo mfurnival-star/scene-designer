@@ -1,12 +1,12 @@
 /**
  * sidebar.js
  * -----------------------------------------------------------
- * Shape Table/List Panel for Scene Designer (Fabric.js Migration, Deep TRACE Logging, Tabulator v6.x)
+ * Shape Table/List Panel for Scene Designer (Fabric.js, Zustand Migration, Tabulator v6.x)
  * - Tabulator-based shape table (ESM only, no globals).
- * - Displays a live-updating table of all shapes in AppState.shapes (Fabric.js objects).
+ * - Displays a live-updating table of all shapes in store.shapes (Fabric.js objects).
  * - Columns: Label, Type, X, Y, W, H, Lock status.
  * - Clicking a row selects the corresponding shape (single selection for now).
- * - All state via AppState.
+ * - All state via Zustand store.
  * - Logging via log.js.
  * - TRACE-level logging for all key entry/exit, table update, selection, and row events.
  * - Refactored for Tabulator v6.x (Full build), with proper row selection API.
@@ -14,23 +14,29 @@
  * -----------------------------------------------------------
  */
 
-import { AppState, subscribe } from './state.js';
-import { setSelectedShape } from './selection.js';
+import {
+  getState,
+  setSelectedShape,
+  sceneDesignerStore,
+} from './state.js';
 import { log } from './log.js';
 import { TabulatorFull as Tabulator } from 'tabulator-tables';
 
 /**
- * Utility: Dump AppState.shapes array for diagnostics.
+ * Utility: Dump store.shapes array for diagnostics.
  */
-function dumpAppStateShapes(tag = "") {
-  log("TRACE", `[sidebar][${tag}] AppState.shapes:`, 
-    Array.isArray(AppState.shapes) ? AppState.shapes.map((s,i)=>({
-      idx: i,
-      type: s?._type,
-      label: s?._label,
-      id: s?._id,
-      locked: s?.locked
-    })) : AppState.shapes
+function dumpShapeStore(tag = "") {
+  const shapes = getState().shapes;
+  log("TRACE", `[sidebar][${tag}] store.shapes:`,
+    Array.isArray(shapes)
+      ? shapes.map((s, i) => ({
+          idx: i,
+          type: s?._type,
+          label: s?._label,
+          id: s?._id,
+          locked: s?.locked
+        }))
+      : shapes
   );
 }
 
@@ -123,20 +129,20 @@ export function buildSidebarPanel({ element, title, componentName }) {
           eventType: e.type,
           idx: row.getData().idx,
           id: row.getData().id,
-          shape: AppState.shapes[row.getData().idx],
+          shape: getState().shapes[row.getData().idx],
           rowData: row.getData()
         });
-        dumpAppStateShapes("rowClick");
+        dumpShapeStore("rowClick");
         const idx = row.getData().idx;
-        if (AppState.shapes[idx]) {
-          setSelectedShape(AppState.shapes[idx]);
+        if (getState().shapes[idx]) {
+          setSelectedShape(getState().shapes[idx]);
           log("INFO", "[sidebar] Shape selected via rowClick", {
-            selectedShapeLabel: AppState.shapes[idx]._label,
-            selectedShapeType: AppState.shapes[idx]._type,
-            id: AppState.shapes[idx]._id
+            selectedShapeLabel: getState().shapes[idx]._label,
+            selectedShapeType: getState().shapes[idx]._type,
+            id: getState().shapes[idx]._id
           });
         } else {
-          log("WARN", "[sidebar] rowClick: No shape found at idx", { idx, shape: AppState.shapes[idx] });
+          log("WARN", "[sidebar] rowClick: No shape found at idx", { idx, shape: getState().shapes[idx] });
         }
       }
     });
@@ -144,14 +150,14 @@ export function buildSidebarPanel({ element, title, componentName }) {
     // --- Robust updateTable: syncs selection and shape rows ---
     const updateTable = () => {
       log("TRACE", "[sidebar] updateTable ENTRY");
-      dumpAppStateShapes("updateTable-top");
-      const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
+      dumpShapeStore("updateTable-top");
+      const data = (getState().shapes || []).map((s, i) => shapeToRow(s, i));
       log("DEBUG", "[sidebar] updateTable: computed table data", { data });
       tabulator.replaceData(data);
 
       // Selection sync: ensure selected row is highlighted
-      if (AppState.selectedShape) {
-        const selectedShape = AppState.selectedShape;
+      if (getState().selectedShape) {
+        const selectedShape = getState().selectedShape;
         let foundRow = null;
         // Try to find row by unique id
         if (selectedShape._id) {
@@ -159,7 +165,7 @@ export function buildSidebarPanel({ element, title, componentName }) {
         }
         // Fallback: try by idx
         if (!foundRow) {
-          const selIdx = AppState.shapes.indexOf(selectedShape);
+          const selIdx = getState().shapes.indexOf(selectedShape);
           let rows = tabulator.getRows ? tabulator.getRows() : [];
           foundRow = rows[selIdx];
         }
@@ -183,16 +189,16 @@ export function buildSidebarPanel({ element, title, componentName }) {
         });
         log("DEBUG", "[sidebar] updateTable: All rows deselected");
       }
-      dumpAppStateShapes("updateTable-bottom");
+      dumpShapeStore("updateTable-bottom");
       log("TRACE", "[sidebar] updateTable EXIT");
     };
 
     tabulator.on("tableBuilt", () => {
       log("TRACE", "[sidebar] Tabulator tableBuilt event");
-      dumpAppStateShapes("tableBuilt");
+      dumpShapeStore("tableBuilt");
       updateTable();
       // Subscribe after built to avoid early calls
-      var unsub = subscribe(updateTable);
+      var unsub = sceneDesignerStore.subscribe(updateTable);
       log("TRACE", "[sidebar] subscribe() after tableBuilt", { unsub });
       // Clean up on destroy
       // MiniLayout: container may provide an on("destroy") API for panel cleanup.

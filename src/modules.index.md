@@ -13,6 +13,7 @@ shapes.js
 transformer.js
 shape-state.js
 shape-defs.js
+sidebar.js
 minilayout.js
 minilayout-ui.js
 minilayout.demo.js
@@ -77,6 +78,10 @@ minilayout.DOCS.md
   - All shape types and their edit/transform properties in one place.
   - Used by transformer.js, shapes.js, canvas.js, etc.
   - Easy to extend for new shape types or features.
+
+- **sidebar.js**  
+  Tabulator-based shape table/list panel.  
+  Displays all shapes, supports row selection, robust sync with AppState.
 
 - **minilayout.js**  
   Native layout manager: robust row/column/stack API, dynamic add/remove/reinsert, close/destroy, resize, splitter support, tab/stack, settings sync, full event API.

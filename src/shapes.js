@@ -1,8 +1,8 @@
 /**
  * shapes.js
  * -----------------------------------------------------------
- * Scene Designer – Shape Factory Module (Fabric.js Migration, ESM ONLY)
- * - Centralizes all Fabric.js shape construction and event attachment.
+ * Scene Designer – Shape Factory Module (Fabric.js Migration, Zustand Refactor, ESM ONLY)
+ * - Centralizes all Fabric.js shape construction, event attachment, and per-shape config.
  * - Exports: makePointShape, makeRectShape, makeCircleShape, fixStrokeWidthAfterTransform.
  * - Every shape/group gets a unique _id at creation for sidebar/selection robustness.
  * - All shapes have selection event handlers from selection.js and shape-state.js.
@@ -10,16 +10,20 @@
  * - No global variables, no window.* usage.
  * - Logging via log.js (DEEP TRACE logging for creation and handler attachment).
  * - Stroke width: always stays at 1px regardless of scaling or transform.
- * - Helper for setting line width (for future UI, defaults to 1px).
  * -----------------------------------------------------------
  */
 
 import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
-
 import { log } from './log.js';
 import { attachSelectionHandlers } from './selection.js';
 import { setShapeState } from './shape-state.js';
-import { AppState, removeShape } from './state.js';
+import {
+  getState,
+  setShapes,
+  setSelectedShapes,
+  addShape,
+  removeShape
+} from './state.js';
 
 // Default stroke width for all shapes
 let currentStrokeWidth = 1;
@@ -32,10 +36,10 @@ let currentStrokeWidth = 1;
 export function setStrokeWidthForSelectedShapes(width = 1) {
   log("DEBUG", "[shapes] setStrokeWidthForSelectedShapes", { width });
   currentStrokeWidth = width;
-  (AppState.selectedShapes || []).forEach(shape => {
+  (getState().selectedShapes || []).forEach(shape => {
     setShapeStrokeWidth(shape, width);
   });
-  if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+  if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
 }
 
 /**
@@ -44,10 +48,10 @@ export function setStrokeWidthForSelectedShapes(width = 1) {
  */
 export function fixStrokeWidthAfterTransform() {
   log("DEBUG", "[shapes] fixStrokeWidthAfterTransform called");
-  (AppState.selectedShapes || []).forEach(shape => {
+  (getState().selectedShapes || []).forEach(shape => {
     setShapeStrokeWidth(shape, 1);
   });
-  if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+  if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
 }
 
 /**
@@ -73,11 +77,12 @@ export function makePointShape(x, y) {
   log("TRACE", "[shapes] makePointShape ENTRY", { x, y });
 
   // Settings for point visuals
-  const hitRadius = AppState.settings?.pointHitRadius ?? 16;
-  const haloRadius = AppState.settings?.pointHaloRadius ?? 12;
-  const crossLen = AppState.settings?.pointCrossLen ?? 14;
-  const strokeColor = AppState.settings?.defaultStrokeColor ?? '#2176ff';
-  const fillColor = AppState.settings?.defaultFillColor ?? '#00000000';
+  const settings = getState().settings || {};
+  const hitRadius = settings.pointHitRadius ?? 16;
+  const haloRadius = settings.pointHaloRadius ?? 12;
+  const crossLen = settings.pointCrossLen ?? 14;
+  const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
+  const fillColor = settings.defaultFillColor ?? '#00000000';
 
   log("TRACE", "[shapes] makePointShape settings", {
     hitRadius, haloRadius, crossLen, strokeColor, fillColor
@@ -140,7 +145,7 @@ export function makePointShape(x, y) {
   // Listen for transform events and forcibly reset strokeWidth to 1px
   pointGroup.on("modified", () => {
     setShapeStrokeWidth(pointGroup, 1);
-    if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+    if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
   });
 
   log("TRACE", "[shapes] makePointShape: after attachSelectionHandlers", {
@@ -166,8 +171,9 @@ export function makeRectShape(x, y, w, h) {
   log("TRACE", "[shapes] makeRectShape ENTRY", { x, y, w, h });
 
   // Read settings for rect shape defaults
-  const strokeColor = AppState.settings?.defaultStrokeColor ?? '#2176ff';
-  const fillColor = AppState.settings?.defaultFillColor ?? '#00000000';
+  const settings = getState().settings || {};
+  const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
+  const fillColor = settings.defaultFillColor ?? '#00000000';
 
   log("TRACE", "[shapes] makeRectShape settings", {
     strokeColor, fillColor
@@ -199,7 +205,7 @@ export function makeRectShape(x, y, w, h) {
   // Listen for transform events and forcibly reset strokeWidth to 1px
   rect.on("modified", () => {
     setShapeStrokeWidth(rect, 1);
-    if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+    if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
   });
 
   log("TRACE", "[shapes] makeRectShape: after attachSelectionHandlers", {
@@ -225,8 +231,9 @@ export function makeCircleShape(x, y, r) {
   log("TRACE", "[shapes] makeCircleShape ENTRY", { x, y, r });
 
   // Read settings for circle shape defaults
-  const strokeColor = AppState.settings?.defaultStrokeColor ?? '#2176ff';
-  const fillColor = AppState.settings?.defaultFillColor ?? '#00000000';
+  const settings = getState().settings || {};
+  const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
+  const fillColor = settings.defaultFillColor ?? '#00000000';
 
   log("TRACE", "[shapes] makeCircleShape settings", {
     strokeColor, fillColor
@@ -257,7 +264,7 @@ export function makeCircleShape(x, y, r) {
   // Listen for transform events and forcibly reset strokeWidth to 1px
   circle.on("modified", () => {
     setShapeStrokeWidth(circle, 1);
-    if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+    if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
   });
 
   log("TRACE", "[shapes] makeCircleShape: after attachSelectionHandlers", {

@@ -1,9 +1,10 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Fabric.js Panel (Fabric.js Migration, MiniLayout Panel)
+ * Scene Designer – Canvas/Fabric.js Panel (Fabric.js Migration, MiniLayout Panel, Zustand Refactor)
  * - Fabric.js canvas creation, image background, shape management.
  * - All logic is ES module only, no window/global access.
+ * - State is managed via Zustand store from state.js.
  * - Exports: buildCanvasPanel({ element, title, componentName })
  * - Panel factory for MiniLayout; renders the main canvas panel.
  * - Logging via log.js at TRACE/DEBUG/INFO.
@@ -12,7 +13,17 @@
  */
 
 import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
-import { AppState, setShapes, addShape, removeShape, setImage, setSelectedShapes, subscribe } from './state.js';
+import {
+  getState,
+  setShapes,
+  addShape,
+  removeShape,
+  setImage,
+  setSelectedShapes,
+  setFabricCanvas,
+  setBgFabricImage,
+  sceneDesignerStore,
+} from './state.js';
 import { log } from './log.js';
 import { attachSelectionHandlers } from './selection.js';
 import { setShapeState, selectShape, deselectShape } from './shape-state.js';
@@ -21,18 +32,19 @@ import { setShapeState, selectShape, deselectShape } from './shape-state.js';
  * Move all shapes above the background image (index 0).
  */
 function moveShapesToFront() {
-  if (!AppState.fabricCanvas) return;
-  const objs = AppState.fabricCanvas.getObjects();
+  const store = getState();
+  if (!store.fabricCanvas) return;
+  const objs = store.fabricCanvas.getObjects();
   if (!objs.length) return;
   // Find bg image (should be at index 0)
-  const bgImg = AppState.bgFabricImage;
+  const bgImg = store.bgFabricImage;
   objs.forEach((obj) => {
     if (obj !== bgImg) {
       // Move all non-image shapes to the top (after bg image)
-      obj.moveTo(AppState.fabricCanvas.getObjects().length - 1);
+      obj.moveTo(store.fabricCanvas.getObjects().length - 1);
     }
   });
-  AppState.fabricCanvas.renderAll();
+  store.fabricCanvas.renderAll();
 }
 
 /**
@@ -43,22 +55,23 @@ function moveShapesToFront() {
  */
 function updateBackgroundImage(containerDiv, element) {
   log("TRACE", "[canvas] updateBackgroundImage ENTRY");
-  const canvas = AppState.fabricCanvas;
+  const store = getState();
+  const canvas = store.fabricCanvas;
   if (!canvas) {
     log("TRACE", "[canvas] updateBackgroundImage EXIT (no canvas)");
     return;
   }
   // Remove previous background image if present
-  if (AppState.bgFabricImage) {
-    canvas.remove(AppState.bgFabricImage);
-    AppState.bgFabricImage = null;
+  if (store.bgFabricImage) {
+    canvas.remove(store.bgFabricImage);
+    setBgFabricImage(null);
     canvas.renderAll();
     log("DEBUG", "[canvas] updateBackgroundImage: old image removed");
   }
-  if (AppState.imageObj) {
-    const imgObj = AppState.imageObj;
+  if (store.imageObj) {
+    const imgObj = store.imageObj;
     log("TRACE", "[canvas] updateBackgroundImage: loading new image", { imgObj });
-    Image.fromURL(imgObj.src || AppState.imageURL, function(img) {
+    Image.fromURL(imgObj.src || store.imageURL, function(img) {
       img.set({
         left: 0,
         top: 0,
@@ -79,7 +92,7 @@ function updateBackgroundImage(containerDiv, element) {
         element.style.width = "100%";
         element.style.height = "100%";
       }
-      AppState.bgFabricImage = img;
+      setBgFabricImage(img);
       canvas.add(img);
       img.moveTo(0); // send to bottom (index 0)
       // After adding the image, move all shapes above it
@@ -112,14 +125,15 @@ export function buildCanvasPanel({ element, title, componentName }) {
     });
 
     // Destroy previous canvas if present
-    if (AppState.fabricCanvas && typeof AppState.fabricCanvas.dispose === "function") {
-      AppState.fabricCanvas.dispose();
+    const store = getState();
+    if (store.fabricCanvas && typeof store.fabricCanvas.dispose === "function") {
+      store.fabricCanvas.dispose();
       log("DEBUG", "[canvas] buildCanvasPanel: previous canvas disposed");
     }
 
     // Use default width/height for initial render (will resize to image when image loads)
-    const width = AppState.settings?.canvasMaxWidth || 600;
-    const height = AppState.settings?.canvasMaxHeight || 400;
+    const width = store.settings?.canvasMaxWidth || 600;
+    const height = store.settings?.canvasMaxHeight || 400;
 
     // --- Create a <div> container for Fabric.js canvas, with overflow: auto for scrollbars ---
     const containerDiv = document.createElement('div');
@@ -151,16 +165,16 @@ export function buildCanvasPanel({ element, title, componentName }) {
       selection: true,
       backgroundColor: "#f7f9fc"
     });
-    AppState.fabricCanvas = canvas;
+    setFabricCanvas(canvas);
     log("DEBUG", "[canvas] buildCanvasPanel: Fabric.js canvas created", { width, height });
 
     // --- Unselect shapes by clicking on empty background ---
     canvas.on("mouse:down", function(e) {
       log("TRACE", "[canvas] mouse:down handler FIRED", { event: e });
       if (!e.target) {
-        AppState.selectedShapes.forEach(deselectShape);
+        getState().selectedShapes.forEach(deselectShape);
         setSelectedShapes([]);
-        (AppState.shapes || []).forEach(s => {
+        (getState().shapes || []).forEach(s => {
           attachSelectionHandlers(s);
         });
         log("DEBUG", "[canvas] mouse:down: all shapes deselected");
@@ -169,16 +183,17 @@ export function buildCanvasPanel({ element, title, componentName }) {
 
     // --- Sync shapes on canvas panel creation ---
     log("TRACE", "[canvas] buildCanvasPanel: Syncing shapes on init");
-    if (Array.isArray(AppState.shapes) && AppState.shapes.length > 0) {
+    const shapes = getState().shapes;
+    if (Array.isArray(shapes) && shapes.length > 0) {
       log("DEBUG", "[canvas] Syncing existing shapes to canvas on panel build");
-      AppState.shapes.forEach((shape, idx) => {
+      shapes.forEach((shape, idx) => {
         log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} sync`, {
           type: shape?._type,
           label: shape?._label,
           id: shape?._id
         });
-        if (AppState.fabricCanvas && !AppState.fabricCanvas.getObjects().includes(shape)) {
-          AppState.fabricCanvas.add(shape);
+        if (getState().fabricCanvas && !getState().fabricCanvas.getObjects().includes(shape)) {
+          getState().fabricCanvas.add(shape);
           attachSelectionHandlers(shape);
           // Move shape above bg image if present
           moveShapesToFront();
@@ -195,75 +210,46 @@ export function buildCanvasPanel({ element, title, componentName }) {
           });
         }
       });
-      AppState.fabricCanvas.renderAll();
+      getState().fabricCanvas.renderAll();
       log("TRACE", "[canvas] buildCanvasPanel: All shapes rendered");
     } else {
       log("DEBUG", "[canvas] buildCanvasPanel: No shapes to sync on init");
     }
 
-    // Subscribe to AppState for image and shape changes
-    log("TRACE", "[canvas] Subscribing to AppState changes");
-    subscribe((state, details) => {
-      log("TRACE", "[canvas] subscriber callback FIRED", { state, details });
-      if (details && details.type === "image") {
-        log("DEBUG", "[canvas] subscriber: image change detected", { details });
+    // Subscribe to store for image and shape changes
+    log("TRACE", "[canvas] Subscribing to store state changes");
+    sceneDesignerStore.subscribe(() => {
+      const state = getState();
+      // Image change
+      if (state.imageObj || state.imageURL) {
         updateBackgroundImage(containerDiv, element);
       }
-      if (details && details.type === "addShape" && details.shape) {
-        log("DEBUG", "[canvas] subscriber: addShape detected", {
-          type: details.shape?._type,
-          label: details.shape?._label,
-          id: details.shape?._id
-        });
-        if (AppState.fabricCanvas && !AppState.fabricCanvas.getObjects().includes(details.shape)) {
-          AppState.fabricCanvas.add(details.shape);
-          // Move shape above bg image if present
+      // Add shapes
+      const canvasShapes = state.fabricCanvas?.getObjects() || [];
+      const stateShapes = state.shapes || [];
+      stateShapes.forEach(shape => {
+        if (state.fabricCanvas && !canvasShapes.includes(shape)) {
+          state.fabricCanvas.add(shape);
+          attachSelectionHandlers(shape);
           moveShapesToFront();
-          AppState.fabricCanvas.renderAll();
-          attachSelectionHandlers(details.shape);
-          log("DEBUG", "[canvas] addShape: shape added to canvas", {
-            type: details.shape?._type,
-            label: details.shape?._label,
-            id: details.shape?._id
-          });
-        } else {
-          log("WARN", "[canvas] addShape: Shape already on canvas or canvas missing", {
-            type: details.shape?._type,
-            label: details.shape?._label,
-            id: details.shape?._id
+          log("TRACE", "[canvas] subscribe: shape added to canvas", {
+            type: shape?._type,
+            label: shape?._label,
+            id: shape?._id
           });
         }
-      }
-      if (details && details.type === "removeShape" && details.shape) {
-        log("DEBUG", "[canvas] subscriber: removeShape detected", {
-          type: details.shape?._type,
-          label: details.shape?._label,
-          id: details.shape?._id
-        });
-        if (AppState.fabricCanvas && AppState.fabricCanvas.getObjects().includes(details.shape)) {
-          AppState.fabricCanvas.remove(details.shape);
-          AppState.fabricCanvas.renderAll();
-          log("DEBUG", "[canvas] removeShape: shape removed from canvas", {
-            type: details.shape?._type,
-            label: details.shape?._label,
-            id: details.shape?._id
-          });
-        } else {
-          log("WARN", "[canvas] removeShape: Shape not found on canvas", {
-            type: details.shape?._type,
-            label: details.shape?._label,
-            id: details.shape?._id
-          });
+      });
+      // Remove shapes
+      canvasShapes.forEach(obj => {
+        if (!stateShapes.includes(obj) && obj !== state.bgFabricImage) {
+          state.fabricCanvas.remove(obj);
         }
-      }
-      if (details && details.type === "selection") {
-        log("DEBUG", "[canvas] subscriber: selection change detected", { details });
-        AppState.fabricCanvas.renderAll();
-      }
+      });
+      state.fabricCanvas?.renderAll();
     });
 
-    if (AppState.imageObj) {
-      log("TRACE", "[canvas] buildCanvasPanel: AppState.imageObj present, loading background image");
+    if (getState().imageObj) {
+      log("TRACE", "[canvas] buildCanvasPanel: imageObj present, loading background image");
       updateBackgroundImage(containerDiv, element);
     }
 
