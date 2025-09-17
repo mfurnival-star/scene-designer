@@ -1,35 +1,42 @@
 /**
  * minilayout.js
  * -----------------------------------------------------------
- * Scene Designer – Minimal Layout Engine (Golden Layout v3 API Shim)
- * - Implements a minimal column/row/panel system with Golden Layout v3–compatible API.
- * - ES module only, no global/window usage.
- * - Panels are rendered as flexbox divs, with nesting for row/column.
- * - Supports: columns, rows, component panels, panel titles, expand/collapse (show/hide) per panel.
- * - Panel factories use { element, title, componentName } just like Golden Layout v3.
- * - No drag/drop, resize, or stack logic (add later).
- * - Can be replaced by real Golden Layout v3 with minimal changes.
+ * Scene Designer – MiniLayout Engine (GL-inspired, splitters/draggable resize, compact neutral greys, fullscreen-safe)
+ * - Minimal ES module layout engine for Scene Designer prototypes.
+ * - Supports: rows, columns, stacks (tabs), component panels, flexible header config.
+ * - GL-inspired: neutral greys, compact headers, optional close button per panel, header "tab" effect.
+ * - Panel header: sticks out as a "tab" with rounded top corners.
+ * - Panel config: { closable: true/false }, { headerHeight }, { headerFontSize }
+ * - All code is ES module only; no global/window usage.
  * - Logging via log.js.
+ * - Splitter bars between columns/rows, drag-to-resize enabled (vertical and horizontal).
+ * - Fixes overflow: no scrollbars on fullscreen, all borders/margins included in sizing.
  * -----------------------------------------------------------
+ * Exports: MiniLayout
+ * Dependencies: log.js
  */
 
 import { log } from './log.js';
 
+// Helper: Deep clone config object (to avoid mutation)
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
 /**
- * Minimal Layout Engine (Golden Layout v3 API)
+ * MiniLayout – GL-inspired layout engine with neutral grey UI & configurable panel headers
  */
 export class MiniLayout {
   /**
-   * @param {Object} config - GL v3-style config object
+   * @param {Object} config - Layout config (rows/columns/components/stacks)
    * @param {HTMLElement} containerElement - Root DOM node to render layout into
    */
   constructor(config, containerElement) {
     log("INFO", "[minilayout] MiniLayout constructor called", { config, containerElement });
-    this.config = config;
+    this.config = deepClone(config);
     this.containerElement = containerElement;
     this._componentFactories = {};
     this._panelRefs = [];
-    this.rootItem = null;
     this._destroyed = false;
   }
 
@@ -53,12 +60,23 @@ export class MiniLayout {
       return;
     }
     this.containerElement.innerHTML = "";
+    this._panelRefs = [];
+    // Ensure the root container is fullscreen and overflow-hidden
+    this.containerElement.style.position = "fixed";
+    this.containerElement.style.top = "0";
+    this.containerElement.style.left = "0";
+    this.containerElement.style.width = "100vw";
+    this.containerElement.style.height = "100vh";
+    this.containerElement.style.overflow = "hidden";
+    this.containerElement.style.margin = "0";
+    this.containerElement.style.padding = "0";
+    this.containerElement.style.boxSizing = "border-box";
     this.rootItem = this._buildItem(this.config.root, this.containerElement, null);
     log("INFO", "[minilayout] Layout initialized");
   }
 
   /**
-   * Internal: Recursively build row/column/component nodes.
+   * Internal: Recursively build row/column/stack/component nodes.
    * @param {Object} node
    * @param {HTMLElement} parentEl
    * @param {Object|null} parentItem
@@ -68,71 +86,139 @@ export class MiniLayout {
     if (!node) return null;
     let item = { config: node, parent: parentItem };
     let el = document.createElement("div");
-    el.className = "minilayout-panel";
 
     // Row/column logic
-    if (node.type === "row") {
+    if (node.type === "row" || node.type === "column") {
+      el.className = "minilayout-panel";
       el.style.display = "flex";
-      el.style.flexDirection = "row";
-      el.style.width = "100%";
+      el.style.flexDirection = node.type === "row" ? "row" : "column";
+      el.style.width = node.width ? node.width + "%" : "100%";
       el.style.height = node.height ? node.height + "%" : "100%";
       el.style.flex = node.width ? `0 0 ${node.width}%` : "1 1 0";
+      el.style.margin = "0";
+      el.style.padding = "0";
+      el.style.boxSizing = "border-box";
+      // Children
+      const children = [];
       if (node.content && Array.isArray(node.content)) {
-        node.content.forEach(child =>
-          this._buildItem(child, el, item)
-        );
+        node.content.forEach((child, idx) => {
+          // Insert splitter bar between children except before the first
+          if (idx > 0) {
+            const splitter = this._makeSplitter(node.type, el);
+            el.appendChild(splitter);
+            children.push(splitter);
+          }
+          const childItem = this._buildItem(child, el, item);
+          children.push(childItem.element);
+        });
       }
-    } else if (node.type === "column") {
+    } else if (node.type === "stack") {
+      // Stack: tabbed panels
+      el.className = "minilayout-panel-stack";
       el.style.display = "flex";
       el.style.flexDirection = "column";
-      el.style.height = "100%";
       el.style.width = node.width ? node.width + "%" : "100%";
-      el.style.flex = node.height ? `0 0 ${node.height}%` : "1 1 0";
-      if (node.content && Array.isArray(node.content)) {
-        node.content.forEach(child =>
-          this._buildItem(child, el, item)
-        );
-      }
+      el.style.height = node.height ? node.height + "%" : "100%";
+      el.style.flex = node.width ? `0 0 ${node.width}%` : "1 1 0";
+      el.style.margin = "0";
+      el.style.padding = "0";
+      el.style.boxSizing = "border-box";
+      // Tab bar
+      const tabbar = document.createElement("div");
+      tabbar.className = "minilayout-tabbar";
+      let activeIdx = 0;
+      const panels = [];
+      node.content.forEach((tabNode, idx) => {
+        const tabBtn = document.createElement("button");
+        tabBtn.className = "minilayout-tabbtn";
+        tabBtn.textContent = tabNode.title || tabNode.componentName || `Tab ${idx+1}`;
+        tabBtn.setAttribute("aria-selected", idx === activeIdx ? "true" : "false");
+        tabBtn.addEventListener("click", () => {
+          panels.forEach((p, i) => p.style.display = i === idx ? "flex" : "none");
+          Array.from(tabbar.children).forEach((btn, i) => btn.setAttribute("aria-selected", i === idx ? "true" : "false"));
+        });
+        tabbar.appendChild(tabBtn);
+      });
+      el.appendChild(tabbar);
+      // Tab panels
+      node.content.forEach((tabNode, idx) => {
+        const tabPanel = document.createElement("div");
+        tabPanel.style.display = idx === activeIdx ? "flex" : "none";
+        tabPanel.style.flex = "1 1 0";
+        this._buildItem(tabNode, tabPanel, item);
+        el.appendChild(tabPanel);
+        panels.push(tabPanel);
+      });
     } else if (node.type === "component") {
-      el.className += " minilayout-panel-component";
+      el.className = "minilayout-panel minilayout-panel-component";
       el.style.flex = node.height
         ? `0 0 ${node.height}%`
         : node.width
         ? `0 0 ${node.width}%`
         : "1 1 0";
+      el.style.margin = "0";
+      el.style.padding = "0";
+      el.style.boxSizing = "border-box";
 
-      // --- Panel header with title and toggle ---
+      // --- Panel header with GL-like "tab" style, optional close button ---
       const header = document.createElement("div");
       header.className = "minilayout-panel-header";
-      header.style.background = "#e9f1ff";
-      header.style.padding = "4px 8px";
+      header.style.setProperty("--header-height", node.headerHeight ? node.headerHeight + "px" : "28px");
+      header.style.fontSize = node.headerFontSize ?? "0.96em";
+
+      // Panel "tab" effect: slightly protruding, rounded top corners
+      header.style.position = "relative";
+      header.style.top = "-2px";
+      header.style.left = "-2px";
+      header.style.marginRight = "-2px";
+      header.style.marginLeft = "-2px";
+      header.style.borderRadius = "7px 7px 0 0";
+      header.style.borderBottom = "1.5px solid #bbb";
+      header.style.boxShadow = "0 1.5px 4px -2px #aaa";
+      header.style.background = node.headerBg ?? "linear-gradient(180deg, #e0e0e0 0%, #d2d2d2 100%)";
       header.style.fontWeight = "bold";
       header.style.display = "flex";
       header.style.alignItems = "center";
-      header.style.justifyContent = "space-between";
-      header.style.borderBottom = "1px solid #d3e2f9";
+      header.style.justifyContent = "flex-start";
+      header.style.gap = "10px";
+      header.style.height = "var(--header-height)";
+      header.style.padding = "2px 10px 2px 10px";
 
-      const titleSpan = document.createElement("span");
-      titleSpan.textContent = node.title || node.componentName || "Panel";
-      header.appendChild(titleSpan);
+      // Title/tag (sticks out to left)
+      const titleTag = document.createElement("span");
+      titleTag.className = "minilayout-panel-title";
+      titleTag.textContent = node.title || node.componentName || "Panel";
+      titleTag.style.fontWeight = "bold";
+      titleTag.style.fontSize = "inherit";
+      titleTag.style.color = "#444";
+      titleTag.style.flex = "1 1 auto";
+      titleTag.style.overflow = "hidden";
+      titleTag.style.whiteSpace = "nowrap";
+      titleTag.style.textOverflow = "ellipsis";
+      titleTag.style.userSelect = "none";
+      header.appendChild(titleTag);
 
-      const toggleBtn = document.createElement("button");
-      toggleBtn.textContent = "⯈";
-      toggleBtn.title = "Expand/collapse panel";
-      toggleBtn.style.fontSize = "1.1em";
-      toggleBtn.style.background = "none";
-      toggleBtn.style.border = "none";
-      toggleBtn.style.cursor = "pointer";
-      toggleBtn.style.marginLeft = "8px";
-      header.appendChild(toggleBtn);
-
-      let collapsed = false;
-      toggleBtn.addEventListener("click", () => {
-        collapsed = !collapsed;
-        bodyDiv.style.display = collapsed ? "none" : "block";
-        toggleBtn.textContent = collapsed ? "⯆" : "⯈";
-        log("INFO", "[minilayout] Panel toggled", { title: node.title, collapsed });
-      });
+      // --- Optional close "x" button (right side, only if closable) ---
+      let showClose = node.closable === true;
+      if (showClose) {
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "minilayout-panel-close-btn";
+        closeBtn.title = "Close panel";
+        closeBtn.style.border = "none";
+        closeBtn.style.background = "none";
+        closeBtn.style.color = "#888";
+        closeBtn.style.fontSize = "1em";
+        closeBtn.style.marginLeft = "6px";
+        closeBtn.style.padding = "0 6px";
+        closeBtn.style.cursor = "pointer";
+        closeBtn.style.borderRadius = "4px";
+        closeBtn.innerHTML = `<span aria-label="Close" style="font-size:1.13em; font-weight:bold;">&#x2715;</span>`;
+        closeBtn.addEventListener("click", () => {
+          log("INFO", "[minilayout] Panel close button clicked", { title: node.title, componentName: node.componentName });
+          el.remove();
+        });
+        header.appendChild(closeBtn);
+      }
 
       el.appendChild(header);
 
@@ -142,12 +228,12 @@ export class MiniLayout {
       bodyDiv.style.flex = "1 1 0";
       bodyDiv.style.height = "100%";
       bodyDiv.style.overflow = "auto";
-      bodyDiv.style.background = "#fff";
+      bodyDiv.style.background = node.bodyBg ?? "#f3f3f3";
       bodyDiv.style.padding = "0";
 
       el.appendChild(bodyDiv);
 
-      // Call factory function, pass bodyDiv (matches GL v3 API)
+      // Call factory function, pass bodyDiv + panel info
       let factory = this._componentFactories[node.componentName];
       if (typeof factory === "function") {
         try {
@@ -173,9 +259,9 @@ export class MiniLayout {
       el.style.position = "absolute";
       el.style.top = "0";
       el.style.left = "0";
-      el.style.width = "100%";
-      el.style.height = "100%";
-      el.style.background = "#f7f9fc";
+      el.style.width = "100vw";
+      el.style.height = "100vh";
+      el.style.background = "#ededed";
       el.style.overflow = "hidden";
       el.style.display = "flex";
     }
@@ -183,6 +269,89 @@ export class MiniLayout {
     parentEl.appendChild(el);
     item.element = el;
     return item;
+  }
+
+  /**
+   * Create a splitter bar for rows/columns. Vertical (between columns), horizontal (between rows).
+   */
+  _makeSplitter(type, parentEl) {
+    const splitter = document.createElement("div");
+    splitter.className = "minilayout-splitter";
+    splitter.style.background = "#d2d2d2";
+    splitter.style.position = "relative";
+    splitter.style.zIndex = "10";
+    splitter.style.userSelect = "none";
+    splitter.style.flex = "0 0 auto";
+    splitter.style.margin = "0";
+    splitter.style.padding = "0";
+    splitter.style.boxSizing = "border-box";
+
+    if (type === "row") {
+      // Vertical splitter between columns
+      splitter.style.width = "7px";
+      splitter.style.height = "100%";
+      splitter.style.cursor = "col-resize";
+      splitter.style.borderLeft = "1.5px solid #bbb";
+      splitter.style.borderRight = "1.5px solid #bbb";
+    } else {
+      // Horizontal splitter between rows
+      splitter.style.height = "7px";
+      splitter.style.width = "100%";
+      splitter.style.cursor = "row-resize";
+      splitter.style.borderTop = "1.5px solid #bbb";
+      splitter.style.borderBottom = "1.5px solid #bbb";
+    }
+
+    // Drag-to-resize logic (FIXED: use previous/nextElementSibling)
+    splitter.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      document.body.style.cursor = splitter.style.cursor;
+      let startX = e.clientX, startY = e.clientY;
+
+      // Get previous and next panel siblings
+      let prev = splitter.previousElementSibling;
+      let next = splitter.nextElementSibling;
+      if (!prev || !next) return;
+
+      // Initial sizes
+      let prevRect = prev.getBoundingClientRect();
+      let nextRect = next.getBoundingClientRect();
+      let parentRect = parentEl.getBoundingClientRect();
+      let totalSize = type === "row" ? parentRect.width : parentRect.height;
+      let prevSize = type === "row" ? prevRect.width : prevRect.height;
+      let nextSize = type === "row" ? nextRect.width : nextRect.height;
+
+      function onMouseMove(ev) {
+        let dx = ev.clientX - startX;
+        let dy = ev.clientY - startY;
+        if (type === "row") {
+          let newPrev = ((prevSize + dx) / totalSize) * 100;
+          let newNext = ((nextSize - dx) / totalSize) * 100;
+          prev.style.width = `${newPrev}%`;
+          prev.style.flex = `0 0 ${newPrev}%`;
+          next.style.width = `${newNext}%`;
+          next.style.flex = `0 0 ${newNext}%`;
+        } else {
+          let newPrev = ((prevSize + dy) / totalSize) * 100;
+          let newNext = ((nextSize - dy) / totalSize) * 100;
+          prev.style.height = `${newPrev}%`;
+          prev.style.flex = `0 0 ${newPrev}%`;
+          next.style.height = `${newNext}%`;
+          next.style.flex = `0 0 ${newNext}%`;
+        }
+      }
+
+      function onMouseUp() {
+        document.body.style.cursor = "";
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+      }
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    });
+
+    return splitter;
   }
 
   /**
@@ -203,10 +372,147 @@ if (typeof document !== "undefined" && !document.getElementById("minilayout-styl
   const style = document.createElement("style");
   style.id = "minilayout-styles";
   style.textContent = `
-    .minilayout-panel { box-sizing: border-box; min-width: 80px; min-height: 40px; border: 1px solid #d3e2f9; background: #f7f9fc; margin: 1px; display: flex; flex-direction: column; }
-    .minilayout-panel-header { background: #e9f1ff; font-size: 1em; padding: 4px 8px; border-bottom: 1px solid #d3e2f9; display: flex; justify-content: space-between; align-items: center; }
-    .minilayout-panel-body { background: #fff; flex: 1 1 0; overflow: auto; padding: 0; }
-    .minilayout-panel-component { min-width: 120px; min-height: 80px; flex: 1 1 0; }
+    html, body, #ml-root {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .minilayout-panel {
+      box-sizing: border-box;
+      min-width: 80px;
+      min-height: 36px;
+      border: 1.5px solid #bbb;
+      background: #f3f3f3;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      border-radius: 8px;
+      box-shadow: 0 2px 9px -6px #aaa;
+      transition: border 0.16s, box-shadow 0.14s;
+    }
+    .minilayout-panel-header {
+      background: linear-gradient(180deg, #e0e0e0 0%, #d2d2d2 100%);
+      font-size: 0.96em;
+      padding: 2px 10px 2px 10px;
+      border-bottom: 1.5px solid #bbb;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      position: relative;
+      border-radius: 7px 7px 0 0;
+      box-shadow: 0 1.5px 4px -2px #aaa;
+      height: var(--header-height, 28px);
+      min-height: 22px;
+      max-height: 32px;
+      gap: 10px;
+      font-weight: bold;
+      user-select: none;
+    }
+    .minilayout-panel-title {
+      flex: 1 1 auto;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: #444;
+      font-weight: bold;
+      font-size: inherit;
+      padding-left: 2px;
+    }
+    .minilayout-panel-close-btn {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 1em;
+      margin-left: 6px;
+      padding: 0 6px;
+      border-radius: 4px;
+      transition: background 0.13s;
+    }
+    .minilayout-panel-close-btn:hover {
+      background: #e0e0e0;
+      color: #c00;
+    }
+    .minilayout-panel-body {
+      background: #f3f3f3;
+      flex: 1 1 0;
+      overflow: auto;
+      padding: 0;
+      border-radius: 0 0 8px 8px;
+      transition: background 0.12s;
+    }
+    .minilayout-panel-component {
+      min-width: 120px;
+      min-height: 80px;
+      flex: 1 1 0;
+    }
+    .minilayout-panel-stack {
+      box-shadow: 0 3px 10px -6px #aaa;
+      border-radius: 6px;
+      background: #ededed;
+      min-width: 120px;
+      min-height: 80px;
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    .minilayout-tabbar {
+      box-sizing: border-box;
+      border-radius: 6px 6px 0 0;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      background: linear-gradient(90deg, #dde8fc 0%, #d2d2d2 100%);
+      border-bottom: 1px solid #bbb;
+      padding: 4px 8px;
+    }
+    .minilayout-tabbtn {
+      font-size: 1em;
+      padding: 4px 18px;
+      margin-right: 8px;
+      border-radius: 6px 6px 0 0;
+      border: none;
+      background: none;
+      cursor: pointer;
+      transition: background 0.11s, font-weight 0.12s;
+    }
+    .minilayout-tabbtn:focus {
+      outline: 2px solid #888;
+    }
+    .minilayout-tabbtn[aria-selected="true"] {
+      background: #fff;
+      font-weight: bold;
+    }
+    .minilayout-splitter {
+      background: #d2d2d2;
+      z-index: 10;
+      user-select: none;
+      transition: background 0.13s;
+    }
+    .minilayout-splitter:hover {
+      background: #b3b3b3;
+    }
+    @media (max-width: 900px) {
+      .minilayout-panel-header {
+        font-size: 0.98em;
+        min-height: 19px;
+      }
+      .minilayout-panel-title {
+        font-size: 1em;
+        padding-left: 1px;
+      }
+      .minilayout-tabbtn {
+        font-size: 0.93em;
+        padding: 2px 9px;
+      }
+    }
   `;
   document.head.appendChild(style);
 }

@@ -1,0 +1,173 @@
+/**
+ * minilayout.css
+ * -----------------------------------------------------------
+ * Scene Designer – MiniLayout CSS (GL-like Neutral Greys, Compact, Splitter Support, Fullscreen-safe)
+ * - Styles for MiniLayout panels, tab bars, stack panels, and compact headers.
+ * - GL-inspired: neutral greys, compact header, tab effect, optional close button.
+ * - Splitter bars: vertical and horizontal, with hover and drag feedback.
+ * - Root container: fullscreen sizing, no scrollbars.
+ * -----------------------------------------------------------
+ */
+
+html, body, #ml-root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.minilayout-panel {
+  box-sizing: border-box;
+  min-width: 80px;
+  min-height: 36px;
+  border: 1.5px solid #bbb;
+  background: #f3f3f3;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  box-shadow: 0 2px 9px -6px #aaa;
+  transition: border 0.16s, box-shadow 0.14s;
+}
+
+.minilayout-panel-header {
+  background: linear-gradient(180deg, #e0e0e0 0%, #d2d2d2 100%);
+  font-size: 0.96em;
+  padding: 2px 10px 2px 10px;
+  border-bottom: 1.5px solid #bbb;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  position: relative;
+  border-radius: 7px 7px 0 0;
+  box-shadow: 0 1.5px 4px -2px #aaa;
+  height: var(--header-height, 28px);
+  min-height: 22px;
+  max-height: 32px;
+  gap: 10px;
+  font-weight: bold;
+  user-select: none;
+}
+
+.minilayout-panel-title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #444;
+  font-weight: bold;
+  font-size: inherit;
+  padding-left: 2px;
+}
+
+.minilayout-panel-close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 1em;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  transition: background 0.13s;
+}
+.minilayout-panel-close-btn:hover {
+  background: #e0e0e0;
+  color: #c00;
+}
+
+.minilayout-panel-body {
+  background: #f3f3f3;
+  flex: 1 1 0;
+  overflow: auto;
+  padding: 0;
+  border-radius: 0 0 8px 8px;
+  transition: background 0.12s;
+}
+
+.minilayout-panel-component {
+  min-width: 120px;
+  min-height: 80px;
+  flex: 1 1 0;
+}
+
+.minilayout-panel-stack {
+  box-shadow: 0 3px 10px -6px #aaa;
+  border-radius: 6px;
+  background: #ededed;
+  min-width: 120px;
+  min-height: 80px;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.minilayout-tabbar {
+  box-sizing: border-box;
+  border-radius: 6px 6px 0 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background: linear-gradient(90deg, #dde8fc 0%, #d2d2d2 100%);
+  border-bottom: 1px solid #bbb;
+  padding: 4px 8px;
+}
+
+.minilayout-tabbtn {
+  font-size: 1em;
+  padding: 4px 18px;
+  margin-right: 8px;
+  border-radius: 6px 6px 0 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: background 0.11s, font-weight 0.12s;
+}
+.minilayout-tabbtn:focus {
+  outline: 2px solid #888;
+}
+.minilayout-tabbtn[aria-selected="true"] {
+  background: #fff;
+  font-weight: bold;
+}
+
+/* --- Splitter styles for drag-resize --- */
+.minilayout-splitter {
+  background: #d2d2d2;
+  z-index: 10;
+  user-select: none;
+  transition: background 0.13s;
+}
+.minilayout-splitter:hover {
+  background: #b3b3b3;
+}
+.minilayout-splitter:active {
+  background: #2176ff;
+}
+.minilayout-splitter[style*="width: 7px"] {
+  cursor: col-resize;
+}
+.minilayout-splitter[style*="height: 7px"] {
+  cursor: row-resize;
+}
+
+@media (max-width: 900px) {
+  .minilayout-panel-header {
+    font-size: 0.98em;
+    min-height: 19px;
+  }
+  .minilayout-panel-title {
+    font-size: 1em;
+    padding-left: 1px;
+  }
+  .minilayout-tabbtn {
+    font-size: 0.93em;
+    padding: 2px 9px;
+  }
+}
