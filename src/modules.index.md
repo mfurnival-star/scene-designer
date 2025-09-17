@@ -15,6 +15,7 @@ shapes.js
 transformer.js
 shape-state.js
 shape-defs.js
+minilayout.js
 ```
 
 ---
@@ -80,6 +81,10 @@ shape-defs.js
   - All shape types and their edit/transform properties in one place.
   - Used by transformer.js, shapes.js, canvas.js, etc.
   - Easy to extend for new shape types or features.
+
+- **minilayout.js**  
+  Minimal layout engine: Golden Layout v3–compatible API (row/column/panel config, registerComponent, init, destroy).  
+  - Use as a drop-in replacement for Golden Layout during migration or until GL v3 is adopted.
 
 ---
 **Instructions:**  
