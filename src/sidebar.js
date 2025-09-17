@@ -20,6 +20,21 @@ import { log } from './log.js';
 import { TabulatorFull as Tabulator } from 'tabulator-tables';
 
 /**
+ * Utility: Dump AppState.shapes array for diagnostics.
+ */
+function dumpAppStateShapes(tag = "") {
+  log("TRACE", `[sidebar][${tag}] AppState.shapes:`, 
+    Array.isArray(AppState.shapes) ? AppState.shapes.map((s,i)=>({
+      idx: i,
+      type: s?._type,
+      label: s?._label,
+      id: s?._id,
+      locked: s?.locked
+    })) : AppState.shapes
+  );
+}
+
+/**
  * Build the sidebar panel (Tabulator shape table).
  * MiniLayout-compliant: accepts { element, title, componentName }.
  */
@@ -111,6 +126,7 @@ export function buildSidebarPanel({ element, title, componentName }) {
           shape: AppState.shapes[row.getData().idx],
           rowData: row.getData()
         });
+        dumpAppStateShapes("rowClick");
         const idx = row.getData().idx;
         if (AppState.shapes[idx]) {
           setSelectedShape(AppState.shapes[idx]);
@@ -128,7 +144,9 @@ export function buildSidebarPanel({ element, title, componentName }) {
     // --- Robust updateTable: syncs selection and shape rows ---
     const updateTable = () => {
       log("TRACE", "[sidebar] updateTable ENTRY");
+      dumpAppStateShapes("updateTable-top");
       const data = (AppState.shapes || []).map((s, i) => shapeToRow(s, i));
+      log("DEBUG", "[sidebar] updateTable: computed table data", { data });
       tabulator.replaceData(data);
 
       // Selection sync: ensure selected row is highlighted
@@ -165,14 +183,17 @@ export function buildSidebarPanel({ element, title, componentName }) {
         });
         log("DEBUG", "[sidebar] updateTable: All rows deselected");
       }
+      dumpAppStateShapes("updateTable-bottom");
       log("TRACE", "[sidebar] updateTable EXIT");
     };
 
     tabulator.on("tableBuilt", () => {
       log("TRACE", "[sidebar] Tabulator tableBuilt event");
+      dumpAppStateShapes("tableBuilt");
       updateTable();
       // Subscribe after built to avoid early calls
       var unsub = subscribe(updateTable);
+      log("TRACE", "[sidebar] subscribe() after tableBuilt", { unsub });
       // Clean up on destroy
       // MiniLayout: container may provide an on("destroy") API for panel cleanup.
       if (typeof element.on === "function") {
