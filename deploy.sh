@@ -132,6 +132,9 @@ EOF
 
 # --- Main logic ---
 if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then usage; fi
+
+node generate-exports-registry.js
+
 git_commit_push
 
 if [[ "$MODE" == "prod" ]]; then
