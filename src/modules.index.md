@@ -5,7 +5,6 @@ global-errors.js
 state.js
 canvas.js
 selection.js
-sidebar.js
 settings.js
 errorlog.js
 main.js
@@ -41,9 +40,6 @@ minilayout.DOCS.md
 
 - **selection.js**  
   Shape selection logic and mutators (Fabric.js adaptation).
-
-- **sidebar.js**  
-  Shape table/list panel (Tabulator implementation, ESM only).
 
 - **settings.js**  
   Settings registry, persistence (via localForage), and UI panel (Tweakpane+Pickr).

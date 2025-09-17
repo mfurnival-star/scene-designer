@@ -3,7 +3,7 @@
  * -----------------------------------------------------------
  * MiniLayout App Bootstrapper for Scene Designer
  * Exports: showErrorLogPanel, hideErrorLogPanel, setErrorLogPanelVisible, isErrorLogPanelOpen
- * Dependencies: minilayout.js, log.js, state.js, settings.js, errorlog.js, sidebar.js, canvas.js, toolbar.js
+ * Dependencies: minilayout.js, log.js, state.js, settings.js, errorlog.js, canvas.js, toolbar.js
  *
  * MiniLayout Compliance:
  * - All panel/component factories registered expect a single object argument:
@@ -12,7 +12,7 @@
  */
 
 import { MiniLayout } from './minilayout.js';
-import { buildSidebarPanel } from './sidebar.js';
+// REMOVED: import { buildSidebarPanel } from './sidebar.js';
 import { buildCanvasPanel } from './canvas.js';
 import { buildSettingsPanel, loadSettings } from './settings.js';
 import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
@@ -112,15 +112,16 @@ function rebuildLayout(includeErrorLogPanel) {
     root: {
       type: 'row',
       content: [
-        {
-          type: 'component',
-          componentName: 'SidebarPanel',
-          title: 'Sidebar',
-          width: 20,
-        },
+        // REMOVED SIDEBAR PANEL
+        // {
+        //   type: 'component',
+        //   componentName: 'SidebarPanel',
+        //   title: 'Sidebar',
+        //   width: 20,
+        // },
         {
           type: 'column',
-          width: 60,
+          width: 80, // Increase width for canvas/toolbar after removing sidebar
           content: [
             {
               type: 'component',
@@ -166,7 +167,7 @@ function rebuildLayout(includeErrorLogPanel) {
   layout = new MiniLayout(panelLayout, mlRoot);
 
   // Panel/component registration (MiniLayout expects single object arg: { element, title, componentName })
-  layout.registerComponent('SidebarPanel', buildSidebarPanel);
+  // REMOVED: layout.registerComponent('SidebarPanel', buildSidebarPanel);
   layout.registerComponent('CanvasToolbarPanel', buildCanvasToolbarPanel);
   layout.registerComponent('CanvasPanel', buildCanvasPanel);
   layout.registerComponent('SettingsPanel', buildSettingsPanel);
@@ -205,3 +206,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initial layout build
   rebuildLayout(showErrorLogPanelSetting);
 });
+
