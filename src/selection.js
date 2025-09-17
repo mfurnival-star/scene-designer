@@ -17,6 +17,8 @@ import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer, updateTransformer } from './transformer.js';
 import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
 import { getShapeDef } from './shape-defs.js';
+// --- Import fixStrokeWidthAfterTransform from shapes.js ---
+import { fixStrokeWidthAfterTransform } from './shapes.js';
 
 /**
  * Set the currently selected shape (single selection).
@@ -62,6 +64,8 @@ export function setSelectedShape(shape) {
       log("TRACE", "[selection] setSelectedShape - Detaching transformer (not editable or locked)", { shapeLabel: shape._label });
       detachTransformer();
     }
+    // --- FIX: Always enforce 1px stroke width after selection ---
+    fixStrokeWidthAfterTransform();
   } else {
     log("TRACE", "[selection] setSelectedShape - No shape, detaching transformer");
     detachTransformer();
@@ -122,9 +126,13 @@ export function setSelectedShapes(arr) {
       log("TRACE", "[selection] setSelectedShapes - Detaching transformer (not editable)", { shapeLabel: newArr[0]._label });
       detachTransformer();
     }
+    // --- FIX: Always enforce 1px stroke width after selection ---
+    fixStrokeWidthAfterTransform();
   } else {
     log("TRACE", "[selection] setSelectedShapes - Detaching transformer (multi/no selection)");
     detachTransformer();
+    // --- FIX: Always enforce 1px stroke width after selection ---
+    fixStrokeWidthAfterTransform();
   }
 
   notifySelectionChanged();

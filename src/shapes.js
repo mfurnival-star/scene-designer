@@ -3,7 +3,7 @@
  * -----------------------------------------------------------
  * Scene Designer – Shape Factory Module (Fabric.js Migration, ESM ONLY)
  * - Centralizes all Fabric.js shape construction and event attachment.
- * - Exports: makePointShape, makeRectShape, makeCircleShape.
+ * - Exports: makePointShape, makeRectShape, makeCircleShape, fixStrokeWidthAfterTransform.
  * - Every shape/group gets a unique _id at creation for sidebar/selection robustness.
  * - All shapes have selection event handlers from selection.js and shape-state.js.
  * - Handles per-shape config, label, lock, and transformer events.
@@ -12,9 +12,6 @@
  * - Stroke width: always stays at 1px regardless of scaling or transform.
  * - Helper for setting line width (for future UI, defaults to 1px).
  * -----------------------------------------------------------
- *
- * NOTE: Fabric.js npm package (v5.x) is UMD-only (no named ESM exports).
- * Use ES module wrapper and named imports from './fabric-wrapper.js'.
  */
 
 import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
@@ -36,18 +33,37 @@ export function setStrokeWidthForSelectedShapes(width = 1) {
   log("DEBUG", "[shapes] setStrokeWidthForSelectedShapes", { width });
   currentStrokeWidth = width;
   (AppState.selectedShapes || []).forEach(shape => {
-    if (shape._type === 'rect' || shape._type === 'circle') {
-      shape.set({ strokeWidth: width });
-    } else if (shape._type === 'point') {
-      // For points: update crosshair and halo lines if present
-      if (shape._objects && Array.isArray(shape._objects)) {
-        shape._objects.forEach(obj => {
-          if (obj.type === 'line') obj.set({ strokeWidth: width });
-        });
-      }
-    }
+    setShapeStrokeWidth(shape, width);
   });
   if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+}
+
+/**
+ * Ensure stroke width is always 1px for all shape types, even after scaling/transform.
+ * Call this after any transform event, selection change, or shape resize.
+ */
+export function fixStrokeWidthAfterTransform() {
+  log("DEBUG", "[shapes] fixStrokeWidthAfterTransform called");
+  (AppState.selectedShapes || []).forEach(shape => {
+    setShapeStrokeWidth(shape, 1);
+  });
+  if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+}
+
+/**
+ * Helper: forcibly set stroke width for a shape (rect, circle, point group).
+ */
+function setShapeStrokeWidth(shape, width = 1) {
+  if (shape._type === 'rect' || shape._type === 'circle') {
+    shape.set({ strokeWidth: width });
+  } else if (shape._type === 'point') {
+    // For points: update crosshair and halo lines if present
+    if (shape._objects && Array.isArray(shape._objects)) {
+      shape._objects.forEach(obj => {
+        if (obj.type === 'line' || obj.type === 'circle') obj.set({ strokeWidth: width });
+      });
+    }
+  }
 }
 
 /**
@@ -121,6 +137,13 @@ export function makePointShape(x, y) {
     _id: pointGroup._id
   });
   attachSelectionHandlers(pointGroup);
+
+  // Listen for transform events and forcibly reset strokeWidth to 1px
+  pointGroup.on("modified", () => {
+    setShapeStrokeWidth(pointGroup, 1);
+    if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+  });
+
   log("TRACE", "[shapes] makePointShape: after attachSelectionHandlers", {
     pointGroup,
     type: pointGroup._type,
@@ -171,6 +194,13 @@ export function makeRectShape(x, y, w, h) {
     _id: rect._id
   });
   attachSelectionHandlers(rect);
+
+  // Listen for transform events and forcibly reset strokeWidth to 1px
+  rect.on("modified", () => {
+    setShapeStrokeWidth(rect, 1);
+    if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+  });
+
   log("TRACE", "[shapes] makeRectShape: after attachSelectionHandlers", {
     rect,
     type: rect._type,
@@ -220,6 +250,13 @@ export function makeCircleShape(x, y, r) {
     _id: circle._id
   });
   attachSelectionHandlers(circle);
+
+  // Listen for transform events and forcibly reset strokeWidth to 1px
+  circle.on("modified", () => {
+    setShapeStrokeWidth(circle, 1);
+    if (AppState.fabricCanvas) AppState.fabricCanvas.renderAll();
+  });
+
   log("TRACE", "[shapes] makeCircleShape: after attachSelectionHandlers", {
     circle,
     type: circle._type,
@@ -234,18 +271,8 @@ export function makeCircleShape(x, y, r) {
 }
 
 /**
- * Ensure all selected shapes keep strokeWidth at 1px after transform.
- * This should be called after any scaling/transform event.
- */
-export function fixStrokeWidthAfterTransform() {
-  log("DEBUG", "[shapes] fixStrokeWidthAfterTransform called");
-  setStrokeWidthForSelectedShapes(1);
-}
-
-/**
  * Helper for generating unique shape IDs.
  */
 function generateShapeId(type = "shape") {
   return `${type}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
 }
-

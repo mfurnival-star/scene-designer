@@ -93,10 +93,10 @@
   ],
   "shapes.js": [
     "setStrokeWidthForSelectedShapes",
+    "fixStrokeWidthAfterTransform",
     "makePointShape",
     "makeRectShape",
-    "makeCircleShape",
-    "fixStrokeWidthAfterTransform"
+    "makeCircleShape"
   ],
   "sidebar.js": [
     "buildSidebarPanel"
@@ -116,7 +116,14 @@
     "getSetting"
   ],
   "toolbar.js": [
-    "buildCanvasToolbarPanel"
+    "setSelectedShape",
+    "setSelectedShapes",
+    "selectAllShapes",
+    "deselectAll",
+    "attachSelectionHandlers",
+    "isShapeSelected",
+    "getSelectedShapes",
+    "getSelectedShape"
   ],
   "transformer.js": [
     "attachTransformerForShape",
