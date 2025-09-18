@@ -85,18 +85,38 @@ function inject_force_settings_block() {
   echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settings.js keys ==="
   # Remove any previous force block
   sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
-  # Extract all setting keys from settings.js
-  local keys
+  # Extract all setting keys and types from settings.js
+  local keys types typeMap
   keys=$(grep -oP 'key:\s*"\K[^"]+' "$SETTINGS_JS" | sort | uniq)
+  types=$(grep -oP 'type:\s*"\K[^"]+' "$SETTINGS_JS" | paste -d, -s)
+  # Build a key:type map
+  declare -A key_type
+  while read -r line; do
+    key=$(echo "$line" | grep -oP 'key:\s*"\K[^"]+')
+    type=$(echo "$line" | grep -oP 'type:\s*"\K[^"]+')
+    if [[ -n "$key" && -n "$type" ]]; then
+      key_type["$key"]="$type"
+    fi
+  done < <(grep -E 'key:|type:' "$SETTINGS_JS" | paste - -)
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
   for key in $keys; do
-    # Transform to env var name convention if needed (exact match)
     value="${!key:-}"
     if [[ -n "$value" ]]; then
-      block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = \"${value}\";\n"
+      setting_type="${key_type[$key]}"
+      if [[ "$setting_type" == "boolean" ]]; then
+        case "$value" in
+          1|true|TRUE) js_val="true";;
+          0|false|FALSE) js_val="false";;
+          *) js_val="false";; # default to false if not recognized
+        esac
+        block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = ${js_val};\n"
+        echo "  [FORCE] $key (boolean) = $js_val"
+      else
+        block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = \"${value}\";\n"
+        echo "  [FORCE] $key = $value"
+      fi
       injected=1
-      echo "  [FORCE] $key = $value"
     fi
   done
   block+="  </script>\n  <!-- END FORCE SETTINGS -->"
