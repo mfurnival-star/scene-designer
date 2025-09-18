@@ -229,9 +229,13 @@ export function log(levelNum, ...args) {
   }
 }
 
+// --- Recursion guard for logStream errors ---
+let _logStreamErrorInProgress = false;
+
 /**
  * Async log streaming to external server (safe serialization).
  * Now with extra TRACE-level logs before and after streaming for diagnostics.
+ * Prevents recursion if streaming itself fails.
  */
 export async function logStream(levelNum, ...args) {
   if (!externalLogServerURL) return;
@@ -280,10 +284,16 @@ export async function logStream(levelNum, ...args) {
       });
     }
   } catch (e) {
-    // --- Added: ERROR log with full fetch error ---
-    log(LOG_LEVELS.ERROR, "[logStream] Failed to stream log", ...args, e);
-    if (typeof console !== "undefined" && console.error) {
-      console.error(`[log][${LOGGER_INSTANCE_ID}]`, levelName(levelNum), "Failed to stream log", ...args, e);
+    // --- Prevent recursion ---
+    if (_logStreamErrorInProgress) return; // Don't log if already inside a logStream error
+    _logStreamErrorInProgress = true;
+    try {
+      log(LOG_LEVELS.ERROR, "[logStream] Failed to stream log", ...args, e);
+      if (typeof console !== "undefined" && console.error) {
+        console.error(`[log][${LOGGER_INSTANCE_ID}]`, levelName(levelNum), "Failed to stream log", ...args, e);
+      }
+    } finally {
+      _logStreamErrorInProgress = false;
     }
   }
 }
