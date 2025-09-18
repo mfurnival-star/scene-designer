@@ -9,6 +9,13 @@
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
   <script>eruda.init();</script>
   <!-- END ERUDA -->
+  <!-- BEGIN FORCE SETTINGS -->
+  <script>
+    window.SCENE_DESIGNER_FORCE = true;
+    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};
+    window.SCENE_DESIGNER_FORCE_SETTINGS["DEBUG_LOG_LEVEL"] = "Trace (very verbose)";
+  </script>
+  <!-- END FORCE SETTINGS -->
 </head>
 <body>
   <!-- Vite will inject scripts automatically -->
