@@ -122,7 +122,7 @@ function rebuildLayout(includeErrorLogPanel) {
         // },
         {
           type: 'column',
-          width: 80, // Increase width for canvas/toolbar after removing sidebar
+          width: 70, // Increase width for canvas/toolbar after removing sidebar
           content: [
             {
               type: 'component',
@@ -142,7 +142,7 @@ function rebuildLayout(includeErrorLogPanel) {
           type: 'component',
           componentName: 'SettingsPanel',
           title: 'Settings',
-          width: 20,
+          width: 30,
         }
       ]
     }
