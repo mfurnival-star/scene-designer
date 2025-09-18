@@ -151,3 +151,25 @@ else
   start_dev_server
 fi
 
+exit 0
+
+Key	Type	Default	Description / Values
+multiDragBox	boolean	true	Show multi-drag box (for group dragging)
+defaultRectWidth	number	50	Default rectangle width
+defaultRectHeight	number	30	Default rectangle height
+defaultCircleRadius	number	15	Default circle radius
+defaultStrokeColor	color	"#000000ff"	Default stroke color
+defaultFillColor	color	"#00000000"	Default fill color
+canvasMaxWidth	number	430	Maximum canvas width (px)
+canvasMaxHeight	number	9999	Maximum canvas height (px)
+canvasScaleMode	select	"fit"	"fit", "fill", "stretch", "actual"
+canvasResponsive	boolean	true	Responsive: resize on window change
+toolbarUIScale	number	1	Toolbar UI scale (0.5–2)
+shapeStartXPercent	number	50	Shape start X position (%)
+shapeStartYPercent	number	50	Shape start Y position (%)
+DEBUG_LOG_LEVEL	select	"Info"	"Silent", "Error", "Warning", "Info", "Debug", "Trace (very verbose)"
+LOG_OUTPUT_DEST	select	"console"	"console", "server", "both"
+LOG_SERVER_URL	text	""	Log server URL
+LOG_SERVER_TOKEN	text	""	Log server token
+INTERCEPT_CONSOLE	boolean	false	Intercept all console logs for mobile/dev debugging
+showErrorLogPanel	boolean	true	Show error log panel
