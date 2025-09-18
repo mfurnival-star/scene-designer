@@ -52,7 +52,9 @@ export function addShape(shape) {
 }
 export function removeShape(shape) {
   log("DEBUG", "[state] removeShape", { shape });
-  _state.shapes = _state.shapes.filter(s => s !== shape);
+  // Use _id-based deletion for robustness (fixes reselect/delete bug)
+  if (!shape || !shape._id) return;
+  _state.shapes = _state.shapes.filter(s => s._id !== shape._id);
   notify();
 }
 export function setImage(url, obj) {
@@ -127,4 +129,3 @@ export const sceneDesignerStore = {
   },
   subscribe
 };
-
