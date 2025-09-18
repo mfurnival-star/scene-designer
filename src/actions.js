@@ -1,108 +1,140 @@
 /**
  * actions.js
  * -----------------------------------------------------------
- * Centralized Scene Actions for Scene Designer (ESM ONLY, Zustand Refactor)
- * - All business logic for shape management, deletion, duplication, locking, unlocking, etc.
- * - UI modules (e.g., toolbar.js) call these action functions with intents.
- * - Ensures separation of concerns; makes toolbars swappable/testable.
+ * Scene Designer – Centralized Business Logic for Scene Actions (Delete, Duplicate, Lock, Unlock)
+ * - All toolbar/UI panels emit intents here.
+ * - Decoupled from toolbar and selection UI.
+ * - Only operates on shapes currently selected (via selection.js).
+ * - Ensures locked shapes cannot be deleted or modified.
+ * - Duplicate creates new shapes offset from originals, assigns new _id.
+ * - Lock/unlock toggles locked state and disables/enables transformer/anchors.
  * - Logging via log.js.
- * - All state flows via state.js store and shape modules.
  * -----------------------------------------------------------
  */
 
 import { log } from './log.js';
 import {
   getState,
+  setShapes,
   setSelectedShapes,
   removeShape,
   addShape
 } from './state.js';
-
-import { setStrokeWidthForSelectedShapes, makeRectShape, makeCircleShape, makePointShape } from './shapes.js';
+import { setShapeState, lockShape, unlockShape } from './shape-state.js';
+import { makePointShape, makeRectShape, makeCircleShape } from './shapes.js';
+import { attachSelectionHandlers } from './selection.js';
 
 /**
- * Delete all currently selected, unlocked shapes.
+ * Delete all selected shapes (except locked).
  */
 export function deleteSelectedShapes() {
-  log("INFO", "[actions] deleteSelectedShapes called");
-  const selected = (getState().selectedShapes || []).filter(s => !s.locked);
-  if (!selected.length) {
-    log("INFO", "[actions] No unlocked shapes selected for deletion");
+  log("INFO", "[actions] deleteSelectedShapes intent received");
+  const selected = getState().selectedShapes || [];
+  const unlocked = selected.filter(s => !s.locked);
+  if (unlocked.length === 0) {
+    log("WARN", "[actions] No unlocked shapes to delete");
     return;
   }
-  selected.forEach(shape => {
+  unlocked.forEach(shape => {
     removeShape(shape);
-    if (getState().fabricCanvas) {
-      getState().fabricCanvas.remove(shape);
-    }
+    log("INFO", "[actions] Shape deleted", {
+      type: shape._type,
+      label: shape._label,
+      id: shape._id
+    });
   });
   setSelectedShapes([]);
-  log("INFO", "[actions] Deleted selected unlocked shapes", { count: selected.length });
+  log("INFO", "[actions] deleteSelectedShapes complete");
 }
 
 /**
- * Duplicate all currently selected shapes (offset new shapes slightly).
+ * Duplicate all selected shapes (except locked).
  */
 export function duplicateSelectedShapes() {
-  log("INFO", "[actions] duplicateSelectedShapes called");
+  log("INFO", "[actions] duplicateSelectedShapes intent received");
   const selected = getState().selectedShapes || [];
-  if (!selected.length) {
-    log("INFO", "[actions] No shapes selected for duplication");
+  const unlocked = selected.filter(s => !s.locked);
+  if (unlocked.length === 0) {
+    log("WARN", "[actions] No unlocked shapes to duplicate");
     return;
   }
-  const offset = 20;
   let newShapes = [];
-  selected.forEach(orig => {
-    let shape = null;
+  unlocked.forEach(orig => {
+    let clone;
+    const offset = 20;
     if (orig._type === 'rect') {
-      shape = makeRectShape(orig.left + offset, orig.top + offset, orig.width, orig.height);
+      clone = makeRectShape(
+        orig.left + offset, orig.top + offset,
+        orig.width, orig.height
+      );
+      clone._label = orig._label + "-copy";
     } else if (orig._type === 'circle') {
-      shape = makeCircleShape(orig.left + offset, orig.top + offset, orig.radius);
+      clone = makeCircleShape(
+        orig.left + offset, orig.top + offset,
+        orig.radius
+      );
+      clone._label = orig._label + "-copy";
     } else if (orig._type === 'point') {
-      shape = makePointShape(orig.left + offset, orig.top + offset);
+      clone = makePointShape(orig.left + offset, orig.top + offset);
+      clone._label = orig._label + "-copy";
     }
-    if (!shape) return;
-    shape.locked = orig.locked;
-    addShape(shape);
-    newShapes.push(shape);
-    if (getState().fabricCanvas) {
-      getState().fabricCanvas.add(shape);
+    if (clone) {
+      clone.locked = false;
+      attachSelectionHandlers(clone);
+      addShape(clone);
+      newShapes.push(clone);
+      log("INFO", "[actions] Shape duplicated", {
+        type: clone._type,
+        label: clone._label,
+        id: clone._id
+      });
     }
   });
   setSelectedShapes(newShapes);
-  setStrokeWidthForSelectedShapes(1);
-  log("INFO", "[actions] Duplicated shapes", { count: newShapes.length });
+  log("INFO", "[actions] duplicateSelectedShapes complete");
 }
 
 /**
- * Lock all currently selected shapes.
+ * Lock all selected shapes.
  */
 export function lockSelectedShapes() {
-  log("INFO", "[actions] lockSelectedShapes called");
+  log("INFO", "[actions] lockSelectedShapes intent received");
   const selected = getState().selectedShapes || [];
+  if (selected.length === 0) {
+    log("WARN", "[actions] No shapes selected to lock");
+    return;
+  }
   selected.forEach(shape => {
-    shape.locked = true;
-    shape.selectable = false;
-    shape.evented = false;
+    lockShape(shape);
+    log("INFO", "[actions] Shape locked", {
+      type: shape._type,
+      label: shape._label,
+      id: shape._id
+    });
   });
   setSelectedShapes(selected);
-  if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
-  log("INFO", "[actions] Locked selected shapes", { count: selected.length });
+  log("INFO", "[actions] lockSelectedShapes complete");
 }
 
 /**
- * Unlock all currently selected shapes.
+ * Unlock all selected shapes.
  */
 export function unlockSelectedShapes() {
-  log("INFO", "[actions] unlockSelectedShapes called");
+  log("INFO", "[actions] unlockSelectedShapes intent received");
   const selected = getState().selectedShapes || [];
+  if (selected.length === 0) {
+    log("WARN", "[actions] No shapes selected to unlock");
+    return;
+  }
   selected.forEach(shape => {
-    shape.locked = false;
-    shape.selectable = true;
-    shape.evented = true;
+    unlockShape(shape);
+    log("INFO", "[actions] Shape unlocked", {
+      type: shape._type,
+      label: shape._label,
+      id: shape._id
+    });
   });
   setSelectedShapes(selected);
-  if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
-  log("INFO", "[actions] Unlocked selected shapes", { count: selected.length });
+  log("INFO", "[actions] unlockSelectedShapes complete");
 }
 

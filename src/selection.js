@@ -46,6 +46,10 @@ export function setSelectedShape(shape) {
     deselectShape(getState().selectedShape);
   }
 
+  // --- NEW: Set _selected flag on all shapes ---
+  (getState().shapes || []).forEach(s => { s._selected = false; });
+  if (shape) shape._selected = true;
+
   sceneDesignerStore.setState({
     selectedShape: shape,
     selectedShapes: shape ? [shape] : []
@@ -102,6 +106,10 @@ export function setSelectedShapes(arr) {
       }
     });
   }
+
+  // --- NEW: Set _selected flag on all shapes ---
+  (getState().shapes || []).forEach(s => { s._selected = false; });
+  newArr.forEach(s => { s._selected = true; });
 
   sceneDesignerStore.setState({
     selectedShapes: newArr,
@@ -166,6 +174,9 @@ export function deselectAll() {
       deselectShape(s);
     });
   }
+  // --- NEW: Set _selected flag on all shapes ---
+  (getState().shapes || []).forEach(s => { s._selected = false; });
+
   sceneDesignerStore.setState({
     selectedShape: null,
     selectedShapes: []
@@ -245,7 +256,8 @@ export function attachSelectionHandlers(shape) {
  */
 export function isShapeSelected(shape) {
   log("TRACE", "[selection] isShapeSelected ENTRY", { shapeLabel: shape?._label });
-  const result = !!shape && getState().selectedShapes.includes(shape);
+  // --- NEW: Use ._selected property for consistency ---
+  const result = !!shape && !!shape._selected;
   log("TRACE", "[selection] isShapeSelected EXIT", { result });
   return result;
 }
@@ -283,4 +295,5 @@ if (typeof window !== "undefined") {
   window.getSelectedShapes = getSelectedShapes;
   window.attachSelectionHandlers = attachSelectionHandlers;
 }
+
 
