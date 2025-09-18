@@ -1,15 +1,14 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Fabric.js Panel (Centralized Selection Handler, Fabric.js, MiniLayout Panel, Zustand Store)
+ * Scene Designer – Canvas/Fabric.js Panel (Full TRACE Logging Edition)
  * - Fabric.js canvas creation, image background, shape management.
  * - All selection/deselection/multiselect handled in a single canvas event handler.
  * - No shape-level selection handlers for selection/deselection.
  * - State is managed via Zustand store from state.js.
  * - Exports: buildCanvasPanel({ element, title, componentName })
  * - Panel factory for MiniLayout; renders the main canvas panel.
- * - Logging via log.js at TRACE/DEBUG/INFO.
- * - Image always at top left, canvas/container sized to image, scrollbars as needed.
+ * - TRACE logging everywhere for robust bug diagnosis!
  * -----------------------------------------------------------
  */
 
@@ -28,50 +27,53 @@ import {
 import { log } from './log.js';
 import { setShapeState, selectShape, deselectShape } from './shape-state.js';
 
-/**
- * Move all shapes above the background image (index 0).
- */
 function moveShapesToFront() {
   const store = getState();
-  if (!store.fabricCanvas) return;
+  log("TRACE", "[canvas] moveShapesToFront ENTRY", { store });
+  if (!store.fabricCanvas) {
+    log("TRACE", "[canvas] moveShapesToFront EXIT (no canvas)");
+    return;
+  }
   const objs = store.fabricCanvas.getObjects();
-  if (!objs.length) return;
-  // Find bg image (should be at index 0)
+  log("TRACE", "[canvas] moveShapesToFront: canvas objects", objs);
+  if (!objs.length) {
+    log("TRACE", "[canvas] moveShapesToFront EXIT (no objects)");
+    return;
+  }
   const bgImg = store.bgFabricImage;
   objs.forEach((obj) => {
     if (obj !== bgImg) {
-      // Move all non-image shapes to the top (after bg image)
       obj.moveTo(store.fabricCanvas.getObjects().length - 1);
+      log("TRACE", "[canvas] moveShapesToFront: moved", {
+        objType: obj._type, objId: obj._id
+      });
     }
   });
   store.fabricCanvas.renderAll();
+  log("TRACE", "[canvas] moveShapesToFront EXIT");
 }
 
-/**
- * Background image logic.
- * Draws image as non-selectable, non-evented Fabric object.
- * Resizes canvas and container to match image size.
- * Ensures scrollbars if image/canvas is larger than visible panel.
- */
 function updateBackgroundImage(containerDiv, element) {
-  log("TRACE", "[canvas] updateBackgroundImage ENTRY");
+  log("TRACE", "[canvas] updateBackgroundImage ENTRY", {
+    containerDiv, element, state: getState()
+  });
   const store = getState();
   const canvas = store.fabricCanvas;
   if (!canvas) {
     log("TRACE", "[canvas] updateBackgroundImage EXIT (no canvas)");
     return;
   }
-  // Remove previous background image if present
   if (store.bgFabricImage) {
+    log("TRACE", "[canvas] updateBackgroundImage: removing old bg image", { bgImg: store.bgFabricImage });
     canvas.remove(store.bgFabricImage);
     setBgFabricImage(null);
     canvas.renderAll();
-    log("DEBUG", "[canvas] updateBackgroundImage: old image removed");
   }
   if (store.imageObj) {
     const imgObj = store.imageObj;
     log("TRACE", "[canvas] updateBackgroundImage: loading new image", { imgObj });
     Image.fromURL(imgObj.src || store.imageURL, function(img) {
+      log("TRACE", "[canvas] updateBackgroundImage: Image.fromURL loaded", { img });
       img.set({
         left: 0,
         top: 0,
@@ -81,12 +83,10 @@ function updateBackgroundImage(containerDiv, element) {
         hasControls: false,
         hoverCursor: 'default'
       });
-      // Resize Fabric.js canvas and container to image size
       canvas.setWidth(img.width);
       canvas.setHeight(img.height);
       containerDiv.style.width = img.width + "px";
       containerDiv.style.height = img.height + "px";
-      // Panel body: scrollbars if needed
       if (element) {
         element.style.overflow = "auto";
         element.style.width = "100%";
@@ -94,8 +94,7 @@ function updateBackgroundImage(containerDiv, element) {
       }
       setBgFabricImage(img);
       canvas.add(img);
-      img.moveTo(0); // send to bottom (index 0)
-      // After adding the image, move all shapes above it
+      img.moveTo(0);
       moveShapesToFront();
       canvas.renderAll();
       log("DEBUG", "[canvas] updateBackgroundImage: image added", {
@@ -110,30 +109,51 @@ function updateBackgroundImage(containerDiv, element) {
 
 /**
  * Centralized canvas pointer event handler for selection/deselection/multiselect.
+ * Full TRACE logging for every possible event/branch.
  */
 function centralizedCanvasPointerHandler(e) {
-  log("TRACE", "[canvas] centralizedCanvasPointerHandler FIRED", { event: e });
+  log("TRACE", "[canvas] centralizedCanvasPointerHandler FIRED", {
+    event: e,
+    pointerType: e.pointerType,
+    eventType: e.e?.type,
+    ctrlKey: e.e?.ctrlKey,
+    metaKey: e.e?.metaKey,
+    target: e.target,
+    currentSelectedShape: getState().selectedShape,
+    currentSelectedShapes: getState().selectedShapes.map(s=>s?._id)
+  });
   const state = getState();
   const canvas = state.fabricCanvas;
   const shapes = state.shapes || [];
 
   // If background is clicked (no shape), deselect all
   if (!e.target) {
-    log("DEBUG", "[canvas] centralized handler: background clicked, deselecting all");
+    log("TRACE", "[canvas] centralized handler: background clicked", {
+      stateBefore: {...state}
+    });
     setSelectedShapes([]);
     canvas.discardActiveObject();
     canvas.renderAll();
+    log("TRACE", "[canvas] centralized handler: background deselect complete", {
+      stateAfter: {...getState()}
+    });
     return;
   }
 
   // If a shape is clicked
   const shape = e.target;
-  // Multi-select toggle (ctrl/meta)
+  log("TRACE", "[canvas] centralized handler: shape clicked", {
+    shapeType: shape._type, shapeLabel: shape._label, shapeId: shape._id,
+    stateBefore: {...state}
+  });
   const isMulti = e.e && (e.e.ctrlKey || e.e.metaKey);
 
   if (isMulti) {
     // If shape is already selected, remove; else add
     const idx = state.selectedShapes.indexOf(shape);
+    log("TRACE", "[canvas] centralized handler: multi-select toggle", {
+      idx, selectedShapes: state.selectedShapes.map(s=>s._id)
+    });
     if (idx === -1) {
       setSelectedShapes([...state.selectedShapes, shape]);
     } else {
@@ -141,32 +161,37 @@ function centralizedCanvasPointerHandler(e) {
       arr.splice(idx, 1);
       setSelectedShapes(arr);
     }
-    log("DEBUG", "[canvas] centralized handler: multi-select", {
+    log("TRACE", "[canvas] centralized handler: multi-select complete", {
       shapeType: shape._type,
       shapeLabel: shape._label,
       shapeId: shape._id,
-      selectedShapes: getState().selectedShapes.map(sh => sh._id)
+      selectedShapes: getState().selectedShapes.map(sh => sh._id),
+      stateAfter: {...getState()}
     });
   } else {
     setSelectedShapes([shape]);
-    log("DEBUG", "[canvas] centralized handler: single selection", {
+    log("TRACE", "[canvas] centralized handler: single selection complete", {
       shapeType: shape._type,
       shapeLabel: shape._label,
-      shapeId: shape._id
+      shapeId: shape._id,
+      selectedShapes: getState().selectedShapes.map(sh => sh._id),
+      stateAfter: {...getState()}
     });
   }
   canvas.setActiveObject(shape);
   canvas.renderAll();
+  log("TRACE", "[canvas] centralized handler: canvas.setActiveObject/renderAll DONE", {
+    activeObject: canvas.getActiveObject(),
+    stateAfter: {...getState()}
+  });
 }
 
-/**
- * Build the Fabric.js canvas panel. MiniLayout-compliant: accepts { element, title, componentName }.
- */
 export function buildCanvasPanel({ element, title, componentName }) {
   log("TRACE", "[canvas] buildCanvasPanel ENTRY", {
     elementType: element?.tagName,
     title,
-    componentName
+    componentName,
+    stateBefore: {...getState()}
   });
   try {
     log("INFO", "[canvas] buildCanvasPanel called", {
@@ -175,30 +200,27 @@ export function buildCanvasPanel({ element, title, componentName }) {
       componentName
     });
 
-    // Destroy previous canvas if present
     const store = getState();
     if (store.fabricCanvas && typeof store.fabricCanvas.dispose === "function") {
+      log("TRACE", "[canvas] buildCanvasPanel: disposing previous canvas", { canvas: store.fabricCanvas });
       store.fabricCanvas.dispose();
       log("DEBUG", "[canvas] buildCanvasPanel: previous canvas disposed");
     }
 
-    // Use default width/height for initial render (will resize to image when image loads)
     const width = store.settings?.canvasMaxWidth || 600;
     const height = store.settings?.canvasMaxHeight || 400;
 
-    // --- Create a <div> container for Fabric.js canvas, with overflow: auto for scrollbars ---
     const containerDiv = document.createElement('div');
     containerDiv.id = "fabric-canvas-div";
     containerDiv.style.position = "relative";
     containerDiv.style.width = width + "px";
     containerDiv.style.height = height + "px";
-    containerDiv.style.overflow = "auto"; // enable scrollbars if needed
+    containerDiv.style.overflow = "auto";
     containerDiv.style.background = "#f7f9fc";
     element.innerHTML = "";
     element.style.overflow = "auto";
     element.appendChild(containerDiv);
 
-    // Create the <canvas> element for Fabric.js
     const canvasEl = document.createElement('canvas');
     canvasEl.id = "fabric-main-canvas";
     canvasEl.width = width;
@@ -209,7 +231,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
     canvasEl.style.top = "0";
     containerDiv.appendChild(canvasEl);
 
-    // Fabric.js canvas: must pass the <canvas> element, not a <div>
     const canvas = new Canvas(canvasEl, {
       width,
       height,
@@ -217,17 +238,18 @@ export function buildCanvasPanel({ element, title, componentName }) {
       backgroundColor: "#f7f9fc"
     });
     setFabricCanvas(canvas);
-    log("DEBUG", "[canvas] buildCanvasPanel: Fabric.js canvas created", { width, height });
+    log("DEBUG", "[canvas] buildCanvasPanel: Fabric.js canvas created", { width, height, canvas });
 
     // --- Centralized selection/deselection handler ---
     canvas.off("mouse:down.centralized");
     canvas.on("mouse:down.centralized", centralizedCanvasPointerHandler);
+    log("TRACE", "[canvas] buildCanvasPanel: centralizedCanvasPointerHandler attached");
 
     // --- Sync shapes on canvas panel creation ---
-    log("TRACE", "[canvas] buildCanvasPanel: Syncing shapes on init");
+    log("TRACE", "[canvas] buildCanvasPanel: Syncing shapes on init", { shapes: getState().shapes });
     const shapes = getState().shapes;
     if (Array.isArray(shapes) && shapes.length > 0) {
-      log("DEBUG", "[canvas] Syncing existing shapes to canvas on panel build");
+      log("DEBUG", "[canvas] Syncing existing shapes to canvas on panel build", { shapes });
       shapes.forEach((shape, idx) => {
         log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} sync`, {
           type: shape?._type,
@@ -236,7 +258,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
         });
         if (getState().fabricCanvas && !getState().fabricCanvas.getObjects().includes(shape)) {
           getState().fabricCanvas.add(shape);
-          // No selection handler attached to shape!
           moveShapesToFront();
           log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} added to canvas`, {
             type: shape?._type,
@@ -265,8 +286,11 @@ export function buildCanvasPanel({ element, title, componentName }) {
 
     sceneDesignerStore.subscribe(() => {
       const state = getState();
-      // Only update background image if imageObj or imageURL actually changed
+      log("TRACE", "[canvas] store.subscribe fired", { state });
       if (state.imageObj !== prevImageObj || state.imageURL !== prevImageURL) {
+        log("TRACE", "[canvas] store.subscribe: imageObj/imageURL changed", {
+          prevImageObj, prevImageURL, stateImageObj: state.imageObj, stateImageURL: state.imageURL
+        });
         updateBackgroundImage(containerDiv, element);
         prevImageObj = state.imageObj;
         prevImageURL = state.imageURL;
@@ -274,10 +298,10 @@ export function buildCanvasPanel({ element, title, componentName }) {
       // Add shapes
       const canvasShapes = state.fabricCanvas?.getObjects() || [];
       const stateShapes = state.shapes || [];
+      log("TRACE", "[canvas] store.subscribe: shape sync", { canvasShapes, stateShapes });
       stateShapes.forEach(shape => {
         if (state.fabricCanvas && !canvasShapes.includes(shape)) {
           state.fabricCanvas.add(shape);
-          // No selection handler attached to shape!
           moveShapesToFront();
           log("TRACE", "[canvas] subscribe: shape added to canvas", {
             type: shape?._type,
@@ -289,20 +313,22 @@ export function buildCanvasPanel({ element, title, componentName }) {
       // Remove shapes
       canvasShapes.forEach(obj => {
         if (!stateShapes.includes(obj) && obj !== state.bgFabricImage) {
+          log("TRACE", "[canvas] subscribe: removing shape from canvas", { obj });
           state.fabricCanvas.remove(obj);
         }
       });
       state.fabricCanvas?.renderAll();
+      log("TRACE", "[canvas] store.subscribe: canvas.renderAll called");
     });
 
     if (getState().imageObj) {
-      log("TRACE", "[canvas] buildCanvasPanel: imageObj present, loading background image");
+      log("TRACE", "[canvas] buildCanvasPanel: imageObj present, loading background image", { imageObj: getState().imageObj });
       updateBackgroundImage(containerDiv, element);
       prevImageObj = getState().imageObj;
       prevImageURL = getState().imageURL;
     }
 
-    log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, centralized event handler, no shape-level selection handlers)");
+    log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, centralized event handler, full TRACE logging)");
 
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
@@ -312,7 +338,8 @@ export function buildCanvasPanel({ element, title, componentName }) {
   log("TRACE", "[canvas] buildCanvasPanel EXIT", {
     elementType: element?.tagName,
     title,
-    componentName
+    componentName,
+    stateAfter: {...getState()}
   });
 }
 

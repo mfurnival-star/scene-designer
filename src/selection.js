@@ -1,16 +1,14 @@
 /**
  * selection.js
  * -----------------------------------------------------------
- * Centralized Shape Selection Logic for Scene Designer (Zustand Migration, Centralized Canvas Handler Edition)
+ * Centralized Shape Selection Logic for Scene Designer (Full TRACE Logging Edition)
  * - Manages single/multi-shape selection state for Fabric.js objects.
  * - Sole authority for transformer lifecycle (attach/detach/update).
  * - Integrates shape state machine (shape-state.js).
  * - Integrates per-shape config (shape-defs.js).
  * - NO shape-level selection event handlers for selection/deselection.
  * - All selection logic is routed via canvas.js centralized event handler.
- * - DEEP TRACE logging for all entry/exit, selection state transitions.
- * - Robust event propagation control is now handled in the canvas handler.
- * - Transformer attach/detach logic remains as before.
+ * - **EXHAUSTIVE TRACE logging for all entry/exit, selection state transitions, shape arrays, and events.**
  * -----------------------------------------------------------
  */
 
@@ -38,7 +36,8 @@ export function setSelectedShape(shape) {
     incomingShapeId: shape?._id,
     prevSelectedShapeType: getState().selectedShape?._type,
     prevSelectedShapeLabel: getState().selectedShape?._label,
-    prevSelectedShapeId: getState().selectedShape?._id
+    prevSelectedShapeId: getState().selectedShape?._id,
+    prevSelectedShapes: getState().selectedShapes.map(s => s?._id)
   });
 
   // Always deselect previous selection, even if reselecting
@@ -64,7 +63,8 @@ export function setSelectedShape(shape) {
     selectedShapeType: getState().selectedShape?._type,
     selectedShapeLabel: getState().selectedShape?._label,
     selectedShapeId: getState().selectedShape?._id,
-    selectedShapesIds: getState().selectedShapes.map(s => s?._id)
+    selectedShapesIds: getState().selectedShapes.map(s => s?._id),
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type, _label: s._label}))
   });
 
   if (shape) {
@@ -98,7 +98,11 @@ export function setSelectedShape(shape) {
   });
 
   notifySelectionChanged();
-  log("TRACE", "[selection] setSelectedShape EXIT");
+  log("TRACE", "[selection] setSelectedShape EXIT", {
+    selectedShape: getState().selectedShape,
+    selectedShapes: getState().selectedShapes.map(s => s?._id),
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type}))
+  });
 }
 
 /**
@@ -111,7 +115,8 @@ export function setSelectedShapes(arr) {
     arrLabels: arr && arr.map ? arr.map(s => s?._label) : [],
     arrIds: arr && arr.map ? arr.map(s => s?._id) : [],
     prevSelectedShapes: getState().selectedShapes?.map ? getState().selectedShapes.map(s => s?._label) : [],
-    prevSelectedShapesIds: getState().selectedShapes?.map ? getState().selectedShapes.map(s => s?._id) : []
+    prevSelectedShapesIds: getState().selectedShapes?.map ? getState().selectedShapes.map(s => s?._id) : [],
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type, _label: s._label}))
   });
 
   const newArr = Array.isArray(arr) ? arr : [];
@@ -139,7 +144,8 @@ export function setSelectedShapes(arr) {
     selectedShapeLabel: getState().selectedShape?._label,
     selectedShapeId: getState().selectedShape?._id,
     selectedShapesLabels: getState().selectedShapes.map(s => s?._label),
-    selectedShapesIds: getState().selectedShapes.map(s => s?._id)
+    selectedShapesIds: getState().selectedShapes.map(s => s?._id),
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type, _label: s._label}))
   });
 
   newArr.forEach((shape, idx) => {
@@ -184,24 +190,35 @@ export function setSelectedShapes(arr) {
   });
 
   notifySelectionChanged();
-  log("TRACE", "[selection] setSelectedShapes EXIT");
+  log("TRACE", "[selection] setSelectedShapes EXIT", {
+    selectedShapes: getState().selectedShapes.map(s => s?._id),
+    selectedShape: getState().selectedShape?._id,
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type}))
+  });
 }
 
 /**
  * Select all shapes currently in state.
  */
 export function selectAllShapes() {
-  log("TRACE", "[selection] selectAllShapes ENTRY");
+  log("TRACE", "[selection] selectAllShapes ENTRY", {
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type, _label: s._label}))
+  });
   const allShapes = getState().shapes.slice();
   setSelectedShapes(allShapes);
-  log("TRACE", "[selection] selectAllShapes EXIT");
+  log("TRACE", "[selection] selectAllShapes EXIT", {
+    selectedShapes: getState().selectedShapes.map(s => s?._id)
+  });
 }
 
 /**
  * Deselect all shapes.
  */
 export function deselectAll() {
-  log("TRACE", "[selection] deselectAll ENTRY");
+  log("TRACE", "[selection] deselectAll ENTRY", {
+    selectedShapes: getState().selectedShapes.map(s => s?._id),
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type}))
+  });
   const stateShapes = getState().selectedShapes;
   if (stateShapes && Array.isArray(stateShapes)) {
     stateShapes.forEach(s => {
@@ -233,7 +250,10 @@ export function deselectAll() {
     }))
   });
 
-  log("TRACE", "[selection] deselectAll EXIT");
+  log("TRACE", "[selection] deselectAll EXIT", {
+    selectedShapes: getState().selectedShapes.map(s => s?._id),
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type}))
+  });
 }
 
 /**
@@ -244,7 +264,8 @@ function notifySelectionChanged() {
     selectedShapeLabel: getState().selectedShape?._label,
     selectedShapeId: getState().selectedShape?._id,
     selectedShapesLabels: getState().selectedShapes.map(s => s?._label),
-    selectedShapesIds: getState().selectedShapes.map(s => s?._id)
+    selectedShapesIds: getState().selectedShapes.map(s => s?._id),
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type}))
   });
   // Zustand store listeners (if any)
   // (If you want to implement custom listeners, do so here.)
@@ -284,7 +305,10 @@ export function isShapeSelected(shape) {
  * @returns {Array}
  */
 export function getSelectedShapes() {
-  log("TRACE", "[selection] getSelectedShapes ENTRY");
+  log("TRACE", "[selection] getSelectedShapes ENTRY", {
+    selectedShapes: getState().selectedShapes.map(s => s?._id),
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type}))
+  });
   const arr = getState().selectedShapes;
   log("TRACE", "[selection] getSelectedShapes EXIT", { arr });
   return arr;
@@ -295,7 +319,10 @@ export function getSelectedShapes() {
  * @returns {Object|null}
  */
 export function getSelectedShape() {
-  log("TRACE", "[selection] getSelectedShape ENTRY");
+  log("TRACE", "[selection] getSelectedShape ENTRY", {
+    selectedShape: getState().selectedShape,
+    shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type}))
+  });
   const s = getState().selectedShape;
   log("TRACE", "[selection] getSelectedShape EXIT", { s });
   return s;
