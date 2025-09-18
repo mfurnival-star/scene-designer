@@ -1,11 +1,12 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (ESM ONLY, Zustand Refactor)
+ * Scene Designer – Modular Toolbar UI Factory (ESM ONLY, Zustand Refactor, Actions Decoupled)
  * - Factory for all toolbar controls: image upload, server image select, shape type, shape actions.
  * - ES module only, all dependencies imported.
  * - No direct use of window.*, no legacy code.
  * - All logic for image upload and shape creation is routed via Zustand store and shapes.js.
+ * - All shape/scene actions (delete, duplicate, lock, unlock) are emitted as intents to actions.js.
  * - Logging via log.js at appropriate levels.
  * - MiniLayout compliance: panel factory expects { element, title, componentName } argument.
  * -----------------------------------------------------------
@@ -17,10 +18,15 @@ import {
   getState,
   addShape,
   setImage,
-  removeShape,
   setSelectedShapes
 } from './state.js';
 import { selectAllShapes } from './selection.js';
+import {
+  deleteSelectedShapes,
+  duplicateSelectedShapes,
+  lockSelectedShapes,
+  unlockSelectedShapes
+} from './actions.js';
 
 /**
  * Build the canvas toolbar panel.
@@ -212,26 +218,15 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     // --- DELETE SHAPE BUTTON ---
     deleteShapeBtn.addEventListener('click', () => {
       log("INFO", "[toolbar] Delete button clicked");
-      // Use direct references. Only delete unlocked shapes currently selected.
-      const selected = (getState().selectedShapes || []).filter(s => !s.locked);
-      if (!selected.length) {
-        log("INFO", "[toolbar] Delete button: No unlocked shapes selected");
-        return;
-      }
-      selected.forEach(shape => {
-        removeShape(shape);
-        if (getState().fabricCanvas) {
-          getState().fabricCanvas.remove(shape);
-        }
-      });
-      setSelectedShapes([]);
-      log("INFO", "[toolbar] Deleted selected unlocked shapes", { count: selected.length });
+      // Emit intent to actions.js
+      deleteSelectedShapes();
     });
 
     // --- DUPLICATE SHAPE BUTTON ---
     duplicateShapeBtn.addEventListener('click', () => {
-      log("INFO", "[toolbar] Duplicate button clicked (handled externally)");
-      // Duplication logic handled elsewhere (sidebar/canvas)
+      log("INFO", "[toolbar] Duplicate button clicked");
+      // Emit intent to actions.js
+      duplicateSelectedShapes();
     });
 
     // --- SELECT ALL BUTTON ---
@@ -242,15 +237,17 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
 
     // --- LOCK/UNLOCK BUTTONS ---
     lockBtn.addEventListener('click', () => {
-      log("INFO", "[toolbar] Lock button clicked (handled externally)");
-      // Lock logic handled elsewhere (sidebar/canvas)
+      log("INFO", "[toolbar] Lock button clicked");
+      // Emit intent to actions.js
+      lockSelectedShapes();
     });
     unlockBtn.addEventListener('click', () => {
-      log("INFO", "[toolbar] Unlock button clicked (handled externally)");
-      // Unlock logic handled elsewhere (sidebar/canvas)
+      log("INFO", "[toolbar] Unlock button clicked");
+      // Emit intent to actions.js
+      unlockSelectedShapes();
     });
 
-    log("INFO", "[toolbar] Toolbar panel fully initialized (image + shape controls, ESM only)");
+    log("INFO", "[toolbar] Toolbar panel fully initialized (image + shape controls, ESM only, actions decoupled)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);

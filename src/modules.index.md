@@ -9,6 +9,7 @@ settings.js
 errorlog.js
 main.js
 toolbar.js
+actions.js
 shapes.js
 transformer.js
 shape-state.js
@@ -34,7 +35,7 @@ minilayout.DOCS.md
   Global error and unhandled promise rejection handler; forwards all browser-level errors to logger.
 
 - **state.js**  
-  Centralized AppState singleton and state management.
+  Centralized Zustand-style store and state management for all app logic.
 
 - **canvas.js**  
   Canvas and shape creation APIs (Fabric.js-based).
@@ -52,7 +53,12 @@ minilayout.DOCS.md
   App entry point (MiniLayout bootstrapping).
 
 - **toolbar.js**  
-  Modular toolbar UI element factory (button, dropdown, color swatch, text input), ESM only.
+  Modular toolbar UI element factory (image upload, shape add/select, emits action intents to actions.js, ESM only).
+
+- **actions.js**  
+  Centralized business logic for scene actions (delete, duplicate, lock, unlock, add shape, etc).
+  - Toolbar and other UI modules emit intents to this module.
+  - Ensures separation of concerns and swappable toolbars.
 
 - **shapes.js**  
   Shape factory module:  

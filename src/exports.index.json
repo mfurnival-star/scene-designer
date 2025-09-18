@@ -1,4 +1,10 @@
 {
+  "actions.js": [
+    "deleteSelectedShapes",
+    "duplicateSelectedShapes",
+    "lockSelectedShapes",
+    "unlockSelectedShapes"
+  ],
   "canvas.js": [
     "buildCanvasPanel"
   ],

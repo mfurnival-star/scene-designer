@@ -37,6 +37,21 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
 
 ---
 
+## 🛠️ Modular Actions & Separation of Concerns (2025 Update)
+
+- **Toolbar and UI panels emit "intents" or "actions" only.**
+  - All business logic for scene actions (delete, duplicate, lock, unlock, etc.) is centralized in [`src/actions.js`](src/actions.js).
+  - Toolbars are now fully decoupled: you can swap, extend, or test toolbars without touching business logic.
+  - Actions module ensures consistent rules for deletion, duplication, locking, etc.
+
+- **State management** uses Zustand-style store in [`src/state.js`](src/state.js).
+  - UI and business logic modules communicate via exported functions.
+  - No direct mutation from UI components.
+
+- See [SCENE_DESIGNER_MANIFESTO.md](SCENE_DESIGNER_MANIFESTO.md) for architectural rules.
+
+---
+
 ## 📋 Updated TODO
 
 ### MVP
@@ -120,6 +135,8 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
 - [ ] When settings panel is closed, some users report toggle is hard to spot or not clickable.
 - [ ] Label saving UI/logic is present but could benefit from clearer feedback (e.g. confirm flash, or auto-save on Enter).
 - [ ] Some mobile/touch devices may have scaling or input issues.
+- [ ] **Toolbar actions are now dispatched as intents to `actions.js`.**  
+      If you extend the toolbar (e.g., add keyboard shortcuts, new UI), emit actions via the centralized module.
 
 ---
 
@@ -154,4 +171,20 @@ To restart or fork:
 - Add color sampling
 - Add config export
 - UI/logic must always match the `.ini` schema and ADB automation workflow
+
+---
+
+## 🏗️ Architecture Notes (2025 Update)
+
+- See `src/actions.js` for all centralized business logic for scene actions.
+- Toolbars and other UI emit actions only—never mutate state or shapes directly.
+- State managed in `src/state.js` (Zustand pattern).
+- Panels and UI factories follow MiniLayout API: `{ element, title, componentName }`.
+
+---
+
+## 📚 Documentation & Manifest
+
+- For engineering/code delivery rules, see [SCENE_DESIGNER_MANIFESTO.md](SCENE_DESIGNER_MANIFESTO.md)
+- For full module list, see [`src/modules.index.md`](src/modules.index.md)
 

@@ -79,21 +79,49 @@ These instructions are binding for all development, code review, and delivery in
 
 ---
 
-## 7. **Example (Good/Bad)**
+## 7. **Action/Intent-Based Separation of Concerns (2025 Update)**
+
+- **All UI components emit "intents" or "actions" to dedicated handler modules.**
+    - Toolbar, keyboard shortcuts, and other panels DO NOT contain business logic for deletion, duplication, locking, etc.
+    - All business logic for scene actions (delete, duplicate, lock, unlock, add shape, etc.) is centralized in `src/actions.js`.
+    - UI emits an intent (e.g., `deleteSelectedShapes()`), and the actions module performs the logic.
+    - This ensures:
+        - Maximum separation of concerns
+        - Swappable toolbars and input methods
+        - Consistent business rules
+        - Testable and maintainable code
+    - See `src/toolbar.js` for an example: all shape/scene actions are routed via `actions.js`.
+
+- **Cross-module communication always uses ES module imports/exports.**
+    - Never directly mutate state or shape arrays from UI modules.
+
+---
+
+## 8. **Example (Good/Bad)**
 
 ```js
-// Good
+// Good: UI emits intent, logic is centralized
+import { deleteSelectedShapes } from "./actions.js";
+deleteSelectedShapes();
+
 import { getState, setShapes } from "./state.js";
 import { buildSidebarPanel } from "./sidebar.js";
 
-// Bad
-import { AppState } from "./state.js";              // ❌ Not allowed (no AppState export)
-const stage = new window.Konva.Stage(...);          // ❌ Not allowed
-window.Pickr.create(...);                           // ❌ Not allowed
-import { something } from "./notExportedHere.js";   // ❌ Not allowed if not actually exported
+// Bad: UI contains business logic
+// (NOT ALLOWED)
+deleteShapeBtn.addEventListener('click', () => {
+  // ...directly mutating state, filtering shapes, etc.
+});
 ```
 
 ---
 
-Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
+## 9. **Manifest and Documentation Updates**
+
+- All new modules (added/removed/renamed) must be reflected in `src/modules.index.md`.
+- Update this file and module manifest as needed to document architecture changes.
+
+---
+
+Refer to **SCENE_DESIGNER_MANIFESTO.md** for the definitive engineering rules and architectural philosophy.
 
