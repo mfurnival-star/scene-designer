@@ -1,5 +1,5 @@
 #!/bin/bash
-# Scene Designer Deploy Script (prod or dev, auto FORCE settings injection)
+# Scene Designer Deploy Script (prod or dev, auto FORCE settings/Eruda injection, clean-up logic)
 # ---------------------------------------------------------------------------
 # Usage:
 #   [VAR=VALUE ...] ./deploy.sh [prod|dev]
@@ -11,7 +11,9 @@ set -euo pipefail
 PROJECT_DIR="$HOME/scene-designer"
 BUILD_DIR="$PROJECT_DIR/dist"
 DEPLOY_DIR="/var/www/scene-designer"
-INDEX_HTML="$BUILD_DIR/index.html"
+
+ROOT_INDEX_HTML="$PROJECT_DIR/index.html"
+DIST_INDEX_HTML="$BUILD_DIR/index.html"
 SETTINGS_JS="$PROJECT_DIR/src/settings.js"
 DATESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
@@ -56,9 +58,9 @@ function build_project() {
 
 function prepare_index_html() {
   echo "[$DATESTAMP] === Ensuring index.html exists in $BUILD_DIR ==="
-  if [ ! -f "$INDEX_HTML" ]; then
-    cp "$PROJECT_DIR/index.html" "$INDEX_HTML"
-    echo "Copied index.html to $INDEX_HTML"
+  if [ ! -f "$DIST_INDEX_HTML" ]; then
+    cp "$ROOT_INDEX_HTML" "$DIST_INDEX_HTML"
+    echo "Copied index.html to $DIST_INDEX_HTML"
   fi
 }
 
@@ -83,7 +85,7 @@ function inject_eruda() {
 
 function inject_force_settings_block() {
   echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settings.js keys ==="
-  # Remove any previous force block
+  # Remove any previous FORCE block first
   sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
 
   # Extract all setting keys and types from settings.js
@@ -105,9 +107,8 @@ function inject_force_settings_block() {
   echo "[$DATESTAMP] === ENV VAR DEBUG LIST ==="
   echo "  (Env var name) | (Value) | (Settings key match)"
   echo "-----------------|--------|----------------------"
-  # List all env vars (except internal bash vars)
   for var in $(env | cut -d= -f1 | sort); do
-    [[ "$var" =~ ^BASH_ ]] && continue # Skip bash internals
+    [[ "$var" =~ ^BASH_ ]] && continue
     [[ "$var" =~ ^SHLVL$ ]] && continue
     [[ "$var" =~ ^PWD$ ]] && continue
     [[ "$var" =~ ^OLDPWD$ ]] && continue
@@ -145,12 +146,12 @@ function inject_force_settings_block() {
   for key in $keys; do
     value="${!key:-}"
     if [[ -n "$value" ]]; then
-      setting_type="${key_type[$key]:-text}" # Default to text if not found
+      setting_type="${key_type[$key]:-text}"
       if [[ "$setting_type" == "boolean" ]]; then
         case "$value" in
           1|true|TRUE) js_val="true";;
           0|false|FALSE) js_val="false";;
-          *) js_val="false";; # default to false if not recognized
+          *) js_val="false";;
         esac
         block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = ${js_val};\n"
         echo "  [FORCE] $key (boolean) = $js_val"
@@ -163,7 +164,6 @@ function inject_force_settings_block() {
   done
   block+="  </script>\n  <!-- END FORCE SETTINGS -->"
   if [[ $injected -eq 1 ]]; then
-    # Insert block just before </head>
     awk -v block="$block" '
       /<\/head>/ {
         print block;
@@ -172,9 +172,8 @@ function inject_force_settings_block() {
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
     echo "[$DATESTAMP] === FORCE settings injected into $INDEX_HTML ==="
   else
-    # Remove any old block if present
-    sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
-    echo "[$DATESTAMP] === No FORCE settings found in env. ==="
+    # Remove any old block if present (already done above)
+    echo "[$DATESTAMP] === No FORCE settings found in env. Previous block removed. ==="
   fi
 }
 
@@ -205,13 +204,14 @@ if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then usage; fi
 git_commit_push
 
 if [[ "$MODE" == "prod" ]]; then
+  INDEX_HTML="$DIST_INDEX_HTML"
   build_project
   prepare_index_html
   inject_eruda
   inject_force_settings_block
   deploy_to_prod
 else
-  # DEV MODE: ensure dist/index.html is available and inject scripts
+  INDEX_HTML="$ROOT_INDEX_HTML"
   prepare_index_html
   inject_eruda
   inject_force_settings_block
@@ -219,4 +219,5 @@ else
 fi
 
 exit 0
+
 
