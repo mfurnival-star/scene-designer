@@ -1,5 +1,6 @@
 {
   "actions.js": [
+    "addShapeOfType",
     "deleteSelectedShapes",
     "duplicateSelectedShapes",
     "lockSelectedShapes",

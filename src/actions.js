@@ -1,227 +1,170 @@
 /**
  * actions.js
  * -----------------------------------------------------------
- * Scene Designer – Centralized Business Logic for Scene Actions (Full TRACE Logging Edition)
- * - All toolbar/UI intents for delete, duplicate, lock, unlock, etc. are handled here.
- * - Ensures separation of concerns and robust state mutation.
- * - Uses Zustand-style store from state.js.
- * - No direct mutation from UI modules.
- * - Exports: deleteSelectedShapes, duplicateSelectedShapes, lockSelectedShapes, unlockSelectedShapes.
- * - **EXHAUSTIVE TRACE logging at all entry/exit points, state dumps, and shape operations.**
+ * Scene Designer – Centralized Business Logic for Scene Actions (ESM ONLY, Manifesto-compliant)
+ * - Centralizes all scene actions: add shape, delete, duplicate, lock, unlock, select, etc.
+ * - All business rules (selection, stroke width, transformer handling) are here.
+ * - UI (toolbars, keyboard, etc.) emit only intents and never mutate state or selection directly.
+ * - Exports: addShapeOfType, deleteSelectedShapes, duplicateSelectedShapes, lockSelectedShapes, unlockSelectedShapes
+ * - All logging via log.js.
  * -----------------------------------------------------------
  */
 
 import { log } from './log.js';
-import { getState, setShapes, setSelectedShapes, removeShape, addShape } from './state.js';
-import { setSelectedShape, selectAllShapes, deselectAll } from './selection.js';
-import { setShapeState, lockShape, unlockShape } from './shape-state.js';
+import {
+  makePointShape,
+  makeRectShape,
+  makeCircleShape,
+  setStrokeWidthForSelectedShapes
+} from './shapes.js';
+import {
+  getState,
+  addShape,
+  removeShape,
+  setSelectedShapes
+} from './state.js';
+import {
+  setSelectedShapes as selectionSetSelectedShapes,
+  deselectAll
+} from './selection.js';
 
 /**
- * Delete all selected shapes (unlocked only).
- * Called by toolbar and keyboard shortcut.
- * Logs all entry/exit, state, and shape IDs before/after.
+ * Add a shape of the given type, apply business rules (select, stroke width).
+ * Handles creation, addition, selection, and stroke width logic.
+ * @param {string} type - "point", "rect", "circle"
+ * @param {Object} [opts] - Optional settings override (position, etc)
+ */
+export function addShapeOfType(type, opts = {}) {
+  log("TRACE", "[actions] addShapeOfType ENTRY", { type, opts });
+  const store = getState();
+  const w = store.settings?.defaultRectWidth || 50;
+  const h = store.settings?.defaultRectHeight || 30;
+  const r = store.settings?.defaultCircleRadius || 15;
+  const x = opts.x !== undefined
+    ? opts.x
+    : (store.settings?.canvasMaxWidth || 600) * ((store.settings?.shapeStartXPercent ?? 50) / 100);
+  const y = opts.y !== undefined
+    ? opts.y
+    : (store.settings?.canvasMaxHeight || 400) * ((store.settings?.shapeStartYPercent ?? 50) / 100);
+
+  let shape = null;
+  if (type === "rect") {
+    shape = makeRectShape(x - w / 2, y - h / 2, w, h);
+  } else if (type === "circle") {
+    shape = makeCircleShape(x, y, r);
+  } else if (type === "point") {
+    shape = makePointShape(x, y);
+  }
+  if (shape) {
+    addShape(shape);
+    // Always select and enter edit mode for new shape (only here, not in toolbar)
+    selectionSetSelectedShapes([shape]);
+    // Set stroke width as a business rule (from settings or default)
+    const strokeWidth = store.settings?.defaultStrokeWidth ?? 1;
+    setStrokeWidthForSelectedShapes(strokeWidth);
+    log("INFO", `[actions] Added ${type} shape`, shape);
+  } else {
+    log("WARN", "[actions] addShapeOfType: Failed to create shape", { type, opts });
+  }
+  log("TRACE", "[actions] addShapeOfType EXIT");
+}
+
+/**
+ * Delete all currently selected, unlocked shapes.
+ * Always clears selection and detaches transformer after deletion.
  */
 export function deleteSelectedShapes() {
   log("TRACE", "[actions] deleteSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label,
-      locked: s?.locked
-    })),
-    shapesInStore: getState().shapes.map(s => ({
-      _id: s._id,
-      _type: s._type,
-      _label: s._label,
-      locked: s.locked
-    }))
+    selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
-
-  const unlockedToDelete = getState().selectedShapes.filter(s => !s.locked);
-  log("TRACE", "[actions] deleteSelectedShapes: unlocked shapes to delete", {
-    unlockedToDelete: unlockedToDelete.map(s => ({
-      _id: s._id,
-      _type: s._type,
-      _label: s._label
-    }))
+  const selected = getState().selectedShapes || [];
+  const unlockedToDelete = selected.filter(s => !s.locked);
+  log("TRACE", "[actions] deleteSelectedShapes: unlocked shapes to delete", { unlockedToDelete });
+  unlockedToDelete.forEach(shape => {
+    removeShape(shape);
   });
-
-  // Remove from shapes array in store
-  unlockedToDelete.forEach(s => {
-    log("TRACE", "[actions] deleteSelectedShapes: removing shape", {
-      _id: s._id,
-      _type: s._type,
-      _label: s._label
-    });
-    removeShape(s);
-  });
-
-  // Deselect all after deletion
+  // Always deselect all after deletion
   deselectAll();
-
+  log("INFO", "[actions] deleteSelectedShapes: Deleted shapes, selection cleared");
   log("TRACE", "[actions] deleteSelectedShapes EXIT", {
     shapesInStoreAfter: getState().shapes.map(s => ({
-      _id: s._id,
-      _type: s._type,
-      _label: s._label,
-      locked: s.locked
-    })),
-    selectedShapesAfter: getState().selectedShapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label,
-      locked: s?.locked
+      _id: s._id, _type: s._type, _label: s._label
     }))
   });
 }
 
 /**
- * Duplicate all selected shapes (unlocked only).
- * Creates new shapes with offset and new IDs.
- * Logs every step.
+ * Duplicate all currently selected, unlocked shapes.
+ * The new shapes are selected after duplication.
  */
 export function duplicateSelectedShapes() {
   log("TRACE", "[actions] duplicateSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label,
-      locked: s?.locked
-    }))
+    selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
-
-  const unlockedToDuplicate = getState().selectedShapes.filter(s => !s.locked);
+  const selected = getState().selectedShapes || [];
+  const unlockedToDuplicate = selected.filter(s => !s.locked);
   const offset = 20;
   let newShapes = [];
-
   unlockedToDuplicate.forEach(orig => {
     let clone;
-    const type = orig._type;
-    log("TRACE", "[actions] duplicateSelectedShapes: duplicating shape", {
-      _id: orig._id,
-      type,
-      label: orig._label
-    });
-
-    // Clone shape based on type
-    if (type === "rect") {
-      clone = { ...orig };
-      clone.left = (orig.left || 0) + offset;
-      clone.top = (orig.top || 0) + offset;
-      clone._id = `rect_${Math.random().toString(36).slice(2)}_${Date.now()}`;
-      clone._label = orig._label + "_copy";
-      clone.locked = false;
-    } else if (type === "circle") {
-      clone = { ...orig };
-      clone.left = (orig.left || 0) + offset;
-      clone.top = (orig.top || 0) + offset;
-      clone._id = `circle_${Math.random().toString(36).slice(2)}_${Date.now()}`;
-      clone._label = orig._label + "_copy";
-      clone.locked = false;
-    } else if (type === "point") {
-      clone = { ...orig };
-      clone.left = (orig.left || 0) + offset;
-      clone.top = (orig.top || 0) + offset;
-      clone._id = `point_${Math.random().toString(36).slice(2)}_${Date.now()}`;
-      clone._label = orig._label + "_copy";
-      clone.locked = false;
+    if (orig._type === "rect") {
+      clone = makeRectShape(orig.left + offset, orig.top + offset, orig.width, orig.height);
+    } else if (orig._type === "circle") {
+      clone = makeCircleShape(orig.left + offset, orig.top + offset, orig.radius);
+    } else if (orig._type === "point") {
+      clone = makePointShape(orig.left + offset, orig.top + offset);
     }
     if (clone) {
       addShape(clone);
       newShapes.push(clone);
-      log("TRACE", "[actions] duplicateSelectedShapes: new shape added", {
-        _id: clone._id,
-        type: clone._type,
-        label: clone._label
-      });
     }
   });
-
-  // Select all newly duplicated shapes
-  setSelectedShapes(newShapes);
-
-  log("TRACE", "[actions] duplicateSelectedShapes EXIT", {
-    newShapes: newShapes.map(s => ({
-      _id: s._id,
-      _type: s._type,
-      _label: s._label,
-      locked: s.locked
-    })),
-    shapesInStoreAfter: getState().shapes.map(s => ({
-      _id: s._id,
-      _type: s._type,
-      _label: s._label,
-      locked: s.locked
-    }))
-  });
+  if (newShapes.length > 0) {
+    selectionSetSelectedShapes(newShapes);
+    setStrokeWidthForSelectedShapes(getState().settings?.defaultStrokeWidth ?? 1);
+    log("INFO", "[actions] duplicateSelectedShapes: Duplicated shapes and selected new", {
+      newShapes: newShapes.map(s => s._id)
+    });
+  }
+  log("TRACE", "[actions] duplicateSelectedShapes EXIT");
 }
 
 /**
- * Lock all selected shapes.
- * Updates lock property and disables drag/transform.
- * Logs all state changes.
+ * Lock all currently selected shapes.
  */
 export function lockSelectedShapes() {
   log("TRACE", "[actions] lockSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label,
-      locked: s?.locked
-    }))
+    selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
-
-  getState().selectedShapes.forEach(s => {
-    log("TRACE", "[actions] lockSelectedShapes: locking shape", {
-      _id: s._id,
-      _type: s._type,
-      _label: s._label
-    });
-    lockShape(s);
+  const selected = getState().selectedShapes || [];
+  selected.forEach(shape => {
+    shape.locked = true;
+    shape.selectable = false;
+    shape.evented = false;
   });
-
-  log("TRACE", "[actions] lockSelectedShapes EXIT", {
-    selectedShapesAfter: getState().selectedShapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label,
-      locked: s?.locked
-    }))
+  selectionSetSelectedShapes([]); // Deselect all after lock
+  log("INFO", "[actions] lockSelectedShapes: Locked shapes and cleared selection", {
+    lockedShapes: selected.map(s => s._id)
   });
+  log("TRACE", "[actions] lockSelectedShapes EXIT");
 }
 
 /**
- * Unlock all selected shapes.
- * Updates lock property and enables drag/transform.
- * Logs all state changes.
+ * Unlock all currently selected shapes.
  */
 export function unlockSelectedShapes() {
   log("TRACE", "[actions] unlockSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label,
-      locked: s?.locked
-    }))
+    selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
-
-  getState().selectedShapes.forEach(s => {
-    log("TRACE", "[actions] unlockSelectedShapes: unlocking shape", {
-      _id: s._id,
-      _type: s._type,
-      _label: s._label
-    });
-    unlockShape(s);
+  const selected = getState().selectedShapes || [];
+  selected.forEach(shape => {
+    shape.locked = false;
+    shape.selectable = true;
+    shape.evented = true;
   });
-
-  log("TRACE", "[actions] unlockSelectedShapes EXIT", {
-    selectedShapesAfter: getState().selectedShapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label,
-      locked: s?.locked
-    }))
+  log("INFO", "[actions] unlockSelectedShapes: Unlocked shapes", {
+    unlockedShapes: selected.map(s => s._id)
   });
+  log("TRACE", "[actions] unlockSelectedShapes EXIT");
 }
-
 

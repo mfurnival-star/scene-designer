@@ -1,27 +1,22 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (ESM ONLY, Zustand Refactor, Actions Decoupled)
+ * Scene Designer – Modular Toolbar UI Factory (ESM ONLY, Manifesto-compliant, Actions Decoupled)
  * - Factory for all toolbar controls: image upload, server image select, shape type, shape actions.
  * - ES module only, all dependencies imported.
  * - No direct use of window.*, no legacy code.
- * - All logic for image upload and shape creation is routed via Zustand store and shapes.js.
- * - All shape/scene actions (delete, duplicate, lock, unlock) are emitted as intents to actions.js.
+ * - All shape/scene actions are emitted as intents to actions.js.
+ * - NO business logic, selection, or state mutation.
  * - Logging via log.js at appropriate levels.
  * - MiniLayout compliance: panel factory expects { element, title, componentName } argument.
  * -----------------------------------------------------------
  */
 
 import { log } from './log.js';
-import { makePointShape, makeRectShape, makeCircleShape, setStrokeWidthForSelectedShapes } from './shapes.js';
-import {
-  getState,
-  addShape,
-  setImage,
-  setSelectedShapes
-} from './state.js';
+import { getState, setImage } from './state.js';
 import { selectAllShapes } from './selection.js';
 import {
+  addShapeOfType,
   deleteSelectedShapes,
   duplicateSelectedShapes,
   lockSelectedShapes,
@@ -193,26 +188,9 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     // --- ADD SHAPE BUTTON ---
     addShapeBtn.addEventListener('click', () => {
       const type = shapeTypeSelect.value;
-      let shape = null;
-      const store = getState();
-      const w = store.settings?.defaultRectWidth || 50;
-      const h = store.settings?.defaultRectHeight || 30;
-      const r = store.settings?.defaultCircleRadius || 15;
-      const x = (store.settings?.canvasMaxWidth || 600) * ((store.settings?.shapeStartXPercent ?? 50) / 100);
-      const y = (store.settings?.canvasMaxHeight || 400) * ((store.settings?.shapeStartYPercent ?? 50) / 100);
-      if (type === "rect") {
-        shape = makeRectShape(x - w / 2, y - h / 2, w, h);
-      } else if (type === "circle") {
-        shape = makeCircleShape(x, y, r);
-      } else if (type === "point") {
-        shape = makePointShape(x, y);
-      }
-      if (shape) {
-        addShape(shape);
-        setSelectedShapes([shape]);
-        setStrokeWidthForSelectedShapes(1);
-        log("INFO", `[toolbar] Added ${type} shape via shapes.js`, shape);
-      }
+      // Emit intent to actions.js: centralized add/select/strokeWidth logic
+      addShapeOfType(type);
+      log("INFO", `[toolbar] Add shape intent emitted`, { type });
     });
 
     // --- DELETE SHAPE BUTTON ---
