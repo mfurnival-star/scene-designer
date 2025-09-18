@@ -5,6 +5,16 @@
   <title>Scene Designer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="scene-designer.css">
+  <!-- BEGIN FORCE SETTINGS -->
+  <script>
+    window.SCENE_DESIGNER_FORCE = true;
+    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};
+    window.SCENE_DESIGNER_FORCE_SETTINGS["DEBUG_LOG_LEVEL"] = "Trace (very verbose)";
+    window.SCENE_DESIGNER_FORCE_SETTINGS["INTERCEPT_CONSOLE"] = "0";
+    window.SCENE_DESIGNER_FORCE_SETTINGS["LOG_OUTPUT_DEST"] = "server";
+    window.SCENE_DESIGNER_FORCE_SETTINGS["LOG_SERVER_URL"] = "http://143.47.247.184/logstream";
+  </script>
+  <!-- END FORCE SETTINGS -->
 </head>
 <body>
   <!-- Vite will inject scripts automatically -->
