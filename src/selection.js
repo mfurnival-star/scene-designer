@@ -25,6 +25,17 @@ import {
 } from './state.js';
 
 /**
+ * Utility: get canonical shape reference from state.shapes by _id.
+ * @param {Object} shapeLike - shape-like object (from event or store)
+ * @returns {Object|null} shape from state.shapes, or null
+ */
+function getCanonicalShapeById(shapeLike) {
+  if (!shapeLike || !shapeLike._id) return null;
+  const shapes = getState().shapes || [];
+  return shapes.find(s => s._id === shapeLike._id) || null;
+}
+
+/**
  * Set the currently selected shape (single selection).
  * Always runs full selection logic, even if shape is already selected.
  * @param {Object|null} shape - Fabric.js object or null to clear.
@@ -40,6 +51,9 @@ export function setSelectedShape(shape) {
     prevSelectedShapes: getState().selectedShapes.map(s => s?._id)
   });
 
+  // Always resolve to canonical reference
+  const canonicalShape = getCanonicalShapeById(shape);
+
   // Always deselect previous selection, even if reselecting
   if (getState().selectedShape) {
     log("TRACE", "[selection] setSelectedShape - Deselecting previous shape", {
@@ -52,11 +66,11 @@ export function setSelectedShape(shape) {
 
   // --- Set _selected flag on all shapes ---
   (getState().shapes || []).forEach(s => { s._selected = false; });
-  if (shape) shape._selected = true;
+  if (canonicalShape) canonicalShape._selected = true;
 
   sceneDesignerStore.setState({
-    selectedShape: shape,
-    selectedShapes: shape ? [shape] : []
+    selectedShape: canonicalShape,
+    selectedShapes: canonicalShape ? [canonicalShape] : []
   });
 
   log("TRACE", "[selection] setSelectedShape - State updated", {
@@ -67,18 +81,18 @@ export function setSelectedShape(shape) {
     shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type, _label: s._label}))
   });
 
-  if (shape) {
-    log("TRACE", "[selection] setSelectedShape - Calling selectShape()", { shape, id: shape?._id });
-    selectShape(shape);
+  if (canonicalShape) {
+    log("TRACE", "[selection] setSelectedShape - Calling selectShape()", { canonicalShape, id: canonicalShape?._id });
+    selectShape(canonicalShape);
 
     // Always attach transformer for valid shapes; never skip if same shape
-    const def = getShapeDef(shape);
+    const def = getShapeDef(canonicalShape);
     log("TRACE", "[selection] setSelectedShape - ShapeDef", { def });
-    if (def && def.editable && !shape.locked) {
-      log("TRACE", "[selection] setSelectedShape - Attaching transformer", { shapeLabel: shape._label });
-      attachTransformerForShape(shape);
+    if (def && def.editable && !canonicalShape.locked) {
+      log("TRACE", "[selection] setSelectedShape - Attaching transformer", { shapeLabel: canonicalShape._label });
+      attachTransformerForShape(canonicalShape);
     } else {
-      log("TRACE", "[selection] setSelectedShape - Detaching transformer (not editable or locked)", { shapeLabel: shape._label });
+      log("TRACE", "[selection] setSelectedShape - Detaching transformer (not editable or locked)", { shapeLabel: canonicalShape._label });
       detachTransformer();
     }
     fixStrokeWidthAfterTransform();
@@ -93,7 +107,7 @@ export function setSelectedShape(shape) {
       _id: s?._id,
       _type: s?._type,
       _label: s?._label,
-      refEq: s === shape
+      refEq: s === canonicalShape
     }))
   });
 
@@ -107,6 +121,7 @@ export function setSelectedShape(shape) {
 
 /**
  * Set the current multi-selection.
+ * ALWAYS resolves all shapes to canonical references by _id.
  * @param {Array} arr - Array of Fabric.js objects.
  */
 export function setSelectedShapes(arr) {
@@ -119,7 +134,11 @@ export function setSelectedShapes(arr) {
     shapesInStore: getState().shapes.map(s => ({_id: s._id, _type: s._type, _label: s._label}))
   });
 
-  const newArr = Array.isArray(arr) ? arr : [];
+  // Always resolve all arr items to canonical references
+  const shapesInStore = getState().shapes || [];
+  const newArr = Array.isArray(arr)
+    ? arr.map(shape => getCanonicalShapeById(shape)).filter(s => !!s)
+    : [];
 
   // Always deselect previous selection
   if (getState().selectedShapes && Array.isArray(getState().selectedShapes)) {
@@ -132,7 +151,7 @@ export function setSelectedShapes(arr) {
   }
 
   // --- Set _selected flag on all shapes ---
-  (getState().shapes || []).forEach(s => { s._selected = false; });
+  shapesInStore.forEach(s => { s._selected = false; });
   newArr.forEach(s => { s._selected = true; });
 
   sceneDesignerStore.setState({
@@ -183,9 +202,9 @@ export function setSelectedShapes(arr) {
       _label: s?._label
     })),
     storeShapes: getState().shapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label
+      _id: s._id,
+      _type: s._type,
+      _label: s._label
     }))
   });
 
@@ -244,9 +263,9 @@ export function deselectAll() {
       _label: s?._label
     })),
     storeShapes: getState().shapes.map(s => ({
-      _id: s?._id,
-      _type: s?._type,
-      _label: s?._label
+      _id: s._id,
+      _type: s._type,
+      _label: s._label
     }))
   });
 
