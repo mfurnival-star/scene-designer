@@ -64,7 +64,7 @@ export const settingsRegistry = [
   { key: "defaultStrokeColor", label: "Default Stroke Color", type: "color", default: "#000000ff" },
   { key: "defaultFillColor", label: "Default Fill Color", type: "color", default: "#00000000" },
   { key: "canvasMaxWidth", label: "Canvas Max Width (px)", type: "number", default: 430, min: 100, max: 4000, step: 10 },
-  { key: "canvasMaxHeight", label: "Canvas Max Height (px)", type: "number", default: 9999, min: 100, max: 4000, step: 10 },
+  { key: "canvasMaxHeight", label: "Canvas Max Height (px)", type:  "number", default: 9999, min: 100, max: 4000, step: 10 },
   {
     key: "canvasScaleMode",
     label: "Image Scale Mode",
@@ -142,6 +142,19 @@ function normalizeLogLevelNum(val) {
   return 3; // Info
 }
 
+// --- Robust Boolean Coercion for FORCE Settings ---
+function coerceBoolean(val) {
+  if (typeof val === "boolean") return val;
+  if (typeof val === "string") {
+    if (val === "true" || val === "1") return true;
+    if (val === "false" || val === "0") return false;
+  }
+  if (typeof val === "number") {
+    return Boolean(val);
+  }
+  return false;
+}
+
 function mergeSettingsWithForce(stored) {
   log("TRACE", "[settings] mergeSettingsWithForce", { stored });
   const forceMode = typeof window !== "undefined" &&
@@ -153,6 +166,10 @@ function mergeSettingsWithForce(stored) {
     let val;
     if (forceMode && reg.key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
       val = window.SCENE_DESIGNER_FORCE_SETTINGS[reg.key];
+      // --- Coerce boolean types robustly ---
+      if (reg.type === "boolean") {
+        val = coerceBoolean(val);
+      }
       log("INFO", `[settings] FORCE MODE: Overriding ${reg.key} with forced value`, val);
     } else if (reg.key in stored) {
       val = stored[reg.key];
