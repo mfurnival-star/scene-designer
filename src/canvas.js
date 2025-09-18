@@ -1,14 +1,15 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Fabric.js Panel (Fabric.js Migration, MiniLayout Panel, Zustand Refactor)
+ * Scene Designer – Canvas/Fabric.js Panel (Centralized Selection Handler, Fabric.js, MiniLayout Panel, Zustand Store)
  * - Fabric.js canvas creation, image background, shape management.
- * - All logic is ES module only, no window/global access.
+ * - All selection/deselection/multiselect handled in a single canvas event handler.
+ * - No shape-level selection handlers for selection/deselection.
  * - State is managed via Zustand store from state.js.
  * - Exports: buildCanvasPanel({ element, title, componentName })
  * - Panel factory for MiniLayout; renders the main canvas panel.
  * - Logging via log.js at TRACE/DEBUG/INFO.
- * - Refactored: Image always at top left, canvas/container sized to image, scrollbars as needed.
+ * - Image always at top left, canvas/container sized to image, scrollbars as needed.
  * -----------------------------------------------------------
  */
 
@@ -25,7 +26,6 @@ import {
   sceneDesignerStore,
 } from './state.js';
 import { log } from './log.js';
-import { attachSelectionHandlers } from './selection.js';
 import { setShapeState, selectShape, deselectShape } from './shape-state.js';
 
 /**
@@ -109,6 +109,57 @@ function updateBackgroundImage(containerDiv, element) {
 }
 
 /**
+ * Centralized canvas pointer event handler for selection/deselection/multiselect.
+ */
+function centralizedCanvasPointerHandler(e) {
+  log("TRACE", "[canvas] centralizedCanvasPointerHandler FIRED", { event: e });
+  const state = getState();
+  const canvas = state.fabricCanvas;
+  const shapes = state.shapes || [];
+
+  // If background is clicked (no shape), deselect all
+  if (!e.target) {
+    log("DEBUG", "[canvas] centralized handler: background clicked, deselecting all");
+    setSelectedShapes([]);
+    canvas.discardActiveObject();
+    canvas.renderAll();
+    return;
+  }
+
+  // If a shape is clicked
+  const shape = e.target;
+  // Multi-select toggle (ctrl/meta)
+  const isMulti = e.e && (e.e.ctrlKey || e.e.metaKey);
+
+  if (isMulti) {
+    // If shape is already selected, remove; else add
+    const idx = state.selectedShapes.indexOf(shape);
+    if (idx === -1) {
+      setSelectedShapes([...state.selectedShapes, shape]);
+    } else {
+      const arr = state.selectedShapes.slice();
+      arr.splice(idx, 1);
+      setSelectedShapes(arr);
+    }
+    log("DEBUG", "[canvas] centralized handler: multi-select", {
+      shapeType: shape._type,
+      shapeLabel: shape._label,
+      shapeId: shape._id,
+      selectedShapes: getState().selectedShapes.map(sh => sh._id)
+    });
+  } else {
+    setSelectedShapes([shape]);
+    log("DEBUG", "[canvas] centralized handler: single selection", {
+      shapeType: shape._type,
+      shapeLabel: shape._label,
+      shapeId: shape._id
+    });
+  }
+  canvas.setActiveObject(shape);
+  canvas.renderAll();
+}
+
+/**
  * Build the Fabric.js canvas panel. MiniLayout-compliant: accepts { element, title, componentName }.
  */
 export function buildCanvasPanel({ element, title, componentName }) {
@@ -168,24 +219,9 @@ export function buildCanvasPanel({ element, title, componentName }) {
     setFabricCanvas(canvas);
     log("DEBUG", "[canvas] buildCanvasPanel: Fabric.js canvas created", { width, height });
 
-    // --- Unselect shapes by clicking on empty background ---
-    canvas.on("mouse:down", function(e) {
-      log("TRACE", "[canvas] mouse:down handler FIRED", { event: e });
-      // --- PATCH: Only deselect if NOT clicking on a shape ---
-      // Fabric.js: e.target is the clicked object, null means canvas background.
-      // If event bubbling/propagation is blocked, this will only fire for true background clicks.
-      if (!e.target) {
-        getState().selectedShapes.forEach(deselectShape);
-        setSelectedShapes([]);
-        (getState().shapes || []).forEach(s => {
-          attachSelectionHandlers(s);
-        });
-        log("DEBUG", "[canvas] mouse:down: all shapes deselected");
-      } else {
-        // If a shape, don't deselect (selection.js handler will fire)
-        log("TRACE", "[canvas] mouse:down: shape clicked, no deselect", { targetType: e.target?._type, targetLabel: e.target?._label });
-      }
-    });
+    // --- Centralized selection/deselection handler ---
+    canvas.off("mouse:down.centralized");
+    canvas.on("mouse:down.centralized", centralizedCanvasPointerHandler);
 
     // --- Sync shapes on canvas panel creation ---
     log("TRACE", "[canvas] buildCanvasPanel: Syncing shapes on init");
@@ -200,8 +236,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
         });
         if (getState().fabricCanvas && !getState().fabricCanvas.getObjects().includes(shape)) {
           getState().fabricCanvas.add(shape);
-          attachSelectionHandlers(shape);
-          // Move shape above bg image if present
+          // No selection handler attached to shape!
           moveShapesToFront();
           log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} added to canvas`, {
             type: shape?._type,
@@ -225,7 +260,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
     // Subscribe to store for image and shape changes (FILTERED)
     log("TRACE", "[canvas] Subscribing to store state changes");
 
-    // --- Fix: Only update background image if imageObj or imageURL actually changes ---
     let prevImageObj = null;
     let prevImageURL = null;
 
@@ -243,7 +277,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
       stateShapes.forEach(shape => {
         if (state.fabricCanvas && !canvasShapes.includes(shape)) {
           state.fabricCanvas.add(shape);
-          attachSelectionHandlers(shape);
+          // No selection handler attached to shape!
           moveShapesToFront();
           log("TRACE", "[canvas] subscribe: shape added to canvas", {
             type: shape?._type,
@@ -268,7 +302,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
       prevImageURL = getState().imageURL;
     }
 
-    log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, no UI controls)");
+    log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, centralized event handler, no shape-level selection handlers)");
 
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);

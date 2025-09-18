@@ -5,7 +5,7 @@
  * - Centralizes all Fabric.js shape construction, event attachment, and per-shape config.
  * - Exports: makePointShape, makeRectShape, makeCircleShape, fixStrokeWidthAfterTransform.
  * - Every shape/group gets a unique _id at creation for sidebar/selection robustness.
- * - All shapes have selection event handlers from selection.js and shape-state.js.
+ * - NO selection event handlers are attached to shapes (handled centrally in canvas.js).
  * - Handles per-shape config, label, lock, and transformer events.
  * - No global variables, no window.* usage.
  * - Logging via log.js (DEEP TRACE logging for creation and handler attachment).
@@ -15,7 +15,6 @@
 
 import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
 import { log } from './log.js';
-import { attachSelectionHandlers } from './selection.js';
 import { setShapeState } from './shape-state.js';
 import {
   getState,
@@ -135,23 +134,16 @@ export function makePointShape(x, y) {
   pointGroup.locked = false;
   pointGroup._id = generateShapeId('point');
 
-  log("TRACE", "[shapes] makePointShape: before attachSelectionHandlers", {
+  log("TRACE", "[shapes] makePointShape: creation", {
     type: pointGroup._type,
     label: pointGroup._label,
     _id: pointGroup._id
   });
-  attachSelectionHandlers(pointGroup);
 
   // Listen for transform events and forcibly reset strokeWidth to 1px
   pointGroup.on("modified", () => {
     setShapeStrokeWidth(pointGroup, 1);
     if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
-  });
-
-  log("TRACE", "[shapes] makePointShape: after attachSelectionHandlers", {
-    type: pointGroup._type,
-    label: pointGroup._label,
-    _id: pointGroup._id
   });
 
   setShapeState(pointGroup, 'default');
@@ -195,23 +187,16 @@ export function makeRectShape(x, y, w, h) {
   rect.locked = false;
   rect._id = generateShapeId('rect');
 
-  log("TRACE", "[shapes] makeRectShape: before attachSelectionHandlers", {
+  log("TRACE", "[shapes] makeRectShape: creation", {
     type: rect._type,
     label: rect._label,
     _id: rect._id
   });
-  attachSelectionHandlers(rect);
 
   // Listen for transform events and forcibly reset strokeWidth to 1px
   rect.on("modified", () => {
     setShapeStrokeWidth(rect, 1);
     if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
-  });
-
-  log("TRACE", "[shapes] makeRectShape: after attachSelectionHandlers", {
-    type: rect._type,
-    label: rect._label,
-    _id: rect._id
   });
 
   setShapeState(rect, 'default');
@@ -254,23 +239,16 @@ export function makeCircleShape(x, y, r) {
   circle.locked = false;
   circle._id = generateShapeId('circle');
 
-  log("TRACE", "[shapes] makeCircleShape: before attachSelectionHandlers", {
+  log("TRACE", "[shapes] makeCircleShape: creation", {
     type: circle._type,
     label: circle._label,
     _id: circle._id
   });
-  attachSelectionHandlers(circle);
 
   // Listen for transform events and forcibly reset strokeWidth to 1px
   circle.on("modified", () => {
     setShapeStrokeWidth(circle, 1);
     if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
-  });
-
-  log("TRACE", "[shapes] makeCircleShape: after attachSelectionHandlers", {
-    type: circle._type,
-    label: circle._label,
-    _id: circle._id
   });
 
   setShapeState(circle, 'default');

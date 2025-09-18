@@ -1,15 +1,16 @@
 /**
  * selection.js
  * -----------------------------------------------------------
- * Centralized Shape Selection Logic for Scene Designer (Zustand Migration)
+ * Centralized Shape Selection Logic for Scene Designer (Zustand Migration, Centralized Canvas Handler Edition)
  * - Manages single/multi-shape selection state for Fabric.js objects.
  * - Sole authority for transformer lifecycle (attach/detach/update).
  * - Integrates shape state machine (shape-state.js).
  * - Integrates per-shape config (shape-defs.js).
- * - Always attaches selection event handlers; never removes except on shape destroy.
- * - Always re-attaches transformer on selection, even if selecting same shape.
- * - DEEP TRACE logging for all entry/exit, event handler attach/fired, selection state transitions.
- * - Robust event propagation control to ensure shape clicks select, not deselect (fixes DEFECT1).
+ * - NO shape-level selection event handlers for selection/deselection.
+ * - All selection logic is routed via canvas.js centralized event handler.
+ * - DEEP TRACE logging for all entry/exit, selection state transitions.
+ * - Robust event propagation control is now handled in the canvas handler.
+ * - Transformer attach/detach logic remains as before.
  * -----------------------------------------------------------
  */
 
@@ -50,7 +51,7 @@ export function setSelectedShape(shape) {
     deselectShape(getState().selectedShape);
   }
 
-  // --- NEW: Set _selected flag on all shapes ---
+  // --- Set _selected flag on all shapes ---
   (getState().shapes || []).forEach(s => { s._selected = false; });
   if (shape) shape._selected = true;
 
@@ -125,7 +126,7 @@ export function setSelectedShapes(arr) {
     });
   }
 
-  // --- NEW: Set _selected flag on all shapes ---
+  // --- Set _selected flag on all shapes ---
   (getState().shapes || []).forEach(s => { s._selected = false; });
   newArr.forEach(s => { s._selected = true; });
 
@@ -208,7 +209,7 @@ export function deselectAll() {
       deselectShape(s);
     });
   }
-  // --- NEW: Set _selected flag on all shapes ---
+  // --- Set _selected flag on all shapes ---
   (getState().shapes || []).forEach(s => { s._selected = false; });
 
   sceneDesignerStore.setState({
@@ -251,62 +252,18 @@ function notifySelectionChanged() {
 }
 
 /**
- * Attach selection event handlers to a Fabric.js shape.
- * Always attaches; never removes except on shape destroy.
- * Robust propagation/bubbling control: always blocks event bubbling and propagation after shape click.
+ * NO LONGER USED: Attach selection event handlers to a Fabric.js shape.
+ * Selection is now handled only via canvas.js centralized handler.
+ * This function is retained only for backward compatibility with drag/transform handlers.
  * @param {Object} shape - Fabric.js object to attach handlers to.
  */
 export function attachSelectionHandlers(shape) {
-  log("TRACE", "[selection] attachSelectionHandlers ENTRY", {
+  log("TRACE", "[selection] attachSelectionHandlers NO-OP (centralized handler edition)", {
     shapeType: shape?._type,
     shapeLabel: shape?._label,
     shapeId: shape?._id
   });
-  if (!shape || typeof shape.on !== "function") {
-    log("WARN", "[selection] attachSelectionHandlers: Not a valid Fabric.js shape", { shape });
-    log("TRACE", "[selection] attachSelectionHandlers EXIT (invalid shape)");
-    return;
-  }
-  // Remove previous mousedown.selection handler to avoid duplicates
-  shape.off("mousedown.selection");
-  shape.on("mousedown.selection", function(evt) {
-    log("TRACE", "[selection] Shape mousedown.selection handler FIRED", {
-      shapeType: shape?._type,
-      shapeLabel: shape?._label,
-      shapeId: shape?._id,
-      pointer: evt?.pointer,
-      event: evt
-    });
-    // Robustly block event bubbling/propagation
-    if (evt) {
-      if (evt.cancelBubble !== undefined) evt.cancelBubble = true;
-      // For Fabric.js, block both native and synthetic events
-      if (evt.e && typeof evt.e.stopPropagation === "function") evt.e.stopPropagation();
-      if (evt.e && typeof evt.e.stopImmediatePropagation === "function") evt.e.stopImmediatePropagation();
-      if (evt.e) evt.e.cancelBubble = true;
-    }
-
-    // Ctrl/Meta for multi-select toggle
-    if (evt.e && (evt.e.ctrlKey || evt.e.metaKey)) {
-      log("TRACE", "[selection] mousedown.selection: multi-select toggle", { shapeLabel: shape._label, shapeId: shape._id });
-      const idx = getState().selectedShapes.indexOf(shape);
-      if (idx === -1) {
-        setSelectedShapes([...getState().selectedShapes, shape]);
-      } else {
-        const newArr = getState().selectedShapes.slice();
-        newArr.splice(idx, 1);
-        setSelectedShapes(newArr);
-      }
-    } else {
-      log("TRACE", "[selection] mousedown.selection: single selection", { shapeLabel: shape._label, shapeId: shape._id });
-      setSelectedShape(shape); // Always triggers full selection logic, even if same shape
-    }
-  });
-  log("TRACE", "[selection] attachSelectionHandlers EXIT", {
-    shapeType: shape?._type,
-    shapeLabel: shape?._label,
-    shapeId: shape?._id
-  });
+  // No-op: selection handled in canvas.js centralized handler
 }
 
 /**
@@ -316,7 +273,7 @@ export function attachSelectionHandlers(shape) {
  */
 export function isShapeSelected(shape) {
   log("TRACE", "[selection] isShapeSelected ENTRY", { shapeLabel: shape?._label, shapeId: shape?._id });
-  // --- NEW: Use ._selected property for consistency ---
+  // Use ._selected property for consistency
   const result = !!shape && !!shape._selected;
   log("TRACE", "[selection] isShapeSelected EXIT", { result });
   return result;
@@ -355,5 +312,4 @@ if (typeof window !== "undefined") {
   window.getSelectedShapes = getSelectedShapes;
   window.attachSelectionHandlers = attachSelectionHandlers;
 }
-
 
