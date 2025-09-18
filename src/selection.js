@@ -33,15 +33,18 @@ export function setSelectedShape(shape) {
   log("TRACE", "[selection] setSelectedShape ENTRY", {
     incomingShapeType: shape?._type,
     incomingShapeLabel: shape?._label,
+    incomingShapeId: shape?._id,
     prevSelectedShapeType: getState().selectedShape?._type,
-    prevSelectedShapeLabel: getState().selectedShape?._label
+    prevSelectedShapeLabel: getState().selectedShape?._label,
+    prevSelectedShapeId: getState().selectedShape?._id
   });
 
   // Always deselect previous selection, even if reselecting
   if (getState().selectedShape) {
     log("TRACE", "[selection] setSelectedShape - Deselecting previous shape", {
       prevSelectedShapeType: getState().selectedShape?._type,
-      prevSelectedShapeLabel: getState().selectedShape?._label
+      prevSelectedShapeLabel: getState().selectedShape?._label,
+      prevSelectedShapeId: getState().selectedShape?._id
     });
     deselectShape(getState().selectedShape);
   }
@@ -57,11 +60,13 @@ export function setSelectedShape(shape) {
 
   log("TRACE", "[selection] setSelectedShape - State updated", {
     selectedShapeType: getState().selectedShape?._type,
-    selectedShapeLabel: getState().selectedShape?._label
+    selectedShapeLabel: getState().selectedShape?._label,
+    selectedShapeId: getState().selectedShape?._id,
+    selectedShapesIds: getState().selectedShapes.map(s => s?._id)
   });
 
   if (shape) {
-    log("TRACE", "[selection] setSelectedShape - Calling selectShape()", { shape });
+    log("TRACE", "[selection] setSelectedShape - Calling selectShape()", { shape, id: shape?._id });
     selectShape(shape);
 
     // Always attach transformer for valid shapes; never skip if same shape
@@ -80,6 +85,16 @@ export function setSelectedShape(shape) {
     detachTransformer();
   }
 
+  // EXTRA TRACE: dump selectedShapes array and shape references
+  log("TRACE", "[selection] setSelectedShape - selectedShapes array after update", {
+    selectedShapes: getState().selectedShapes.map(s => ({
+      _id: s?._id,
+      _type: s?._type,
+      _label: s?._label,
+      refEq: s === shape
+    }))
+  });
+
   notifySelectionChanged();
   log("TRACE", "[selection] setSelectedShape EXIT");
 }
@@ -92,7 +107,9 @@ export function setSelectedShapes(arr) {
   log("TRACE", "[selection] setSelectedShapes ENTRY", {
     arrTypes: arr && arr.map ? arr.map(s => s?._type) : [],
     arrLabels: arr && arr.map ? arr.map(s => s?._label) : [],
-    prevSelectedShapes: getState().selectedShapes?.map ? getState().selectedShapes.map(s => s?._label) : []
+    arrIds: arr && arr.map ? arr.map(s => s?._id) : [],
+    prevSelectedShapes: getState().selectedShapes?.map ? getState().selectedShapes.map(s => s?._label) : [],
+    prevSelectedShapesIds: getState().selectedShapes?.map ? getState().selectedShapes.map(s => s?._id) : []
   });
 
   const newArr = Array.isArray(arr) ? arr : [];
@@ -101,7 +118,7 @@ export function setSelectedShapes(arr) {
   if (getState().selectedShapes && Array.isArray(getState().selectedShapes)) {
     getState().selectedShapes.forEach(s => {
       if (!newArr.includes(s)) {
-        log("TRACE", "[selection] setSelectedShapes - Deselecting shape", { shapeLabel: s?._label });
+        log("TRACE", "[selection] setSelectedShapes - Deselecting shape", { shapeLabel: s?._label, shapeId: s?._id });
         deselectShape(s);
       }
     });
@@ -118,14 +135,16 @@ export function setSelectedShapes(arr) {
 
   log("TRACE", "[selection] setSelectedShapes - State updated", {
     selectedShapeLabel: getState().selectedShape?._label,
-    selectedShapesLabels: getState().selectedShapes.map(s => s?._label)
+    selectedShapeId: getState().selectedShape?._id,
+    selectedShapesLabels: getState().selectedShapes.map(s => s?._label),
+    selectedShapesIds: getState().selectedShapes.map(s => s?._id)
   });
 
   newArr.forEach((shape, idx) => {
-    log("TRACE", "[selection] setSelectedShapes - setMultiSelected", { shapeLabel: shape._label, enable: newArr.length > 1 });
+    log("TRACE", "[selection] setSelectedShapes - setMultiSelected", { shapeLabel: shape._label, shapeId: shape._id, enable: newArr.length > 1 });
     setMultiSelected(shape, newArr.length > 1);
     if (newArr.length === 1) {
-      log("TRACE", "[selection] setSelectedShapes - selectShape()", { shapeLabel: shape._label });
+      log("TRACE", "[selection] setSelectedShapes - selectShape()", { shapeLabel: shape._label, shapeId: shape._id });
       selectShape(shape);
     }
   });
@@ -135,10 +154,10 @@ export function setSelectedShapes(arr) {
     const def = getShapeDef(newArr[0]);
     log("TRACE", "[selection] setSelectedShapes - ShapeDef", { def });
     if (def && def.editable) {
-      log("TRACE", "[selection] setSelectedShapes - Attaching transformer", { shapeLabel: newArr[0]._label });
+      log("TRACE", "[selection] setSelectedShapes - Attaching transformer", { shapeLabel: newArr[0]._label, shapeId: newArr[0]._id });
       attachTransformerForShape(newArr[0]);
     } else {
-      log("TRACE", "[selection] setSelectedShapes - Detaching transformer (not editable)", { shapeLabel: newArr[0]._label });
+      log("TRACE", "[selection] setSelectedShapes - Detaching transformer (not editable)", { shapeLabel: newArr[0]._label, shapeId: newArr[0]._id });
       detachTransformer();
     }
     fixStrokeWidthAfterTransform();
@@ -147,6 +166,20 @@ export function setSelectedShapes(arr) {
     detachTransformer();
     fixStrokeWidthAfterTransform();
   }
+
+  // EXTRA TRACE: dump selectedShapes array and all shape IDs in store
+  log("TRACE", "[selection] setSelectedShapes - selectedShapes array after update", {
+    selectedShapes: getState().selectedShapes.map(s => ({
+      _id: s?._id,
+      _type: s?._type,
+      _label: s?._label
+    })),
+    storeShapes: getState().shapes.map(s => ({
+      _id: s?._id,
+      _type: s?._type,
+      _label: s?._label
+    }))
+  });
 
   notifySelectionChanged();
   log("TRACE", "[selection] setSelectedShapes EXIT");
@@ -170,7 +203,7 @@ export function deselectAll() {
   const stateShapes = getState().selectedShapes;
   if (stateShapes && Array.isArray(stateShapes)) {
     stateShapes.forEach(s => {
-      log("TRACE", "[selection] deselectAll - Deselecting shape", { shapeLabel: s?._label });
+      log("TRACE", "[selection] deselectAll - Deselecting shape", { shapeLabel: s?._label, shapeId: s?._id });
       deselectShape(s);
     });
   }
@@ -183,6 +216,21 @@ export function deselectAll() {
   });
   detachTransformer();
   notifySelectionChanged();
+
+  // EXTRA TRACE: dump selectedShapes and store shapes after deselect
+  log("TRACE", "[selection] deselectAll - selectedShapes/shape store after update", {
+    selectedShapes: getState().selectedShapes.map(s => ({
+      _id: s?._id,
+      _type: s?._type,
+      _label: s?._label
+    })),
+    storeShapes: getState().shapes.map(s => ({
+      _id: s?._id,
+      _type: s?._type,
+      _label: s?._label
+    }))
+  });
+
   log("TRACE", "[selection] deselectAll EXIT");
 }
 
@@ -192,7 +240,9 @@ export function deselectAll() {
 function notifySelectionChanged() {
   log("TRACE", "[selection] notifySelectionChanged ENTRY", {
     selectedShapeLabel: getState().selectedShape?._label,
-    selectedShapesLabels: getState().selectedShapes.map(s => s?._label)
+    selectedShapeId: getState().selectedShape?._id,
+    selectedShapesLabels: getState().selectedShapes.map(s => s?._label),
+    selectedShapesIds: getState().selectedShapes.map(s => s?._id)
   });
   // Zustand store listeners (if any)
   // (If you want to implement custom listeners, do so here.)
@@ -208,7 +258,8 @@ function notifySelectionChanged() {
 export function attachSelectionHandlers(shape) {
   log("TRACE", "[selection] attachSelectionHandlers ENTRY", {
     shapeType: shape?._type,
-    shapeLabel: shape?._label
+    shapeLabel: shape?._label,
+    shapeId: shape?._id
   });
   if (!shape || typeof shape.on !== "function") {
     log("WARN", "[selection] attachSelectionHandlers: Not a valid Fabric.js shape", { shape });
@@ -221,6 +272,7 @@ export function attachSelectionHandlers(shape) {
     log("TRACE", "[selection] Shape mousedown.selection handler FIRED", {
       shapeType: shape?._type,
       shapeLabel: shape?._label,
+      shapeId: shape?._id,
       pointer: evt?.pointer,
       event: evt
     });
@@ -229,7 +281,7 @@ export function attachSelectionHandlers(shape) {
 
     // Ctrl/Meta for multi-select toggle
     if (evt.e && (evt.e.ctrlKey || evt.e.metaKey)) {
-      log("TRACE", "[selection] mousedown.selection: multi-select toggle", { shapeLabel: shape._label });
+      log("TRACE", "[selection] mousedown.selection: multi-select toggle", { shapeLabel: shape._label, shapeId: shape._id });
       const idx = getState().selectedShapes.indexOf(shape);
       if (idx === -1) {
         setSelectedShapes([...getState().selectedShapes, shape]);
@@ -239,13 +291,14 @@ export function attachSelectionHandlers(shape) {
         setSelectedShapes(newArr);
       }
     } else {
-      log("TRACE", "[selection] mousedown.selection: single selection", { shapeLabel: shape._label });
+      log("TRACE", "[selection] mousedown.selection: single selection", { shapeLabel: shape._label, shapeId: shape._id });
       setSelectedShape(shape); // Always triggers full selection logic, even if same shape
     }
   });
   log("TRACE", "[selection] attachSelectionHandlers EXIT", {
     shapeType: shape?._type,
-    shapeLabel: shape?._label
+    shapeLabel: shape?._label,
+    shapeId: shape?._id
   });
 }
 
@@ -255,7 +308,7 @@ export function attachSelectionHandlers(shape) {
  * @returns {boolean}
  */
 export function isShapeSelected(shape) {
-  log("TRACE", "[selection] isShapeSelected ENTRY", { shapeLabel: shape?._label });
+  log("TRACE", "[selection] isShapeSelected ENTRY", { shapeLabel: shape?._label, shapeId: shape?._id });
   // --- NEW: Use ._selected property for consistency ---
   const result = !!shape && !!shape._selected;
   log("TRACE", "[selection] isShapeSelected EXIT", { result });
