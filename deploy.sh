@@ -1,10 +1,9 @@
 #!/bin/bash
-# Scene Designer Deploy Script (prod or dev, robust and functional)
+# Scene Designer Deploy Script (prod or dev, auto FORCE settings injection)
 # ---------------------------------------------------------------------------
 # Usage:
-#   ./deploy.sh [prod|dev] [env overrides...]
-#   e.g. LOG_LEVEL="Trace (very verbose)" ./deploy.sh dev
-#        ./deploy.sh prod
+#   [VAR=VALUE ...] ./deploy.sh [prod|dev]
+#   e.g. LOG_LEVEL="Trace (very verbose)" LOG_OUTPUT_DEST=server LOG_SERVER_URL="http://..." ./deploy.sh dev
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -13,30 +12,29 @@ PROJECT_DIR="$HOME/scene-designer"
 BUILD_DIR="$PROJECT_DIR/dist"
 DEPLOY_DIR="/var/www/scene-designer"
 INDEX_HTML="$BUILD_DIR/index.html"
+SETTINGS_JS="$PROJECT_DIR/src/settings.js"
 DATESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
 MODE="${1:-prod}"
 if [[ $# -gt 0 ]]; then shift; fi
 
 INJECT_ERUDA="${INJECT_ERUDA:-0}"
-LOG_LEVEL="${LOG_LEVEL:-}"
 
 function usage() {
   cat <<EOF
 Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
 
   prod     Build and deploy to nginx (default)
-  dev      Just git add/commit/push, inject Eruda and log level into index.html, then start dev server (npm run dev)
+  dev      Just git add/commit/push, inject Eruda and FORCE settings, then start dev server (npm run dev)
 
 Environment variables:
-
   INJECT_ERUDA     1 to add Eruda debug console, 0 otherwise   [default: 0]
-  LOG_LEVEL        Force Scene Designer log level (e.g. "Silent", "Info", "Trace (very verbose)")
+  <any FORCE setting key>
+    e.g. LOG_LEVEL, LOG_OUTPUT_DEST, LOG_SERVER_URL, INTERCEPT_CONSOLE
 
 Examples:
   INJECT_ERUDA=1 ./deploy.sh prod
-  INJECT_ERUDA=1 ./deploy.sh dev
-  LOG_LEVEL="Trace (very verbose)" ./deploy.sh prod
+  LOG_LEVEL="Trace (very verbose)" LOG_OUTPUT_DEST=server ./deploy.sh dev
 
 EOF
   exit 0
@@ -83,29 +81,38 @@ function inject_eruda() {
   fi
 }
 
-function inject_force_log_level() {
-  if [[ -n "$LOG_LEVEL" ]]; then
-    echo "[$DATESTAMP] === Injecting forced log level: $LOG_LEVEL ==="
-    # Remove any previous force-log-level blocks
-    sed -i '/<!-- BEGIN FORCE LOG LEVEL -->/,/<!-- END FORCE LOG LEVEL -->/d' "$INDEX_HTML"
-    # Insert just before </head>
-    awk -v LOG_LEVEL="$LOG_LEVEL" '
+function inject_force_settings_block() {
+  echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settings.js keys ==="
+  # Remove any previous force block
+  sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
+  # Extract all setting keys from settings.js
+  local keys
+  keys=$(grep -oP 'key:\s*"\K[^"]+' "$SETTINGS_JS" | sort | uniq)
+  local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
+  local injected=0
+  for key in $keys; do
+    # Transform to env var name convention if needed (exact match)
+    value="${!key:-}"
+    if [[ -n "$value" ]]; then
+      block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = \"${value}\";\n"
+      injected=1
+      echo "  [FORCE] $key = $value"
+    fi
+  done
+  block+="  </script>\n  <!-- END FORCE SETTINGS -->"
+  if [[ $injected -eq 1 ]]; then
+    # Insert block just before </head>
+    awk -v block="$block" '
       /<\/head>/ {
-        print "  <!-- BEGIN FORCE LOG LEVEL -->";
-        print "  <script>";
-        print "    window.SCENE_DESIGNER_FORCE = true;";
-        print "    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};";
-        print "    window.SCENE_DESIGNER_FORCE_SETTINGS[\"DEBUG_LOG_LEVEL\"] = \"" LOG_LEVEL "\";";
-        print "  </script>";
-        print "  <!-- END FORCE LOG LEVEL -->";
+        print block;
       }
       { print }
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
-    echo "[$DATESTAMP] === Forced log level injected: $LOG_LEVEL ==="
+    echo "[$DATESTAMP] === FORCE settings injected into $INDEX_HTML ==="
   else
-    # Remove any old force log level block if present
-    sed -i '/<!-- BEGIN FORCE LOG LEVEL -->/,/<!-- END FORCE LOG LEVEL -->/d' "$INDEX_HTML"
-    echo "[$DATESTAMP] === No forced log level requested. ==="
+    # Remove any old block if present
+    sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
+    echo "[$DATESTAMP] === No FORCE settings found in env. ==="
   fi
 }
 
@@ -133,43 +140,20 @@ EOF
 # --- Main logic ---
 if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then usage; fi
 
-node generate-exports-registry.js
-
 git_commit_push
 
 if [[ "$MODE" == "prod" ]]; then
   build_project
   prepare_index_html
   inject_eruda
-  inject_force_log_level
+  inject_force_settings_block
   deploy_to_prod
 else
   # DEV MODE: ensure dist/index.html is available and inject scripts
   prepare_index_html
   inject_eruda
-  inject_force_log_level
+  inject_force_settings_block
   start_dev_server
 fi
 
 exit 0
-
-Key	Type	Default	Description / Values
-multiDragBox	boolean	true	Show multi-drag box (for group dragging)
-defaultRectWidth	number	50	Default rectangle width
-defaultRectHeight	number	30	Default rectangle height
-defaultCircleRadius	number	15	Default circle radius
-defaultStrokeColor	color	"#000000ff"	Default stroke color
-defaultFillColor	color	"#00000000"	Default fill color
-canvasMaxWidth	number	430	Maximum canvas width (px)
-canvasMaxHeight	number	9999	Maximum canvas height (px)
-canvasScaleMode	select	"fit"	"fit", "fill", "stretch", "actual"
-canvasResponsive	boolean	true	Responsive: resize on window change
-toolbarUIScale	number	1	Toolbar UI scale (0.5–2)
-shapeStartXPercent	number	50	Shape start X position (%)
-shapeStartYPercent	number	50	Shape start Y position (%)
-DEBUG_LOG_LEVEL	select	"Info"	"Silent", "Error", "Warning", "Info", "Debug", "Trace (very verbose)"
-LOG_OUTPUT_DEST	select	"console"	"console", "server", "both"
-LOG_SERVER_URL	text	""	Log server URL
-LOG_SERVER_TOKEN	text	""	Log server token
-INTERCEPT_CONSOLE	boolean	false	Intercept all console logs for mobile/dev debugging
-showErrorLogPanel	boolean	true	Show error log panel
