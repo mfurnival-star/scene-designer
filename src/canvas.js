@@ -1,14 +1,13 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Fabric.js Panel (Full TRACE Logging Edition)
+ * Scene Designer – Canvas/Fabric.js Panel (Debug Logging Edition)
  * - Fabric.js canvas creation, image background, shape management.
  * - All selection/deselection/multiselect handled in a single canvas event handler.
  * - State is managed via Zustand store from state.js.
  * - Exports: buildCanvasPanel({ element, title, componentName })
  * - Panel factory for MiniLayout; renders the main canvas panel.
- * - TRACE logging everywhere for robust bug diagnosis!
- * - [2025-09] Selection fix: always resolve clicked shape to canonical reference from state.shapes via _id
+ * - DEBUG logging everywhere for robust bug diagnosis—especially selection!
  * -----------------------------------------------------------
  */
 
@@ -36,6 +35,42 @@ function getCanonicalShapeById(shapeLike) {
   if (!shapeLike || !shapeLike._id) return null;
   const shapes = getState().shapes || [];
   return shapes.find(s => s._id === shapeLike._id) || null;
+}
+
+/**
+ * Utility: dump all shapes in store for diagnostics.
+ */
+function dumpAllShapes(tag = "") {
+  const shapes = getState().shapes || [];
+  log("DEBUG", `[canvas][${tag}] All shapes in store:`,
+    shapes.map((s, i) => ({
+      idx: i,
+      label: s?._label,
+      type: s?._type,
+      _id: s?._id,
+      left: s?.left,
+      top: s?.top,
+      locked: s?.locked
+    }))
+  );
+}
+
+/**
+ * Utility: dump selectedShapes for diagnostics.
+ */
+function dumpSelectedShapes(tag = "") {
+  const sel = getState().selectedShapes || [];
+  log("DEBUG", `[canvas][${tag}] Selected shapes:`,
+    sel.map((s, i) => ({
+      idx: i,
+      label: s?._label,
+      type: s?._type,
+      _id: s?._id,
+      left: s?.left,
+      top: s?.top,
+      locked: s?.locked
+    }))
+  );
 }
 
 function moveShapesToFront() {
@@ -120,11 +155,10 @@ function updateBackgroundImage(containerDiv, element) {
 
 /**
  * Centralized canvas pointer event handler for selection/deselection/multiselect.
- * Full TRACE logging for every possible event/branch.
- * [2025-09] Selection fix: always resolve clicked shape to canonical reference from state.shapes via _id
+ * Now with extra logging for shape selection debugging!
  */
 function centralizedCanvasPointerHandler(e) {
-  log("TRACE", "[canvas] centralizedCanvasPointerHandler FIRED", {
+  log("DEBUG", "[canvas] centralizedCanvasPointerHandler FIRED", {
     event: e,
     pointerType: e.pointerType,
     eventType: e.e?.type,
@@ -134,32 +168,41 @@ function centralizedCanvasPointerHandler(e) {
     currentSelectedShape: getState().selectedShape,
     currentSelectedShapes: getState().selectedShapes.map(s=>s?._id)
   });
+  dumpAllShapes("before-selection");
+  dumpSelectedShapes("before-selection");
+
   const state = getState();
   const canvas = state.fabricCanvas;
   const shapes = state.shapes || [];
 
   // If background is clicked (no shape), deselect all
   if (!e.target) {
-    log("TRACE", "[canvas] centralized handler: background clicked", {
+    log("DEBUG", "[canvas] centralized handler: background clicked", {
       stateBefore: {...state}
     });
     setSelectedShapes([]);
     canvas.discardActiveObject();
     canvas.renderAll();
-    log("TRACE", "[canvas] centralized handler: background deselect complete", {
+    log("DEBUG", "[canvas] centralized handler: background deselect complete", {
       stateAfter: {...getState()}
     });
+    dumpSelectedShapes("after-deselect");
     return;
   }
 
   // If a shape is clicked
   const shapeEventObj = e.target;
-  log("TRACE", "[canvas] centralized handler: shape clicked", {
-    shapeType: shapeEventObj._type, shapeLabel: shapeEventObj._label, shapeId: shapeEventObj._id,
+  log("DEBUG", "[canvas] centralized handler: shape clicked", {
+    shapeType: shapeEventObj._type,
+    shapeLabel: shapeEventObj._label,
+    shapeId: shapeEventObj._id,
+    left: shapeEventObj.left,
+    top: shapeEventObj.top,
+    locked: shapeEventObj.locked,
     stateBefore: {...state}
   });
 
-  // --- FIX: Always resolve to canonical reference from state.shapes via _id ---
+  // --- Always resolve to canonical reference from state.shapes via _id ---
   const shape = getCanonicalShapeById(shapeEventObj);
   if (!shape) {
     log("ERROR", "[canvas] centralized handler: shape clicked, but could not resolve canonical reference", {
@@ -168,12 +211,21 @@ function centralizedCanvasPointerHandler(e) {
     return;
   }
 
+  log("DEBUG", "[canvas] centralized handler: canonical shape resolved", {
+    shapeType: shape._type,
+    shapeLabel: shape._label,
+    shapeId: shape._id,
+    left: shape.left,
+    top: shape.top,
+    locked: shape.locked
+  });
+
   const isMulti = e.e && (e.e.ctrlKey || e.e.metaKey);
 
   if (isMulti) {
     // If shape is already selected, remove; else add
     const idx = state.selectedShapes.findIndex(s => s._id === shape._id);
-    log("TRACE", "[canvas] centralized handler: multi-select toggle", {
+    log("DEBUG", "[canvas] centralized handler: multi-select toggle", {
       idx, selectedShapes: state.selectedShapes.map(s=>s._id)
     });
     if (idx === -1) {
@@ -183,7 +235,7 @@ function centralizedCanvasPointerHandler(e) {
       arr.splice(idx, 1);
       setSelectedShapes(arr);
     }
-    log("TRACE", "[canvas] centralized handler: multi-select complete", {
+    log("DEBUG", "[canvas] centralized handler: multi-select complete", {
       shapeType: shape._type,
       shapeLabel: shape._label,
       shapeId: shape._id,
@@ -192,7 +244,7 @@ function centralizedCanvasPointerHandler(e) {
     });
   } else {
     setSelectedShapes([shape]);
-    log("TRACE", "[canvas] centralized handler: single selection complete", {
+    log("DEBUG", "[canvas] centralized handler: single selection complete", {
       shapeType: shape._type,
       shapeLabel: shape._label,
       shapeId: shape._id,
@@ -200,9 +252,11 @@ function centralizedCanvasPointerHandler(e) {
       stateAfter: {...getState()}
     });
   }
+  dumpSelectedShapes("after-selection");
+
   canvas.setActiveObject(shape);
   canvas.renderAll();
-  log("TRACE", "[canvas] centralized handler: canvas.setActiveObject/renderAll DONE", {
+  log("DEBUG", "[canvas] centralized handler: canvas.setActiveObject/renderAll DONE", {
     activeObject: canvas.getActiveObject(),
     stateAfter: {...getState()}
   });
@@ -350,7 +404,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
       prevImageURL = getState().imageURL;
     }
 
-    log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, centralized event handler, full TRACE logging)");
+    log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, centralized event handler, DEBUG logging)");
 
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
