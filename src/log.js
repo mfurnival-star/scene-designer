@@ -172,6 +172,9 @@ export function log(levelNum, ...args) {
   const msgLevelNum = normalizeLevelNum(levelNum);
   const curLevelNum = curLogLevelNum;
 
+  // Detect if this is the "[logStream] Failed to stream log" error
+  const isLogStreamError = args[0] && typeof args[0] === "string" && args[0].includes("[logStream] Failed to stream log");
+
   // Always show errors even in SILENT mode
   if (msgLevelNum === LOG_LEVELS.ERROR) {
     if (logDest === "console" || logDest === "both") {
@@ -179,10 +182,7 @@ export function log(levelNum, ...args) {
         console.error(`[log][${LOGGER_INSTANCE_ID}]`, levelName(msgLevelNum), ...args.map(safeLogArg));
       }
     }
-    // Server streaming for errors
-    if ((logDest === "server" || logDest === "both") && externalLogServerURL) {
-      logStream(msgLevelNum, ...args);
-    }
+    // Output to sinks
     for (const sink of logSinks) {
       try {
         if (typeof sink === "function") sink(msgLevelNum, ...args);
@@ -192,6 +192,10 @@ export function log(levelNum, ...args) {
           console.warn(`[log][${LOGGER_INSTANCE_ID}]`, "Log sink error", e);
         }
       }
+    }
+    // Only stream to server if NOT a logStream error
+    if (!isLogStreamError && (logDest === "server" || logDest === "both") && externalLogServerURL) {
+      logStream(msgLevelNum, ...args);
     }
     return;
   }
@@ -288,6 +292,7 @@ export async function logStream(levelNum, ...args) {
     if (_logStreamErrorInProgress) return; // Don't log if already inside a logStream error
     _logStreamErrorInProgress = true;
     try {
+      // Only log to console and sinks, not to server
       log(LOG_LEVELS.ERROR, "[logStream] Failed to stream log", ...args, e);
       if (typeof console !== "undefined" && console.error) {
         console.error(`[log][${LOGGER_INSTANCE_ID}]`, levelName(levelNum), "Failed to stream log", ...args, e);
