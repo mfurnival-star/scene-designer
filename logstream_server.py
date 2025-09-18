@@ -1,3 +1,5 @@
+#!/home/ubuntu/scene-designer/venv/bin/python
+
 import os
 from flask import Flask, request, abort
 from flask_cors import CORS  # <-- Add this line
