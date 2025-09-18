@@ -1,7 +1,9 @@
 import os
 from flask import Flask, request, abort
+from flask_cors import CORS  # <-- Add this line
 
 app = Flask(__name__)
+CORS(app)  # <-- Add this line
 
 # Load environment variables at the top
 LOGSTREAM_TOKEN = os.environ.get("LOGSTREAM_SECRET")
@@ -44,4 +46,3 @@ def logstream():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
-
