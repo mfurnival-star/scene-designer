@@ -9,7 +9,7 @@
  * - Panel config: { closable: true/false }, { headerHeight }, { headerFontSize }
  * - All code is ES module only; no global/window usage.
  * - Logging via log.js.
- * - Splitter bars between columns/rows, drag-to-resize enabled (vertical and horizontal).
+ * - Splitter bars between columns/rows, drag-to-resize enabled (vertical and horizontal) including mobile/touch support.
  * - Fixes overflow: no scrollbars on fullscreen, all borders/margins included in sizing.
  * -----------------------------------------------------------
  * Exports: MiniLayout
@@ -273,6 +273,7 @@ export class MiniLayout {
 
   /**
    * Create a splitter bar for rows/columns. Vertical (between columns), horizontal (between rows).
+   * Mobile/touch support included.
    */
   _makeSplitter(type, parentEl) {
     const splitter = document.createElement("div");
@@ -302,18 +303,16 @@ export class MiniLayout {
       splitter.style.borderBottom = "1.5px solid #bbb";
     }
 
-    // Drag-to-resize logic (FIXED: use previous/nextElementSibling)
+    // --- Desktop Drag-to-resize ---
     splitter.addEventListener("mousedown", (e) => {
       e.preventDefault();
       document.body.style.cursor = splitter.style.cursor;
       let startX = e.clientX, startY = e.clientY;
 
-      // Get previous and next panel siblings
       let prev = splitter.previousElementSibling;
       let next = splitter.nextElementSibling;
       if (!prev || !next) return;
 
-      // Initial sizes
       let prevRect = prev.getBoundingClientRect();
       let nextRect = next.getBoundingClientRect();
       let parentRect = parentEl.getBoundingClientRect();
@@ -321,9 +320,11 @@ export class MiniLayout {
       let prevSize = type === "row" ? prevRect.width : prevRect.height;
       let nextSize = type === "row" ? nextRect.width : nextRect.height;
 
-      function onMouseMove(ev) {
-        let dx = ev.clientX - startX;
-        let dy = ev.clientY - startY;
+      function onMove(ev) {
+        let clientX = ev.type === "touchmove" ? ev.touches[0].clientX : ev.clientX;
+        let clientY = ev.type === "touchmove" ? ev.touches[0].clientY : ev.clientY;
+        let dx = clientX - startX;
+        let dy = clientY - startY;
         if (type === "row") {
           let newPrev = ((prevSize + dx) / totalSize) * 100;
           let newNext = ((nextSize - dx) / totalSize) * 100;
@@ -341,14 +342,71 @@ export class MiniLayout {
         }
       }
 
-      function onMouseUp() {
+      function onUp(ev) {
         document.body.style.cursor = "";
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onUp);
       }
 
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onUp, { passive: false });
+    });
+
+    // --- Mobile/Touch Drag-to-resize ---
+    splitter.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      document.body.style.cursor = splitter.style.cursor;
+      let startX = e.touches[0].clientX, startY = e.touches[0].clientY;
+
+      let prev = splitter.previousElementSibling;
+      let next = splitter.nextElementSibling;
+      if (!prev || !next) return;
+
+      let prevRect = prev.getBoundingClientRect();
+      let nextRect = next.getBoundingClientRect();
+      let parentRect = parentEl.getBoundingClientRect();
+      let totalSize = type === "row" ? parentRect.width : parentRect.height;
+      let prevSize = type === "row" ? prevRect.width : prevRect.height;
+      let nextSize = type === "row" ? nextRect.width : nextRect.height;
+
+      function onMove(ev) {
+        let clientX = ev.type === "touchmove" ? ev.touches[0].clientX : ev.clientX;
+        let clientY = ev.type === "touchmove" ? ev.touches[0].clientY : ev.clientY;
+        let dx = clientX - startX;
+        let dy = clientY - startY;
+        if (type === "row") {
+          let newPrev = ((prevSize + dx) / totalSize) * 100;
+          let newNext = ((nextSize - dx) / totalSize) * 100;
+          prev.style.width = `${newPrev}%`;
+          prev.style.flex = `0 0 ${newPrev}%`;
+          next.style.width = `${newNext}%`;
+          next.style.flex = `0 0 ${newNext}%`;
+        } else {
+          let newPrev = ((prevSize + dy) / totalSize) * 100;
+          let newNext = ((nextSize - dy) / totalSize) * 100;
+          prev.style.height = `${newPrev}%`;
+          prev.style.flex = `0 0 ${newPrev}%`;
+          next.style.height = `${newNext}%`;
+          next.style.flex = `0 0 ${newNext}%`;
+        }
+      }
+
+      function onUp(ev) {
+        document.body.style.cursor = "";
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onUp);
+      }
+
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onUp, { passive: false });
     });
 
     return splitter;
