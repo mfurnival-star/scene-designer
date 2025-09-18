@@ -171,6 +171,9 @@ export function buildCanvasPanel({ element, title, componentName }) {
     // --- Unselect shapes by clicking on empty background ---
     canvas.on("mouse:down", function(e) {
       log("TRACE", "[canvas] mouse:down handler FIRED", { event: e });
+      // --- PATCH: Only deselect if NOT clicking on a shape ---
+      // Fabric.js: e.target is the clicked object, null means canvas background.
+      // If event bubbling/propagation is blocked, this will only fire for true background clicks.
       if (!e.target) {
         getState().selectedShapes.forEach(deselectShape);
         setSelectedShapes([]);
@@ -178,6 +181,9 @@ export function buildCanvasPanel({ element, title, componentName }) {
           attachSelectionHandlers(s);
         });
         log("DEBUG", "[canvas] mouse:down: all shapes deselected");
+      } else {
+        // If a shape, don't deselect (selection.js handler will fire)
+        log("TRACE", "[canvas] mouse:down: shape clicked, no deselect", { targetType: e.target?._type, targetLabel: e.target?._label });
       }
     });
 

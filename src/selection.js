@@ -9,6 +9,7 @@
  * - Always attaches selection event handlers; never removes except on shape destroy.
  * - Always re-attaches transformer on selection, even if selecting same shape.
  * - DEEP TRACE logging for all entry/exit, event handler attach/fired, selection state transitions.
+ * - Robust event propagation control to ensure shape clicks select, not deselect (fixes DEFECT1).
  * -----------------------------------------------------------
  */
 
@@ -252,7 +253,7 @@ function notifySelectionChanged() {
 /**
  * Attach selection event handlers to a Fabric.js shape.
  * Always attaches; never removes except on shape destroy.
- * Pointer event bubbling blocked for robustness.
+ * Robust propagation/bubbling control: always blocks event bubbling and propagation after shape click.
  * @param {Object} shape - Fabric.js object to attach handlers to.
  */
 export function attachSelectionHandlers(shape) {
@@ -276,8 +277,14 @@ export function attachSelectionHandlers(shape) {
       pointer: evt?.pointer,
       event: evt
     });
-    // Block event bubbling for robustness
-    if (evt && evt.cancelBubble !== undefined) evt.cancelBubble = true;
+    // Robustly block event bubbling/propagation
+    if (evt) {
+      if (evt.cancelBubble !== undefined) evt.cancelBubble = true;
+      // For Fabric.js, block both native and synthetic events
+      if (evt.e && typeof evt.e.stopPropagation === "function") evt.e.stopPropagation();
+      if (evt.e && typeof evt.e.stopImmediatePropagation === "function") evt.e.stopImmediatePropagation();
+      if (evt.e) evt.e.cancelBubble = true;
+    }
 
     // Ctrl/Meta for multi-select toggle
     if (evt.e && (evt.e.ctrlKey || evt.e.metaKey)) {

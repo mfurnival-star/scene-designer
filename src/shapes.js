@@ -290,4 +290,3 @@ function generateShapeId(type = "shape") {
   return `${type}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
 }
 
-
