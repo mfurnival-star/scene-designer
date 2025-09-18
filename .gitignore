@@ -13,3 +13,4 @@ server.log
 start_http.py
 oldcode/
 oldparts/
+!logstream.py
