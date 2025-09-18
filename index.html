@@ -5,16 +5,13 @@
   <title>Scene Designer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="scene-designer.css">
-  <!-- BEGIN ERUDA -->
-  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-  <script>eruda.init();</script>
-  <!-- END ERUDA -->
   <!-- BEGIN FORCE SETTINGS -->
   <script>
     window.SCENE_DESIGNER_FORCE = true;
     window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};
     window.SCENE_DESIGNER_FORCE_SETTINGS["DEBUG_LOG_LEVEL"] = "Trace (very verbose)";
     window.SCENE_DESIGNER_FORCE_SETTINGS["INTERCEPT_CONSOLE"] = "false";
+    window.SCENE_DESIGNER_FORCE_SETTINGS["LOG_OUTPUT_DEST"] = "Remote Server Only";
     window.SCENE_DESIGNER_FORCE_SETTINGS["LOG_SERVER_URL"] = "http://143.47.247.184/logstream";
   </script>
   <!-- END FORCE SETTINGS -->
