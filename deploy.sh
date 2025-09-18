@@ -85,10 +85,12 @@ function inject_force_settings_block() {
   echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settings.js keys ==="
   # Remove any previous force block
   sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
+
   # Extract all setting keys and types from settings.js
-  local keys types typeMap
+  local keys types
   keys=$(grep -oP 'key:\s*"\K[^"]+' "$SETTINGS_JS" | sort | uniq)
   types=$(grep -oP 'type:\s*"\K[^"]+' "$SETTINGS_JS" | paste -d, -s)
+
   # Build a key:type map
   declare -A key_type
   while read -r line; do
@@ -98,12 +100,52 @@ function inject_force_settings_block() {
       key_type["$key"]="$type"
     fi
   done < <(grep -E 'key:|type:' "$SETTINGS_JS" | paste - -)
+
+  # --- Debug listing: show all env vars and settings keys ---
+  echo "[$DATESTAMP] === ENV VAR DEBUG LIST ==="
+  echo "  (Env var name) | (Value) | (Settings key match)"
+  echo "-----------------|--------|----------------------"
+  # List all env vars (except internal bash vars)
+  for var in $(env | cut -d= -f1 | sort); do
+    [[ "$var" =~ ^BASH_ ]] && continue # Skip bash internals
+    [[ "$var" =~ ^SHLVL$ ]] && continue
+    [[ "$var" =~ ^PWD$ ]] && continue
+    [[ "$var" =~ ^OLDPWD$ ]] && continue
+    [[ "$var" =~ ^_$ ]] && continue
+    [[ "$var" =~ ^LS_COLORS$ ]] && continue
+    [[ "$var" =~ ^PATH$ ]] && continue
+    [[ "$var" =~ ^HOME$ ]] && continue
+    [[ "$var" =~ ^LANG$ ]] && continue
+    [[ "$var" =~ ^TERM$ ]] && continue
+    [[ "$var" =~ ^USER$ ]] && continue
+    [[ "$var" =~ ^LOGNAME$ ]] && continue
+    [[ "$var" =~ ^SHELL$ ]] && continue
+    [[ "$var" =~ ^HOSTNAME$ ]] && continue
+    [[ "$var" =~ ^MAIL$ ]] && continue
+    val="${!var}"
+    match="NO MATCH"
+    for key in $keys; do
+      if [[ "$var" == "$key" ]]; then
+        match="MATCH"
+        break
+      fi
+    done
+    echo "  $var | $val | $match"
+  done
+  echo "-----------------|--------|----------------------"
+  echo "  Settings keys from $SETTINGS_JS:"
+  for key in $keys; do
+    echo "    $key (type: ${key_type[$key]:-UNKNOWN})"
+  done
+  echo "-----------------|--------|----------------------"
+
+  # --- Build FORCE block ---
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
   for key in $keys; do
     value="${!key:-}"
     if [[ -n "$value" ]]; then
-      setting_type="${key_type[$key]}"
+      setting_type="${key_type[$key]:-text}" # Default to text if not found
       if [[ "$setting_type" == "boolean" ]]; then
         case "$value" in
           1|true|TRUE) js_val="true";;
@@ -177,3 +219,4 @@ else
 fi
 
 exit 0
+
