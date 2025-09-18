@@ -26,10 +26,14 @@ Panel sizing changes via splitters are not preserved between reloads.
 Remote log streaming is not reliably working in Scene Designer. When attempting to set logging to 'server' or 'both', TRACE/DEBUG logs are not consistently sent to the configured external server. This prevents effective mobile and remote debugging, especially for diagnosing complex issues (e.g., defect1).
 - See draft issue in Copilot Space for full steps, expected/actual behavior, and acceptance criteria.
 
-### defect7: FORCE values from index.html not reflected in settings
-FORCE values set via `window.SCENE_DESIGNER_FORCE_SETTINGS` (from index.html) do not appear to be reflected in the settings panel and/or are not taking effect on page load. This prevents reliable override of settings from the HTML entry point.
-- Needs investigation: Are FORCE values being merged/applied in `settings.js` on load?
-- May impact mobile debugging and initial config.
+---
+
+## Resolved Defects
+
+### defect7: FORCE values from index.html not reflected in settings **[RESOLVED]**
+FORCE values set via `window.SCENE_DESIGNER_FORCE_SETTINGS` (from index.html) did not appear to be reflected in the settings panel and/or were not taking effect on page load. This prevented reliable override of settings from the HTML entry point.
+- **Resolution:** Deploy script and settings.js were updated to ensure correct boolean coercion and robust FORCE settings merge on load. The settings panel now accurately reflects all FORCE overrides from index.html, including booleans such as INTERCEPT_CONSOLE.
+- **Status:** Closed as resolved (2025-09-18).
 
 ---
 
@@ -42,4 +46,3 @@ FORCE values set via `window.SCENE_DESIGNER_FORCE_SETTINGS` (from index.html) do
 ---
 
 *Last updated: 2025-09-18*
-
