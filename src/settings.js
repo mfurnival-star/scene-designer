@@ -114,12 +114,12 @@ export const settingsRegistry = [
   },
   {
     key: "LOG_OUTPUT_DEST",
-    label: "Log Output Destination",
+    label: "label: "Log Output Destination"",
     type: "select",
     options: [
-      { value: "console", label: "Console Only" },
-      { value: "server", label: "Remote Server Only" },
-      { value: "both", label: "Both Console and Server" }
+      { value: "console", label: "label: "console"" },
+      { value: "server", label: "label: "server"" },
+      { value: "both", label: "label: "both"" }
     ],
     default: "console"
   },
