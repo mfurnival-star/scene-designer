@@ -196,6 +196,8 @@ export async function loadSettings() {
     updateLogConfigFromSettings(merged);
     updateConsoleInterceptionFromSettings(merged);
     log("DEBUG", "[settings] Settings loaded and applied", merged);
+    // --- Added TRACE log to dump all settings after load ---
+    log("TRACE", "[settings] Full settings after load", { settings: getState().settings });
     log("TRACE", "[settings] loadSettings exit");
     return merged;
   } catch (e) {
@@ -227,6 +229,8 @@ export async function saveSettings() {
     updateLogConfigFromSettings(getState().settings);
     updateConsoleInterceptionFromSettings(getState().settings);
     log("DEBUG", "[settings] Settings saved", toSave);
+    // --- Added TRACE log after saving settings ---
+    log("TRACE", "[settings] Full settings after save", { settings: getState().settings });
     log("TRACE", "[settings] saveSettings exit");
   } catch (e) {
     log("ERROR", "[settings] saveSettings error", e);
@@ -252,6 +256,8 @@ export async function setSettingAndSave(key, value) {
   }
   setSetting(key, valToSet);
   log("DEBUG", "[settings] setSettingAndSave: after setSetting", getState().settings);
+  // --- Added TRACE log after setting changed ---
+  log("TRACE", `[settings] setSettingAndSave: setting '${key}' changed`, { value: valToSet, fullSettings: getState().settings });
   await saveSettings();
   if (key === "showErrorLogPanel") setErrorLogPanelVisible(valToSet);
   log("TRACE", "[settings] setSettingAndSave exit");
@@ -279,6 +285,8 @@ export async function setSettingsAndSave(settingsObj) {
   }
   setSettings(settingsObj);
   log("DEBUG", "[settings] setSettingsAndSave: after setSettings", getState().settings);
+  // --- Added TRACE log after all settings changed ---
+  log("TRACE", "[settings] setSettingsAndSave: all settings changed", { fullSettings: getState().settings });
   await saveSettings();
   if ("showErrorLogPanel" in settingsObj) setErrorLogPanelVisible(settingsObj.showErrorLogPanel);
   log("TRACE", "[settings] setSettingsAndSave exit");
@@ -287,6 +295,8 @@ export async function setSettingsAndSave(settingsObj) {
 function setLogLevelByNum(numLevel) {
   let name = LOG_LEVEL_NUM_TO_LABEL[numLevel] ?? "Silent";
   setLogLevel(numLevel);
+  // --- Added TRACE log after log level change ---
+  log("TRACE", "[settings] Log level changed", { numLevel, name });
 }
 
 function updateLogConfigFromSettings(settings) {
@@ -298,6 +308,13 @@ function updateLogConfigFromSettings(settings) {
   if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
   if ("LOG_SERVER_URL" in settings) setLogServerURL(settings.LOG_SERVER_URL);
   if ("LOG_SERVER_TOKEN" in settings) setLogServerToken(settings.LOG_SERVER_TOKEN);
+  // --- Added TRACE log after logging config updated ---
+  log("TRACE", "[settings] Logging config updated", {
+    logLevel: settings.DEBUG_LOG_LEVEL,
+    logDest: settings.LOG_OUTPUT_DEST,
+    logServerURL: settings.LOG_SERVER_URL,
+    logServerToken: settings.LOG_SERVER_TOKEN
+  });
 }
 
 function updateConsoleInterceptionFromSettings(settings) {

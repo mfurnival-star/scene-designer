@@ -231,10 +231,20 @@ export function log(levelNum, ...args) {
 
 /**
  * Async log streaming to external server (safe serialization).
+ * Now with extra TRACE-level logs before and after streaming for diagnostics.
  */
 export async function logStream(levelNum, ...args) {
   if (!externalLogServerURL) return;
   try {
+    // --- Added: TRACE log before streaming ---
+    log(LOG_LEVELS.TRACE, "[logStream] Preparing to stream log", {
+      levelNum,
+      levelName: levelName(levelNum),
+      args,
+      serverURL: externalLogServerURL,
+      token: externalLogServerToken
+    });
+
     const payload = {
       level: levelNum,
       levelName: levelName(levelNum),
@@ -245,12 +255,33 @@ export async function logStream(levelNum, ...args) {
       token: externalLogServerToken,
       loggerInstance: LOGGER_INSTANCE_ID
     };
-    await fetch(externalLogServerURL, {
+
+    // --- Added: TRACE log with payload ---
+    log(LOG_LEVELS.TRACE, "[logStream] Streaming payload", payload);
+
+    const resp = await fetch(externalLogServerURL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
+
+    // --- Added: INFO log after successful streaming ---
+    if (resp.ok) {
+      log(LOG_LEVELS.INFO, "[logStream] Log streamed successfully", {
+        status: resp.status,
+        statusText: resp.statusText,
+        payload
+      });
+    } else {
+      log(LOG_LEVELS.ERROR, "[logStream] Log streaming failed", {
+        status: resp.status,
+        statusText: resp.statusText,
+        payload
+      });
+    }
   } catch (e) {
+    // --- Added: ERROR log with full fetch error ---
+    log(LOG_LEVELS.ERROR, "[logStream] Failed to stream log", ...args, e);
     if (typeof console !== "undefined" && console.error) {
       console.error(`[log][${LOGGER_INSTANCE_ID}]`, levelName(levelNum), "Failed to stream log", ...args, e);
     }
@@ -275,3 +306,4 @@ if (typeof window !== "undefined") {
   window.LOG_LEVELS = LOG_LEVELS;
   window.__loggerInstanceId = LOGGER_INSTANCE_ID;
 }
+

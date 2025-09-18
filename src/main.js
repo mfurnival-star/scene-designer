@@ -17,6 +17,11 @@ import { log } from './log.js';
 // Import MiniLayout bootstrapper:
 import './layout.js';
 
+// --- ADDED: Explicit TRACE-level logs at startup for debugging/diagnostics ---
+log("TRACE", "[main.js] Scene Designer app entry point loaded");
+log("TRACE", "[main.js] If you see this, logger and error panel are working");
+log("TRACE", "[main.js] Settings and FORCE mode values:", window?.SCENE_DESIGNER_FORCE_SETTINGS ?? null);
+
 // (Optional) Attach for debugging; remove for production
 if (typeof window !== "undefined") {
   window.log = log;
