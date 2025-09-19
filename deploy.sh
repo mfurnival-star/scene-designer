@@ -1,5 +1,5 @@
 #!/bin/bash
-# Scene Designer Deploy Script (prod or dev, auto FORCE settings/Eruda injection, clean-up logic)
+# Scene Designer Deploy Script (prod or dev, auto FORCE settings/Eruda/Console.Re injection, clean-up logic)
 # ---------------------------------------------------------------------------
 # Usage:
 #   [VAR=VALUE ...] ./deploy.sh [prod|dev]
@@ -32,7 +32,7 @@ Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
 
 Environment variables:
   INJECT_ERUDA     1 to add Eruda debug console, 0 otherwise   [default: 0]
-  INJECT_CONSOLERE 1 to add Console.Re log streaming, 0 otherwise (now ignored in dev mode)
+  INJECT_CONSOLERE 1 to add Console.Re log streaming, 0 otherwise
   <any FORCE setting key>
     e.g. LOG_LEVEL, LOG_OUTPUT_DEST, INTERCEPT_CONSOLE
 
@@ -87,9 +87,9 @@ function inject_eruda() {
 }
 
 function inject_consolere() {
-  echo "[$DATESTAMP] === (Re)inserting Console.Re (prod only, if enabled) ==="
+  echo "[$DATESTAMP] === (Re)inserting Console.Re (if enabled) ==="
   sed -i '/<!-- BEGIN CONSOLERE -->/,/<!-- END CONSOLERE -->/d' "$INDEX_HTML"
-  if [[ "$INJECT_CONSOLERE" == "1" && "$MODE" == "prod" ]]; then
+  if [[ "$INJECT_CONSOLERE" == "1" ]]; then
     awk '
       /<script type="module" src="\/src\/main.js">/ {
         print "  <!-- BEGIN CONSOLERE -->";
@@ -109,9 +109,9 @@ function inject_consolere() {
       }
       { print }
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
-    echo "[$DATESTAMP] === Injected Console.Re CDN script into $INDEX_HTML (before main.js entry, prod only) ==="
+    echo "[$DATESTAMP] === Injected Console.Re CDN script into $INDEX_HTML (before main.js entry) ==="
   else
-    echo "[$DATESTAMP] === Console.Re injection not requested or running in dev mode. Skipping. ==="
+    echo "[$DATESTAMP] === Console.Re injection not requested. Skipping. ==="
   fi
 }
 
@@ -196,16 +196,17 @@ if [[ "$MODE" == "prod" ]]; then
   build_project
   prepare_index_html
   inject_eruda
-  inject_consolere   # Only inject Console.Re CDN in prod!
+  inject_consolere   # Inject Console.Re CDN in prod (if enabled)
   inject_force_settings_block
   deploy_to_prod
 else
   INDEX_HTML="$ROOT_INDEX_HTML"
   prepare_index_html
   inject_eruda
-  # DO NOT inject Console.Re CDN script in dev mode!
+  inject_consolere   # Inject Console.Re CDN in dev (if enabled)
   inject_force_settings_block
   start_dev_server
 fi
 
 exit 0
+
