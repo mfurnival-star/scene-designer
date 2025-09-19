@@ -87,3 +87,4 @@ import { foo } from "./notExportedHere.js";  // ❌ Not allowed if not exported
 ---
 
 Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
+

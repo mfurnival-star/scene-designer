@@ -9,6 +9,7 @@
  * - No global/window usage except for patching the console object.
  * - ES module only: imports log() from log.js.
  * - Logging policy: No direct use of console.log outside the logger implementation.
+ * - **Streams all intercepted logs to remote via Console.Re if available (console.re.log, etc).**
  * -------------------------------------------------------------------
  * Exports: enableConsoleInterception, disableConsoleInterception
  * Dependencies: log.js
@@ -23,6 +24,7 @@ let origConsole = null;
 /**
  * Patch all console methods to forward to logger, preserving level.
  * Optionally, preserve original output as well.
+ * Also forwards to Console.Re remote logging if available.
  */
 export function enableConsoleInterception({ preserveOriginal = true } = {}) {
   if (interceptionEnabled) return;
@@ -54,6 +56,25 @@ export function enableConsoleInterception({ preserveOriginal = true } = {}) {
       try {
         // Forward to the logger for streaming and sinks
         log(levelMap[method], ...args);
+
+        // Forward to Console.Re remote logger if available
+        if (typeof console !== "undefined" && console.re) {
+          try {
+            if (method === "error" && typeof console.re.error === "function") {
+              console.re.error(...args);
+            } else if (method === "warn" && typeof console.re.warn === "function") {
+              console.re.warn(...args);
+            } else if (method === "info" && typeof console.re.info === "function") {
+              console.re.info(...args);
+            } else if (method === "debug" && typeof console.re.debug === "function") {
+              console.re.debug(...args);
+            } else if (typeof console.re.log === "function") {
+              console.re.log(...args);
+            }
+          } catch (e) {
+            // fail silently for remote logging errors
+          }
+        }
       } catch (e) {
         // If log() throws, do not break console
         if (preserveOriginal && origConsole && origConsole[method]) {
