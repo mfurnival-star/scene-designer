@@ -12,7 +12,7 @@
  * -----------------------------------------------------------
  */
 
-import consoleRe from 'console-remote-client';
+import { init } from 'console-remote-client';
 
 /**
  * Initialize Console.Re log streaming with given channel.
@@ -26,7 +26,7 @@ export function initConsoleRe(channel = "default") {
   }).catch(() => {});
 
   // Initialize Console.Re connector with recommended options
-  consoleRe.init({
+  init({
     channel,
     redirectDefaultConsoleToRemote: true,
     disableDefaultConsoleOutput: false,
