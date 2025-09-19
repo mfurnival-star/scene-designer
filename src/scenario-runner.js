@@ -40,15 +40,20 @@ export function getRegisteredScenarios() {
 }
 
 /**
- * Evaluate all args, resolving any functions to their return value.
+ * Recursively evaluate all args, resolving functions to their return value.
  * Used to make scenario steps robust.
  * @param {Array} args
  * @returns {Array}
  */
 function evalArgs(args) {
-  return Array.isArray(args)
-    ? args.map(a => typeof a === "function" ? a() : a)
-    : [];
+  if (Array.isArray(args)) {
+    return args.map(a => {
+      if (typeof a === "function") return a();
+      if (Array.isArray(a)) return evalArgs(a);
+      return a;
+    });
+  }
+  return [];
 }
 
 /**
@@ -61,6 +66,7 @@ export async function runScenarioStep(step) {
     if (step.fn && API[step.fn]) {
       // Evaluate any function args before passing to API
       const args = evalArgs(step.args || []);
+      log("TRACE", `[scenario-runner] Step args evaluated`, { fn: step.fn, rawArgs: step.args, resolvedArgs: args });
       const result = await API[step.fn](...args);
       log("INFO", `[scenario-runner] Ran action: ${step.fn}`, { args, result });
       return result;
