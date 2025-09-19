@@ -188,3 +188,25 @@ To restart or fork:
 - For engineering/code delivery rules, see [SCENE_DESIGNER_MANIFESTO.md](SCENE_DESIGNER_MANIFESTO.md)
 - For full module list, see [`src/modules.index.md`](src/modules.index.md)
 
+---
+
+## ⚠️ Manifesto Caveat: Remote Logging via Console.Re
+
+**Console.Re remote log streaming requires a temporary exception to our strict ES module and no-globals policy:**
+
+- The npm package `console-remote-client` is UMD-only and does **not** provide a reliable ES module export for its `.init` connector under Vite/ESM.
+- **To enable remote log streaming, Scene Designer is permitted to inject the official Console.Re CDN script as a global in `index.html`:**
+  ```html
+  <script src="https://cdn.jsdelivr.net/npm/console-remote-client"></script>
+  ```
+  - This exception is strictly for remote log streaming only.
+  - All other dependencies and code must remain ES module–only and avoid global/window usage.
+  - The exception is documented in [SCENE_DESIGNER_MANIFESTO.md](SCENE_DESIGNER_MANIFESTO.md) and build/deploy scripts.
+  - Remove the exception as soon as Console.Re provides a proper ES module export.
+
+**Rationale:**  
+No alternative exists for ESM-only remote log streaming with Console.Re at this time.  
+This enables robust debugging/log streaming while maintaining code integrity elsewhere.
+
+---
+

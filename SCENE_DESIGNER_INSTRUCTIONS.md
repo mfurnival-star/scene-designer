@@ -10,6 +10,17 @@ These instructions are binding for all development, code review, and delivery in
 - No use of window.*, global variables, or global libraries.
 - External dependencies (e.g., Konva, Pickr, Golden Layout) must be imported as ES modules.
 
+### 1A. **Transitional Exception: Remote Logging via Console.Re**
+
+- The npm package `console-remote-client` is UMD-only and does **not** provide a reliable ES module export for its `.init` connector under Vite/ESM.
+- To enable remote log streaming, Scene Designer may inject the official Console.Re CDN script **as a global** in `index.html`:
+  ```html
+  <script src="https://cdn.jsdelivr.net/npm/console-remote-client"></script>
+  ```
+- This exception is strictly for remote logging only.
+- All other dependencies and code must remain ES module–only and avoid global/window usage.
+- Remove this exception as soon as Console.Re provides a proper ES module export.
+
 ---
 
 ## 2. **Import/Export Consistency**

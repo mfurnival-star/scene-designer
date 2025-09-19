@@ -22,7 +22,6 @@ if [[ $# -gt 0 ]]; then shift; fi
 
 INJECT_ERUDA="${INJECT_ERUDA:-0}"
 INJECT_CONSOLERE="${INJECT_CONSOLERE:-0}"
-CONSOLERE_TOKEN="${CONSOLERE_TOKEN:-}"
 
 function usage() {
   cat <<EOF
@@ -34,12 +33,11 @@ Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
 Environment variables:
   INJECT_ERUDA     1 to add Eruda debug console, 0 otherwise   [default: 0]
   INJECT_CONSOLERE 1 to add Console.Re log streaming, 0 otherwise
-  CONSOLERE_TOKEN  Console.Re API token (required if injecting Console.Re)
   <any FORCE setting key>
     e.g. LOG_LEVEL, LOG_OUTPUT_DEST, LOG_SERVER_URL, INTERCEPT_CONSOLE
 
 Examples:
-  INJECT_CONSOLERE=1 CONSOLERE_TOKEN=YOUR_TOKEN ./deploy.sh dev
+  INJECT_CONSOLERE=1 ./deploy.sh dev
   INJECT_ERUDA=1 ./deploy.sh prod
 
 EOF
@@ -90,21 +88,27 @@ function inject_eruda() {
 function inject_consolere() {
   echo "[$DATESTAMP] === (Re)inserting Console.Re (if enabled) ==="
   sed -i '/<!-- BEGIN CONSOLERE -->/,/<!-- END CONSOLERE -->/d' "$INDEX_HTML"
-  if [[ "$INJECT_CONSOLERE" == "1" && -n "$CONSOLERE_TOKEN" ]]; then
-    awk -v token="$CONSOLERE_TOKEN" '
+  if [[ "$INJECT_CONSOLERE" == "1" ]]; then
+    awk '
       /<\/body>/ {
         print "  <!-- BEGIN CONSOLERE -->";
-        print "  <script type=\"module\">";
-        print "    import { initConsoleRe } from \x22./src/console.re.js\x22;";
-        print "    initConsoleRe(\x22" token "\x22);";
+        print "  <script src=\"https://cdn.jsdelivr.net/npm/console-remote-client\"></script>";
+        print "  <script>";
+        print "    if (window.ConsoleRe && typeof window.ConsoleRe.init === \"function\") {";
+        print "      window.ConsoleRe.init({";
+        print "        channel: \"scene-designer\",";
+        print "        redirectDefaultConsoleToRemote: true,";
+        print "        disableDefaultConsoleOutput: false";
+        print "      });";
+        print "    }";
         print "  </script>";
         print "  <!-- END CONSOLERE -->";
       }
       { print }
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
-    echo "[$DATESTAMP] === Injected Console.Re script into $INDEX_HTML ==="
+    echo "[$DATESTAMP] === Injected Console.Re CDN script into $INDEX_HTML ==="
   else
-    echo "[$DATESTAMP] === Console.Re injection not requested or token missing. Skipping. ==="
+    echo "[$DATESTAMP] === Console.Re injection not requested. Skipping. ==="
   fi
 }
 
@@ -178,11 +182,9 @@ function start_dev_server() {
   echo "[$DATESTAMP] === Starting DEV SERVER (npm run dev) ==="
   export INJECT_ERUDA="$INJECT_ERUDA"
   export INJECT_CONSOLERE="$INJECT_CONSOLERE"
-  export CONSOLERE_TOKEN="$CONSOLERE_TOKEN"
   cat > .env.local <<EOF
 VITE_INJECT_ERUDA=$INJECT_ERUDA
 VITE_INJECT_CONSOLERE=$INJECT_CONSOLERE
-VITE_CONSOLERE_TOKEN=$CONSOLERE_TOKEN
 EOF
   echo "  (env written to .env.local)"
   npm run dev

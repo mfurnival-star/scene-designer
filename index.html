@@ -24,11 +24,16 @@
   <div id="ml-root"></div>
   <!-- Main entry point for Vite: -->
   <script type="module" src="/src/main.js"></script>
-  <!-- Console.Re integration will be injected by deploy.sh if enabled -->
   <!-- BEGIN CONSOLERE -->
-  <script type="module">
-    import { initConsoleRe } from "./src/console.re.js";
-    initConsoleRe("scene-designer");
+  <script src="https://cdn.jsdelivr.net/npm/console-remote-client"></script>
+  <script>
+    if (window.ConsoleRe && typeof window.ConsoleRe.init === "function") {
+      window.ConsoleRe.init({
+        channel: "scene-designer",
+        redirectDefaultConsoleToRemote: true,
+        disableDefaultConsoleOutput: false
+      });
+    }
   </script>
   <!-- END CONSOLERE -->
 </body>
