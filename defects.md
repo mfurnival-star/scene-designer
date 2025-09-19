@@ -48,6 +48,34 @@ Low priority; desktop testing is available and sufficient for now. Documenting f
 
 ---
 
+### defect10: Scenario Runner not working (core automation/testing bug)
+**Summary:**  
+The Scenario Runner panel and `scenario-runner.js` do not correctly automate or run shape-related scenarios.  
+When running any scenario, expected shape creation, selection, and deletion is not visible in the UI/canvas, even though logs indicate actions are being called and state is updated.
+
+**Details:**
+- Running a scenario (e.g., defect1-delete-flow) produces logs showing steps are executed and state is mutated (shapes array updated).
+- However, no shapes appear on the canvas, and subsequent steps (select, delete, assert) do not reflect in the UI.
+- Running scenarios after page load or layout initialization does not help; the UI remains out of sync.
+- Manually using the toolbar to add/delete shapes works as expected, but automation via scenario-runner does not update the visible canvas.
+
+**Expected:**  
+- Running a scenario should result in shapes being created/selected/deleted in the UI/canvas, matching the logs and state.
+
+**Observed:**  
+- Only logs and state are updated, but the canvas and UI do not reflect scenario actions.
+
+**Priority:**  
+Critical for automation/testing and defect reproduction.
+
+**Next steps:**  
+- Focus engineering and diagnostics on scenario-runner.js, scenario-panel.js, and state/canvas sync logic.
+- Add extra TRACE-level logging to canvas.js and scenario-runner.js for all shape/state/canvas updates.
+- Confirm if store subscriptions are firing and canvas is syncing after scenario actions.
+- Consider adding a "force sync" or "refresh" API to canvas.js for post-scenario UI update.
+
+---
+
 ## Resolved Defects
 
 ### defect2: Log streaming not working **[RESOLVED]**
