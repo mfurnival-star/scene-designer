@@ -1,7 +1,7 @@
 /**
  * console.re.js
  * -----------------------------------------------------------
- * Scene Designer – Console.Re Remote Logging Integration (ESM, New API)
+ * Scene Designer – Console.Re Remote Logging Integration (ESM, Latest API)
  * - Initializes Console.Re remote logging with all recommended connector options.
  * - Redirects default console methods (log, warn, error, debug) to remote.
  * - Streams all logs to the remote console dashboard for the given channel.
