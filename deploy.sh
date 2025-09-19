@@ -92,15 +92,15 @@ function inject_consolere() {
   if [[ "$INJECT_CONSOLERE" == "1" ]]; then
     awk '
       /<head>/ {
+        print "<head>";
         print "  <!-- BEGIN CONSOLERE -->";
-        print "  <script src=\"//console.re/connector.js\" data-channel=\"scene-designer\" id=\"consolerescript\"></script>";
+        print "  <script src=\"https://cdn.jsdelivr.net/npm/console-remote-client\"></script>";
         print "  <!-- END CONSOLERE -->";
-        print;
         next;
       }
       { print }
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
-    echo "[$DATESTAMP] === Injected Console.Re connector.js as first script in <head> of $INDEX_HTML ==="
+    echo "[$DATESTAMP] === Injected Console.Re CDN script as first script in <head> of $INDEX_HTML ==="
   else
     echo "[$DATESTAMP] === Console.Re injection not requested. Skipping. ==="
   fi
@@ -186,14 +186,14 @@ if [[ "$MODE" == "prod" ]]; then
   INDEX_HTML="$DIST_INDEX_HTML"
   build_project
   prepare_index_html
-  inject_consolere   # Inject Console.Re connector.js as FIRST script in <head>
+  inject_consolere   # Inject Console.Re CDN script as FIRST script in <head>
   inject_eruda
   inject_force_settings_block
   deploy_to_prod
 else
   INDEX_HTML="$ROOT_INDEX_HTML"
   prepare_index_html
-  inject_consolere   # Inject Console.Re connector.js as FIRST script in <head>
+  inject_consolere   # Inject Console.Re CDN script as FIRST script in <head>
   inject_eruda
   inject_force_settings_block
   start_dev_server
