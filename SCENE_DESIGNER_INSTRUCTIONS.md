@@ -12,11 +12,12 @@ These instructions are binding for all development, code review, and delivery in
 
 ### 1A. **Transitional Exception: Remote Logging via Console.Re**
 
-- The npm package `console-remote-client` is UMD-only and does **not** provide a reliable ES module export for its `.init` connector under Vite/ESM.
-- To enable remote log streaming, Scene Designer may inject the official Console.Re CDN script **as a global** in `index.html`:
+- **Remote log streaming must use the official Console.Re connector script:**
   ```html
-  <script src="https://cdn.jsdelivr.net/npm/console-remote-client"></script>
+  <script src="//console.re/connector.js" data-channel="scene-designer"></script>
   ```
+- This ensures compatibility with the current Console.Re dashboard and captures early errors.
+- The legacy npm UMD CDN (`console-remote-client`) is deprecated and MUST NOT be used except for backward compatibility with older builds.
 - This exception is strictly for remote logging only.
 - All other dependencies and code must remain ES module–only and avoid global/window usage.
 - Remove this exception as soon as Console.Re provides a proper ES module export.

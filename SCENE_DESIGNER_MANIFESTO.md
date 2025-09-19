@@ -17,12 +17,13 @@ These instructions are binding for all development, code review, and delivery in
 
 **Caveat (2025-09):**
 
-- The npm package `console-remote-client` is UMD-only and does **not** provide a reliable ES module export for its `.init` connector under Vite/ESM.
-- To reliably enable remote log streaming (especially for debugging and mobile diagnostics), Scene Designer is permitted to inject the official Console.Re CDN script **as a global** in `index.html`:
+- **Remote log streaming must use the official Console.Re connector script:**
   ```html
-  <script src="https://cdn.jsdelivr.net/npm/console-remote-client"></script>
+  <script src="//console.re/connector.js" data-channel="scene-designer"></script>
   ```
-  - This is a transitional exception **for remote logging only**.
+  - This ensures compatibility with the current Console.Re dashboard and captures early errors.
+  - The legacy npm UMD CDN (`console-remote-client`) is deprecated and MUST NOT be used except for backward compatibility (if needed for old builds).
+  - This exception is strictly for remote logging only.
   - All other dependencies and code must remain ES module–only and avoid global/window usage.
 
 - This exception must be:
@@ -31,13 +32,14 @@ These instructions are binding for all development, code review, and delivery in
     - Removed as soon as Console.Re provides a proper ES module export.
 
 **Rationale:**  
+Console.Re's connector.js CDN is the only supported way to stream logs to the dashboard and reliably capture early errors.  
 No alternative exists for ESM-only remote log streaming with Console.Re at this time.  
 This caveat ensures robust debugging/log streaming while maintaining code integrity elsewhere.
 
 ---
 
 **Action for maintainers:**  
-- If remote logging is required, inject the CDN script before the main bundle in `index.html`.
+- If remote logging is required, inject the connector.js CDN script as the first script inside `<head>` in `index.html`.
 - Document this exception in all build/deploy scripts.
 - Remove the exception once upstream Console.Re supports ESM.
 
