@@ -5,14 +5,18 @@
  * - Minimal ES module layout engine for Scene Designer prototypes.
  * - Supports: rows, columns, stacks (tabs), component panels, flexible header config.
  * - Per-panel scrollbars: style/size/color fully configurable via layout config scrollbarStyle property.
- * - All code is ES module only; no global/window usage.
+ * - All code is ES module only; no global/window usage except localStorage for panel size persistence.
  * - Logging via log.js.
+ * - NEW: Panel size persistence (splitter changes saved/restored).
  * -----------------------------------------------------------
  * Exports: MiniLayout
  * Dependencies: log.js
  */
 
 import { log } from './log.js';
+
+// --- Panel size persistence: localStorage key ---
+const PANEL_SIZE_STORAGE_KEY = "sceneDesignerPanelSizes";
 
 // Helper: Deep clone config object (to avoid mutation)
 function deepClone(obj) {
@@ -57,6 +61,32 @@ function injectPanelScrollbarCSS(className, styleObj) {
   document.head.appendChild(style);
 }
 
+// --- Panel size persistence helpers ---
+function savePanelSizes(sizes) {
+  try {
+    localStorage.setItem(PANEL_SIZE_STORAGE_KEY, JSON.stringify(sizes));
+    log("INFO", "[minilayout] Panel sizes saved", sizes);
+  } catch (e) {
+    log("ERROR", "[minilayout] Failed to save panel sizes", e);
+  }
+}
+function loadPanelSizes() {
+  try {
+    const raw = localStorage.getItem(PANEL_SIZE_STORAGE_KEY);
+    if (!raw) return {};
+    const sizes = JSON.parse(raw);
+    log("INFO", "[minilayout] Panel sizes loaded", sizes);
+    return sizes;
+  } catch (e) {
+    log("ERROR", "[minilayout] Failed to load panel sizes", e);
+    return {};
+  }
+}
+function panelPathKey(pathArr) {
+  // Path as string, e.g. "row-0:column-1:component-2"
+  return pathArr.join(":");
+}
+
 /**
  * MiniLayout – GL-inspired layout engine with neutral grey UI & configurable panel headers
  */
@@ -72,6 +102,8 @@ export class MiniLayout {
     this._componentFactories = {};
     this._panelRefs = [];
     this._destroyed = false;
+    this._panelSizes = loadPanelSizes();
+    this._pendingPanelSizeUpdates = {};
   }
 
   /**
@@ -105,7 +137,7 @@ export class MiniLayout {
     this.containerElement.style.margin = "0";
     this.containerElement.style.padding = "0";
     this.containerElement.style.boxSizing = "border-box";
-    this.rootItem = this._buildItem(this.config.root, this.containerElement, null);
+    this.rootItem = this._buildItem(this.config.root, this.containerElement, null, []);
     log("INFO", "[minilayout] Layout initialized");
   }
 
@@ -114,37 +146,58 @@ export class MiniLayout {
    * @param {Object} node
    * @param {HTMLElement} parentEl
    * @param {Object|null} parentItem
+   * @param {Array} pathArr - Path to this node (for panel size persistence)
    * @returns {Object} panel item (with .element property)
    */
-  _buildItem(node, parentEl, parentItem) {
+  _buildItem(node, parentEl, parentItem, pathArr) {
     if (!node) return null;
     let item = { config: node, parent: parentItem };
     let el = document.createElement("div");
 
-    // Row/column logic (unchanged from previous)
+    // Add node type and index to pathArr for persistence
+    let idxInParent = parentItem && parentItem.config && Array.isArray(parentItem.config.content)
+      ? parentItem.config.content.indexOf(node)
+      : 0;
+    let newPathArr = pathArr.concat([`${node.type}-${idxInParent}`]);
+
+    // Row/column logic
     if (node.type === "row" || node.type === "column") {
       el.className = "minilayout-panel";
       el.style.display = "flex";
       el.style.flexDirection = node.type === "row" ? "row" : "column";
+      // --- Panel size persistence: apply saved sizes ---
+      let parentKey = panelPathKey(newPathArr);
+      let sizes = (this._panelSizes && this._panelSizes[parentKey]) || [];
+      let childEls = [];
+      if (node.content && Array.isArray(node.content)) {
+        node.content.forEach((child, idx) => {
+          if (idx > 0) {
+            const splitter = this._makeSplitter(node.type, el, parentKey, idx - 1, childEls, newPathArr);
+            el.appendChild(splitter);
+            childEls.push(splitter);
+          }
+          const childItem = this._buildItem(child, el, item, newPathArr);
+          // --- Panel size persistence: apply child size ---
+          const sizeVal = sizes[idx];
+          if (sizeVal !== undefined) {
+            if (node.type === "row") {
+              childItem.element.style.width = `${sizeVal}%`;
+              childItem.element.style.flex = `0 0 ${sizeVal}%`;
+            } else {
+              childItem.element.style.height = `${sizeVal}%`;
+              childItem.element.style.flex = `0 0 ${sizeVal}%`;
+            }
+          }
+          childEls.push(childItem.element);
+        });
+      }
+      // If top-level, set to 100%
       el.style.width = node.width ? node.width + "%" : "100%";
       el.style.height = node.height ? node.height + "%" : "100%";
       el.style.flex = node.width ? `0 0 ${node.width}%` : "1 1 0";
       el.style.margin = "0";
       el.style.padding = "0";
       el.style.boxSizing = "border-box";
-      // Children
-      const children = [];
-      if (node.content && Array.isArray(node.content)) {
-        node.content.forEach((child, idx) => {
-          if (idx > 0) {
-            const splitter = this._makeSplitter(node.type, el);
-            el.appendChild(splitter);
-            children.push(splitter);
-          }
-          const childItem = this._buildItem(child, el, item);
-          children.push(childItem.element);
-        });
-      }
     } else if (node.type === "stack") {
       // Stack: tabbed panels
       el.className = "minilayout-panel-stack";
@@ -178,7 +231,7 @@ export class MiniLayout {
         const tabPanel = document.createElement("div");
         tabPanel.style.display = idx === activeIdx ? "flex" : "none";
         tabPanel.style.flex = "1 1 0";
-        this._buildItem(tabNode, tabPanel, item);
+        this._buildItem(tabNode, tabPanel, item, newPathArr);
         el.appendChild(tabPanel);
         panels.push(tabPanel);
       });
@@ -329,8 +382,8 @@ export class MiniLayout {
     return item;
   }
 
-  /** Splitter code unchanged **/
-  _makeSplitter(type, parentEl) {
+  /** Splitter code: extended for panel size persistence **/
+  _makeSplitter(type, parentEl, parentKey, leftIdx, childEls, pathArr) {
     const splitter = document.createElement("div");
     splitter.className = "minilayout-splitter";
     splitter.style.background = "#d2d2d2";
@@ -354,7 +407,7 @@ export class MiniLayout {
       splitter.style.borderTop = "1.5px solid #bbb";
       splitter.style.borderBottom = "1.5px solid #bbb";
     }
-    // Drag-to-resize code unchanged
+    // Drag-to-resize code, with panel size persistence
     splitter.addEventListener("mousedown", (e) => {
       e.preventDefault();
       document.body.style.cursor = splitter.style.cursor;
@@ -373,21 +426,39 @@ export class MiniLayout {
         let clientY = ev.type === "touchmove" ? ev.touches[0].clientY : ev.clientY;
         let dx = clientX - startX;
         let dy = clientY - startY;
-        if (type === "row") {
-          let newPrev = ((prevSize + dx) / totalSize) * 100;
-          let newNext = ((nextSize - dx) / totalSize) * 100;
-          prev.style.width = `${newPrev}%`;
-          prev.style.flex = `0 0 ${newPrev}%`;
-          next.style.width = `${newNext}%`;
-          next.style.flex = `0 0 ${newNext}%`;
-        } else {
-          let newPrev = ((prevSize + dy) / totalSize) * 100;
-          let newNext = ((nextSize - dy) / totalSize) * 100;
-          prev.style.height = `${newPrev}%`;
-          prev.style.flex = `0 0 ${newPrev}%`;
-          next.style.height = `${newNext}%`;
-          next.style.flex = `0 0 ${newNext}%`;
+        let newPrev = type === "row"
+          ? ((prevSize + dx) / totalSize) * 100
+          : ((prevSize + dy) / totalSize) * 100;
+        let newNext = type === "row"
+          ? ((nextSize - dx) / totalSize) * 100
+          : ((nextSize - dy) / totalSize) * 100;
+        // Clamp min size
+        if (newPrev < 7) newPrev = 7;
+        if (newNext < 7) newNext = 7;
+        prev.style.width = type === "row" ? `${newPrev}%` : "";
+        prev.style.height = type === "column" ? `${newPrev}%` : "";
+        prev.style.flex = `0 0 ${newPrev}%`;
+        next.style.width = type === "row" ? `${newNext}%` : "";
+        next.style.height = type === "column" ? `${newNext}%` : "";
+        next.style.flex = `0 0 ${newNext}%`;
+
+        // Save panel sizes for this parent node
+        let sizes = [];
+        let children = Array.from(parentEl.children).filter(el => el.classList.contains("minilayout-panel") || el.classList.contains("minilayout-panel-stack"));
+        for (let i = 0; i < children.length; i++) {
+          if (type === "row") {
+            let w = children[i].getBoundingClientRect().width;
+            sizes[i] = ((w / totalSize) * 100);
+          } else {
+            let h = children[i].getBoundingClientRect().height;
+            sizes[i] = ((h / totalSize) * 100);
+          }
         }
+        // --- Panel size persistence: save sizes ---
+        let key = parentKey;
+        let allSizes = loadPanelSizes();
+        allSizes[key] = sizes;
+        savePanelSizes(allSizes);
       }
       function onUp(ev) {
         document.body.style.cursor = "";
@@ -419,21 +490,39 @@ export class MiniLayout {
         let clientY = ev.type === "touchmove" ? ev.touches[0].clientY : ev.clientY;
         let dx = clientX - startX;
         let dy = clientY - startY;
-        if (type === "row") {
-          let newPrev = ((prevSize + dx) / totalSize) * 100;
-          let newNext = ((nextSize - dx) / totalSize) * 100;
-          prev.style.width = `${newPrev}%`;
-          prev.style.flex = `0 0 ${newPrev}%`;
-          next.style.width = `${newNext}%`;
-          next.style.flex = `0 0 ${newNext}%`;
-        } else {
-          let newPrev = ((prevSize + dy) / totalSize) * 100;
-          let newNext = ((nextSize - dy) / totalSize) * 100;
-          prev.style.height = `${newPrev}%`;
-          prev.style.flex = `0 0 ${newPrev}%`;
-          next.style.height = `${newNext}%`;
-          next.style.flex = `0 0 ${newNext}%`;
+        let newPrev = type === "row"
+          ? ((prevSize + dx) / totalSize) * 100
+          : ((prevSize + dy) / totalSize) * 100;
+        let newNext = type === "row"
+          ? ((nextSize - dx) / totalSize) * 100
+          : ((nextSize - dy) / totalSize) * 100;
+        // Clamp min size
+        if (newPrev < 7) newPrev = 7;
+        if (newNext < 7) newNext = 7;
+        prev.style.width = type === "row" ? `${newPrev}%` : "";
+        prev.style.height = type === "column" ? `${newPrev}%` : "";
+        prev.style.flex = `0 0 ${newPrev}%`;
+        next.style.width = type === "row" ? `${newNext}%` : "";
+        next.style.height = type === "column" ? `${newNext}%` : "";
+        next.style.flex = `0 0 ${newNext}%`;
+
+        // Save panel sizes for this parent node
+        let sizes = [];
+        let children = Array.from(parentEl.children).filter(el => el.classList.contains("minilayout-panel") || el.classList.contains("minilayout-panel-stack"));
+        for (let i = 0; i < children.length; i++) {
+          if (type === "row") {
+            let w = children[i].getBoundingClientRect().width;
+            sizes[i] = ((w / totalSize) * 100);
+          } else {
+            let h = children[i].getBoundingClientRect().height;
+            sizes[i] = ((h / totalSize) * 100);
+          }
         }
+        // --- Panel size persistence: save sizes ---
+        let key = parentKey;
+        let allSizes = loadPanelSizes();
+        allSizes[key] = sizes;
+        savePanelSizes(allSizes);
       }
       function onUp(ev) {
         document.body.style.cursor = "";

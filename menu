@@ -1,29 +1,71 @@
 #!/bin/bash
 
 DIR="./src"
-SPACING="    "           # Indentation for menu items
+SPACING="    "           # Indentation for each row
 CONFIRM_OVERWRITE=false  # Set to false to skip confirmation prompt
 
 # ANSI color codes
 YELLOW="\033[1;33m"
+GREEN="\033[1;32m"
 RESET="\033[0m"
+
+COL_WIDTH=30
+modified_files=()
 
 while true; do
     echo ""
     echo "📁 Available Files in $DIR"
     echo "---------------------------"
+
     files=("$DIR"/*)
-    for i in "${!files[@]}"; do
-        printf "${SPACING}${YELLOW}%2d${RESET} → %s\n" "$i" "${files[$i]##*/}"
+    sorted=($(for f in "${files[@]}"; do basename "$f"; done | sort))
+    last_letter=""
+    index=1
+
+    # Print two-column layout with alphabetical gaps
+    for ((i = 0; i < ${#sorted[@]}; i += 2)); do
+        left="${sorted[$i]}"
+        right="${sorted[$i+1]}"
+
+        first_letter="${left:0:1}"
+        if [[ "$first_letter" != "$last_letter" ]]; then
+            echo ""
+            last_letter="$first_letter"
+        fi
+
+        # Check if left file was modified
+        color_left="$YELLOW"
+        if [[ " ${modified_files[*]} " == *" $left "* ]]; then
+            color_left="$GREEN"
+        fi
+
+        printf "${SPACING}${color_left}%2d${RESET} → %-${COL_WIDTH}s" "$index" "$left"
+        index=$((index + 1))
+
+        # Check if right file exists and was modified
+        if [ -n "$right" ]; then
+            color_right="$YELLOW"
+            if [[ " ${modified_files[*]} " == *" $right "* ]]; then
+                color_right="$GREEN"
+            fi
+            printf "${color_right}%2d${RESET} → %s\n" "$index" "$right"
+            index=$((index + 1))
+        else
+            echo ""
+        fi
     done
+
+    echo ""
     echo "---------------------------"
     echo "Enter the number of the file to overwrite (Ctrl+C to quit):"
     read -r choice
 
-    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -lt "${#files[@]}" ]; then
-        selected="${files[$choice]}"
+    actual_index=$((choice - 1))
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$actual_index" -ge 0 ] && [ "$actual_index" -lt "${#sorted[@]}" ]; then
+        selected="${sorted[$actual_index]}"
+        full_path="$DIR/$selected"
         echo ""
-        echo "⚠️ You selected: ${selected}"
+        echo "⚠️ You selected: $full_path"
 
         if [ "$CONFIRM_OVERWRITE" = true ]; then
             echo "Are you sure you want to overwrite this file? (y/n)"
@@ -36,7 +78,8 @@ while true; do
 
         echo ""
         echo "✍️ Start typing your content. Press Ctrl+D when you're done."
-        cat > "$selected"
+        cat > "$full_path"
+        modified_files+=("$selected")
         echo "✅ File saved. Returning to menu..."
     else
         echo "❌ Invalid choice. Please enter a valid number."

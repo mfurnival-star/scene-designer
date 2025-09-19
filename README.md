@@ -91,6 +91,7 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
    - [x] Responsive #container resizing to fit image/canvas
    - [x] Only show selection highlight box for multiselect (not for single—single selection uses anchors/transformer only)
    - [x] Settings panel toggle always visible and clickable, even when panel is closed
+   - [x] **MiniLayout panel size persistence:** Panel sizes after splitter drag are now saved/restored automatically.
 
 ---
 
@@ -125,6 +126,7 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
 - [ ] Keyboard shortcuts for faster workflow
 - [ ] Undo/redo support
 - [ ] Auto-detect rectangles from images to speed up annotation
+- [x] **MiniLayout panel size persistence (2025-09):** Panel sizes after splitter drag are now saved/restored automatically via localStorage.
 
 ---
 
@@ -180,6 +182,9 @@ To restart or fork:
 - Toolbars and other UI emit actions only—never mutate state or shapes directly.
 - State managed in `src/state.js` (Zustand pattern).
 - Panels and UI factories follow MiniLayout API: `{ element, title, componentName }`.
+- **MiniLayout panel size persistence:**  
+  - After splitter drag, panel sizes are saved/restored via localStorage.
+  - No user action required; works automatically.
 
 ---
 
@@ -209,3 +214,4 @@ No alternative exists for ESM-only remote log streaming with Console.Re at this 
 This enables robust debugging/log streaming while maintaining code integrity elsewhere.
 
 ---
+

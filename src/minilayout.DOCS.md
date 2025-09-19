@@ -21,6 +21,7 @@ minilayout.DOCS.md
 
 - **minilayout.js**  
   Main MiniLayout engine (layout tree, panel logic, splitters, tab/stack, header, close, resizing).
+  - **Panel size persistence:** Splitter drag changes are now saved/restored via localStorage. Panel proportions are remembered between reloads.
 
 - **minilayout-ui.js**  
   *Advanced UI helpers for MiniLayout.*  
@@ -142,6 +143,20 @@ function buildSidebarPanel({ element, title, componentName }) {
 
 ---
 
+### Panel Size Persistence (NEW: 2025-09-19)
+
+- **Splitter drag changes are now saved/restored via localStorage.**
+- When you drag to resize any panel using a splitter, the new proportions (width/height %) are stored per panel path.
+- On reload, MiniLayout restores the last user-set panel sizes automatically.
+- No configuration required—works out-of-the-box.
+
+**Implementation details:**
+- Panel sizes are keyed by layout tree path and component name.
+- Storage uses localStorage under the key `sceneDesignerPanelSizes`.
+- If the layout config changes (e.g., new/removed panels), missing panels are ignored, and only valid sizes are restored.
+
+---
+
 ## Panel Headers & Tabs
 
 - **GL-inspired:** Panel headers are compact, with a "tab" effect and optional close button.
@@ -228,6 +243,7 @@ const tabBar = buildTabBar(panels, activeTabIdx, (newIdx) => {...});
 - **No panel appears:** Check that `registerComponent` was called for each `componentName`.
 - **Header or close button missing:** Check `closable` and header config in your panel node.
 - **Drag-to-resize not working:** Inspect splitter bar logic; ensure previous/next siblings are correct.
+- **Panel sizes not restored:** Confirm localStorage is available (not disabled in browser or incognito).
 - **Advanced UI features not working:** Confirm you imported `minilayout-ui.js` and called the helpers.
 
 ---
@@ -236,6 +252,7 @@ const tabBar = buildTabBar(panels, activeTabIdx, (newIdx) => {...});
 
 - **2024-06**: Initial release: row/column/stack/component, draggable splitters, compact headers, tab bar, close button.
 - **2024-09**: Added advanced UI helpers in `minilayout-ui.js` (ARIA, animated splitters, accessible tab bars).
+- **2025-09**: **Panel size persistence:** Splitter drag changes are now saved/restored via localStorage.
 
 ---
 
@@ -256,5 +273,4 @@ MIT
 ---
 
 **For updates, see `src/modules.index.md` and `SCENE_DESIGNER_MANIFESTO.md`.**
-
 

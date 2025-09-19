@@ -93,6 +93,7 @@ scenario-panel.js
 - **minilayout.js**  
   Native layout manager: robust row/column/stack API, dynamic add/remove/reinsert, close/destroy, resize, splitter support, tab/stack, settings sync, full event API.
   - **Per-panel scrollbars/overflow now supported via `scrollbars` property in panel config. See minilayout.DOCS.md for options.**
+  - **Panel size persistence: splitter drag changes are now saved/restored via localStorage.**
 
 - **minilayout-ui.js**  
   Advanced UI helpers for MiniLayout: splitter bars, tab styling, animated transitions, accessibility.
@@ -122,3 +123,4 @@ scenario-panel.js
 
 **Instructions:**  
 Keep this file updated per SCENE_DESIGNER_MANIFESTO.md.
+
