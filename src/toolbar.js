@@ -13,7 +13,7 @@
  * - NO business logic, selection, or state mutation.
  * - Logging via log.js.
  * - **Delete button is disabled if no shape is selected (UX improvement).**
- * - **FIX: Delete button always updates on any selection change (defect1 fix).**
+ * - **FIX: Always re-query button before updating enabled state to avoid stale reference bugs.**
  * -----------------------------------------------------------
  */
 
@@ -26,10 +26,12 @@ import {
 
 /**
  * Utility: Enable or disable a toolbar button by id.
- * @param {HTMLElement} btn
+ * Always re-query the button to avoid stale references.
+ * @param {string} btnId - DOM id for the button
  * @param {boolean} enabled
  */
-function setButtonEnabled(btn, enabled) {
+function setButtonEnabledById(btnId, enabled) {
+  const btn = document.querySelector(`#${btnId}`);
   if (!btn) return;
   btn.disabled = !enabled;
   btn.setAttribute("aria-disabled", !enabled ? "true" : "false");
@@ -40,6 +42,14 @@ function setButtonEnabled(btn, enabled) {
     btn.classList.remove("disabled");
     btn.title = "Delete selected shape(s)";
   }
+  log("DEBUG", "[toolbar] setButtonEnabledById", {
+    btnId,
+    enabled,
+    btnDisabled: btn.disabled,
+    classList: btn.className,
+    ariaDisabled: btn.getAttribute("aria-disabled"),
+    title: btn.title
+  });
 }
 
 /**
@@ -228,8 +238,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     const serverImageSelect = element.querySelector('#toolbar-server-image-select');
     const shapeTypeSelect = element.querySelector('#toolbar-shape-type-select');
     const addShapeBtn = element.querySelector('#toolbar-add-shape-btn');
-    const deleteShapeBtn = element.querySelector('#toolbar-delete-shape-btn');
-    // Other buttons are present but hidden; will be registered later
+    // NOTE: deleteShapeBtn is no longer cached—always query fresh
 
     // --- Toolbar UI Scale live update support ---
     const updateToolbarScale = () => {
@@ -301,16 +310,26 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     });
 
     // --- DELETE SHAPE BUTTON ---
-    deleteShapeBtn.addEventListener('click', () => {
+    // Always use a fresh reference for delete button
+    function handleDeleteClick() {
+      const deleteShapeBtn = document.querySelector('#toolbar-delete-shape-btn');
+      if (deleteShapeBtn && deleteShapeBtn.disabled) {
+        log("WARN", "[toolbar] Delete button clicked while disabled – ignoring");
+        return;
+      }
       log("INFO", "[toolbar] Delete button clicked");
       deleteSelectedShapes();
+    }
+    // Attach handler (multiple times is safe—event delegation)
+    container.addEventListener('click', function (ev) {
+      const btn = ev.target.closest('#toolbar-delete-shape-btn');
+      if (btn) handleDeleteClick();
     });
 
     // --- Enable/disable Delete button based on selection ---
     function updateDeleteButtonState() {
       const selectedCount = getState().selectedShapes?.length ?? 0;
-      setButtonEnabled(deleteShapeBtn, selectedCount > 0);
-      log("DEBUG", "[toolbar] updateDeleteButtonState", { selectedCount, enabled: selectedCount > 0 });
+      setButtonEnabledById('toolbar-delete-shape-btn', selectedCount > 0);
     }
     // Initial state
     updateDeleteButtonState();
@@ -319,7 +338,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       updateDeleteButtonState();
     });
 
-    log("INFO", "[toolbar] Toolbar panel fully initialized (compact, scalable, single row, Delete button disables if none selected, defect1 fix)");
+    log("INFO", "[toolbar] Toolbar panel fully initialized (compact, scalable, single row, Delete button disables if none selected, robust DOM sync)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
@@ -333,4 +352,3 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
-
