@@ -134,7 +134,8 @@ function rebuildLayout(includeErrorLogPanel) {
               type: 'component',
               componentName: 'CanvasPanel',
               title: 'Canvas',
-              height: 82
+              height: 82,
+              scrollbars: 'both' // <-- Enable both scrollbars for CanvasPanel
             }
           ]
         },
@@ -207,4 +208,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initial layout build
   rebuildLayout(showErrorLogPanelSetting);
 });
+
 

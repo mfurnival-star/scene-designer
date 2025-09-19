@@ -11,6 +11,7 @@
  * - Logging via log.js.
  * - Splitter bars between columns/rows, drag-to-resize enabled (vertical and horizontal) including mobile/touch support.
  * - Fixes overflow: no scrollbars on fullscreen, all borders/margins included in sizing.
+ * - NEW: Per-panel scrollbars/overflow config via `scrollbars` property on component nodes.
  * -----------------------------------------------------------
  * Exports: MiniLayout
  * Dependencies: log.js
@@ -227,9 +228,49 @@ export class MiniLayout {
       bodyDiv.className = "minilayout-panel-body";
       bodyDiv.style.flex = "1 1 0";
       bodyDiv.style.height = "100%";
-      bodyDiv.style.overflow = "auto";
       bodyDiv.style.background = node.bodyBg ?? "#f3f3f3";
       bodyDiv.style.padding = "0";
+
+      // --- NEW: Scrollbar/overflow config ---
+      // If node.scrollbars is present, set overflow explicitly
+      if (node.scrollbars !== undefined) {
+        // Supported values: 'auto', 'both', 'x', 'y', 'always', 'hidden', 'visible'
+        switch (node.scrollbars) {
+          case 'auto': // default
+            bodyDiv.style.overflow = "auto";
+            break;
+          case 'both':
+            bodyDiv.style.overflowX = "auto";
+            bodyDiv.style.overflowY = "auto";
+            break;
+          case 'x':
+            bodyDiv.style.overflowX = "auto";
+            bodyDiv.style.overflowY = "hidden";
+            break;
+          case 'y':
+            bodyDiv.style.overflowX = "hidden";
+            bodyDiv.style.overflowY = "auto";
+            break;
+          case 'always':
+            bodyDiv.style.overflow = "scroll";
+            break;
+          case 'hidden':
+            bodyDiv.style.overflow = "hidden";
+            break;
+          case 'visible':
+            bodyDiv.style.overflow = "visible";
+            break;
+          default:
+            bodyDiv.style.overflow = "auto";
+        }
+        log("INFO", "[minilayout] Panel scrollbars config applied", {
+          componentName: node.componentName,
+          scrollbars: node.scrollbars
+        });
+      } else {
+        // Default: overflow auto
+        bodyDiv.style.overflow = "auto";
+      }
 
       el.appendChild(bodyDiv);
 

@@ -17,7 +17,6 @@ shape-defs.js
 sidebar.js
 minilayout.js
 minilayout-ui.js
-minilayout.demo.js
 minilayout.css
 minilayout.DOCS.md
 ```
@@ -91,6 +90,7 @@ minilayout.DOCS.md
 
 - **minilayout.js**  
   Native layout manager: robust row/column/stack API, dynamic add/remove/reinsert, close/destroy, resize, splitter support, tab/stack, settings sync, full event API.
+  - **Per-panel scrollbars/overflow now supported via `scrollbars` property in panel config. See minilayout.DOCS.md for options.**
 
 - **minilayout-ui.js**  
   Advanced UI helpers for MiniLayout: splitter bars, tab styling, animated transitions, accessibility.
