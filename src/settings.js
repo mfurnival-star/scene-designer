@@ -8,6 +8,7 @@
  * - Settings panel uses Tweakpane.
  * - Logging via log.js.
  * - **Logging destination is now only 'console' or 'both' (no custom server, no error pane sink).**
+ * - Logging levels: Silent, Error, Warning, Info, Debug (TRACE removed, label/value always match).
  * -------------------------------------------------------------------
  */
 
@@ -33,25 +34,23 @@ import { Pane } from 'tweakpane';
 import localforage from 'localforage';
 import { setErrorLogPanelVisible } from './layout.js';
 
-// --- Log Level Options (label and value) ---
+// --- Log Level Options (label and value are identical) ---
 export const LOG_LEVELS = [
   { value: "Silent", label: "Silent" },
   { value: "Error", label: "Error" },
   { value: "Warning", label: "Warning" },
   { value: "Info", label: "Info" },
-  { value: "Debug", label: "Debug" },
-  { value: "Trace (very verbose)", label: "Trace (very verbose)" }
+  { value: "Debug", label: "Debug" }
 ];
 export const LOG_LEVEL_LABEL_TO_NUM = {
   "Silent": 0,
   "Error": 1,
   "Warning": 2,
   "Info": 3,
-  "Debug": 4,
-  "Trace (very verbose)": 5
+  "Debug": 4
 };
 export const LOG_LEVEL_NUM_TO_LABEL = [
-  "Silent", "Error", "Warning", "Info", "Debug", "Trace (very verbose)"
+  "Silent", "Error", "Warning", "Info", "Debug"
 ];
 
 // --- Settings Registry ---
@@ -152,7 +151,7 @@ function coerceBoolean(val) {
 }
 
 function mergeSettingsWithForce(stored) {
-  log("TRACE", "[settings] mergeSettingsWithForce", { stored });
+  log("DEBUG", "[settings] mergeSettingsWithForce", { stored });
   const forceMode = typeof window !== "undefined" &&
     window.SCENE_DESIGNER_FORCE === true &&
     window.SCENE_DESIGNER_FORCE_SETTINGS &&
@@ -162,10 +161,7 @@ function mergeSettingsWithForce(stored) {
     let val;
     if (forceMode && reg.key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
       val = window.SCENE_DESIGNER_FORCE_SETTINGS[reg.key];
-      // --- Coerce boolean types robustly ---
-      if (reg.type === "boolean") {
-        val = coerceBoolean(val);
-      }
+      if (reg.type === "boolean") val = coerceBoolean(val);
       log("INFO", `[settings] FORCE MODE: Overriding ${reg.key} with forced value`, val);
     } else if (reg.key in stored) {
       val = stored[reg.key];
@@ -183,7 +179,7 @@ function mergeSettingsWithForce(stored) {
 }
 
 export async function loadSettings() {
-  log("TRACE", "[settings] loadSettings entry");
+  log("DEBUG", "[settings] loadSettings entry");
   try {
     let stored = (await localforage.getItem("sceneDesignerSettings")) || {};
     log("DEBUG", "[settings] loadSettings: raw stored from localforage:", stored);
@@ -192,8 +188,7 @@ export async function loadSettings() {
     updateLogConfigFromSettings(merged);
     updateConsoleInterceptionFromSettings(merged);
     log("DEBUG", "[settings] Settings loaded and applied", merged);
-    log("TRACE", "[settings] Full settings after load", { settings: getState().settings });
-    log("TRACE", "[settings] loadSettings exit");
+    log("DEBUG", "[settings] Full settings after load", { settings: getState().settings });
     return merged;
   } catch (e) {
     log("ERROR", "[settings] loadSettings error", e);
@@ -202,7 +197,7 @@ export async function loadSettings() {
 }
 
 export async function saveSettings() {
-  log("TRACE", "[settings] saveSettings entry");
+  log("DEBUG", "[settings] saveSettings entry");
   try {
     const forceMode = typeof window !== "undefined" &&
       window.SCENE_DESIGNER_FORCE === true &&
@@ -224,8 +219,7 @@ export async function saveSettings() {
     updateLogConfigFromSettings(getState().settings);
     updateConsoleInterceptionFromSettings(getState().settings);
     log("DEBUG", "[settings] Settings saved", toSave);
-    log("TRACE", "[settings] Full settings after save", { settings: getState().settings });
-    log("TRACE", "[settings] saveSettings exit");
+    log("DEBUG", "[settings] Full settings after save", { settings: getState().settings });
   } catch (e) {
     log("ERROR", "[settings] saveSettings error", e);
     throw e;
@@ -233,7 +227,7 @@ export async function saveSettings() {
 }
 
 export async function setSettingAndSave(key, value) {
-  log("TRACE", "[settings] setSettingAndSave entry", { key, value, type: typeof value });
+  log("DEBUG", "[settings] setSettingAndSave entry", { key, value, type: typeof value });
   const forceMode = typeof window !== "undefined" &&
     window.SCENE_DESIGNER_FORCE === true &&
     window.SCENE_DESIGNER_FORCE_SETTINGS &&
@@ -250,13 +244,13 @@ export async function setSettingAndSave(key, value) {
   }
   setSetting(key, valToSet);
   log("DEBUG", "[settings] setSettingAndSave: after setSetting", getState().settings);
-  log("TRACE", `[settings] setSettingAndSave: setting '${key}' changed`, { value: valToSet, fullSettings: getState().settings });
+  log("DEBUG", `[settings] setSettingAndSave: setting '${key}' changed`, { value: valToSet, fullSettings: getState().settings });
   await saveSettings();
   if (key === "showErrorLogPanel") setErrorLogPanelVisible(valToSet);
-  log("TRACE", "[settings] setSettingAndSave exit");
+  log("DEBUG", "[settings] setSettingAndSave exit");
 }
 export async function setSettingsAndSave(settingsObj) {
-  log("TRACE", "[settings] setSettingsAndSave entry", settingsObj);
+  log("DEBUG", "[settings] setSettingsAndSave entry", settingsObj);
   const forceMode = typeof window !== "undefined" &&
     window.SCENE_DESIGNER_FORCE === true &&
     window.SCENE_DESIGNER_FORCE_SETTINGS &&
@@ -278,16 +272,16 @@ export async function setSettingsAndSave(settingsObj) {
   }
   setSettings(settingsObj);
   log("DEBUG", "[settings] setSettingsAndSave: after setSettings", getState().settings);
-  log("TRACE", "[settings] setSettingsAndSave: all settings changed", { fullSettings: getState().settings });
+  log("DEBUG", "[settings] setSettingsAndSave: all settings changed", { fullSettings: getState().settings });
   await saveSettings();
   if ("showErrorLogPanel" in settingsObj) setErrorLogPanelVisible(settingsObj.showErrorLogPanel);
-  log("TRACE", "[settings] setSettingsAndSave exit");
+  log("DEBUG", "[settings] setSettingsAndSave exit");
 }
 
 function setLogLevelByNum(numLevel) {
   let name = LOG_LEVEL_NUM_TO_LABEL[numLevel] ?? "Silent";
   setLogLevel(numLevel);
-  log("TRACE", "[settings] Log level changed", { numLevel, name });
+  log("DEBUG", "[settings] Log level changed", { numLevel, name });
 }
 
 function updateLogConfigFromSettings(settings) {
@@ -297,7 +291,7 @@ function updateLogConfigFromSettings(settings) {
     setLogLevelByNum(num);
   }
   if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
-  log("TRACE", "[settings] Logging config updated", {
+  log("DEBUG", "[settings] Logging config updated", {
     logLevel: settings.DEBUG_LOG_LEVEL,
     logDest: settings.LOG_OUTPUT_DEST
   });
