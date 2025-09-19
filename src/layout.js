@@ -3,7 +3,7 @@
  * -----------------------------------------------------------
  * MiniLayout App Bootstrapper for Scene Designer
  * Exports: showErrorLogPanel, hideErrorLogPanel, setErrorLogPanelVisible, isErrorLogPanelOpen
- * Dependencies: minilayout.js, log.js, state.js, settings.js, errorlog.js, canvas.js, toolbar.js
+ * Dependencies: minilayout.js, log.js, state.js, settings.js, errorlog.js, canvas.js, toolbar.js, scenario-panel.js
  *
  * MiniLayout Compliance:
  * - All panel/component factories registered expect a single object argument:
@@ -17,10 +17,10 @@ import { buildCanvasPanel } from './canvas.js';
 import { buildSettingsPanel, loadSettings } from './settings.js';
 import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
 import { buildCanvasToolbarPanel } from './toolbar.js';
-// FIXED: Remove invalid import of AppState, only import actual exports
+import { buildScenarioPanel } from './scenario-panel.js';
 import { getSetting, subscribe } from './state.js';
 import { log } from './log.js';
-import { setSettingAndSave } from './settings.js';
+import { setErrorLogPanelVisible } from './settings.js';
 
 let layout = null;
 let mlRoot = null;
@@ -29,7 +29,6 @@ let mlRoot = null;
  * Returns true if Error Log panel is present in layout.
  */
 export function isErrorLogPanelOpen() {
-  // Find the ErrorLogPanel among panel refs
   if (!layout || !layout._panelRefs) return false;
   return layout._panelRefs.some(ref =>
     ref.node?.componentName === "ErrorLogPanel"
@@ -91,7 +90,10 @@ subscribe((state, details) => {
 });
 
 /**
- * Rebuild the layout with or without the ErrorLogPanel.
+ * Rebuild the layout with Scenario Runner panel and/or Error Log panel.
+ * Scenario Runner panel location:
+ * - If panel is taller than wide (default): add as new row beneath CanvasToolbarPanel/CanvasPanel column.
+ * - If panel is wider than tall: add as new column next to CanvasPanel in main column.
  * @param {boolean} includeErrorLogPanel
  */
 function rebuildLayout(includeErrorLogPanel) {
@@ -108,27 +110,28 @@ function rebuildLayout(includeErrorLogPanel) {
     layout.destroy();
   }
 
-  // Build layout config
+  // --- Scenario Runner panel config ---
+  // Proportion logic: if default or unknown, add as a new row under toolbar/canvas column.
+  // For now, always add as a new row below toolbar/canvas (taller than wide).
   let panelLayout = {
     root: {
       type: 'row',
       content: [
-        // REMOVED SIDEBAR PANEL
         {
           type: 'column',
-          width: 70, // Increase width for canvas/toolbar after removing sidebar
+          width: 70,
           content: [
             {
               type: 'component',
               componentName: 'CanvasToolbarPanel',
               title: 'Toolbar',
-              height: 18
+              height: 14
             },
             {
               type: 'component',
               componentName: 'CanvasPanel',
               title: 'Canvas',
-              height: 82,
+              height: 56,
               scrollbars: 'both',
               scrollbarStyle: {
                 width: '28px',
@@ -137,6 +140,13 @@ function rebuildLayout(includeErrorLogPanel) {
                 radius: '14px',
                 hover: '#0057d8'
               }
+            },
+            {
+              type: 'component',
+              componentName: 'ScenarioPanel',
+              title: 'Scenario Runner',
+              height: 30,
+              scrollbars: 'auto'
             }
           ]
         },
@@ -170,11 +180,11 @@ function rebuildLayout(includeErrorLogPanel) {
   layout = new MiniLayout(panelLayout, mlRoot);
 
   // Panel/component registration (MiniLayout expects single object arg: { element, title, componentName })
-  // REMOVED: layout.registerComponent('SidebarPanel', buildSidebarPanel);
   layout.registerComponent('CanvasToolbarPanel', buildCanvasToolbarPanel);
   layout.registerComponent('CanvasPanel', buildCanvasPanel);
   layout.registerComponent('SettingsPanel', buildSettingsPanel);
   layout.registerComponent('ErrorLogPanel', buildErrorLogPanel);
+  layout.registerComponent('ScenarioPanel', buildScenarioPanel);
 
   registerErrorLogSink();
 
@@ -209,6 +219,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initial layout build
   rebuildLayout(showErrorLogPanelSetting);
 });
-
-
 
