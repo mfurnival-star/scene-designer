@@ -1,19 +1,13 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (Compact, Scalable, Single Row Edition)
- * - Factory for toolbar controls: image upload, server image select, shape type, add/delete.
- * - All controls visually grouped, strictly aligned, and sized identically.
- * - Enhanced flexbox layout, uniform height, padding, and icon alignment.
- * - Softer backgrounds, balanced groups, better centering.
- * - Full support for dynamic toolbar scaling via "Toolbar UI Scale" setting.
- * - Responsive tweaks for compactness, and prevents multi-row wrapping.
- * - ES module only, all dependencies imported.
+ * Scene Designer – Modular Toolbar UI Factory (Delete Button Bugfix Edition)
+ * - Ensures Delete button always disables/enables in sync with selection state.
+ * - Attaches click handler directly to button after every render.
+ * - Always queries fresh DOM reference for button state updates.
  * - All shape/scene actions are emitted as intents to actions.js.
  * - NO business logic, selection, or state mutation.
  * - Logging via log.js.
- * - **Delete button is disabled if no shape is selected (UX improvement).**
- * - **FIX: Always re-query button before updating enabled state to avoid stale reference bugs.**
  * -----------------------------------------------------------
  */
 
@@ -238,7 +232,6 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     const serverImageSelect = element.querySelector('#toolbar-server-image-select');
     const shapeTypeSelect = element.querySelector('#toolbar-shape-type-select');
     const addShapeBtn = element.querySelector('#toolbar-add-shape-btn');
-    // NOTE: deleteShapeBtn is no longer cached—always query fresh
 
     // --- Toolbar UI Scale live update support ---
     const updateToolbarScale = () => {
@@ -310,26 +303,30 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     });
 
     // --- DELETE SHAPE BUTTON ---
-    // Always use a fresh reference for delete button
-    function handleDeleteClick() {
-      const deleteShapeBtn = document.querySelector('#toolbar-delete-shape-btn');
-      if (deleteShapeBtn && deleteShapeBtn.disabled) {
+    function handleDeleteClick(ev) {
+      const btn = document.querySelector('#toolbar-delete-shape-btn');
+      if (!btn || btn.disabled) {
         log("WARN", "[toolbar] Delete button clicked while disabled – ignoring");
+        ev && ev.preventDefault && ev.preventDefault();
         return;
       }
       log("INFO", "[toolbar] Delete button clicked");
       deleteSelectedShapes();
     }
-    // Attach handler (multiple times is safe—event delegation)
-    container.addEventListener('click', function (ev) {
-      const btn = ev.target.closest('#toolbar-delete-shape-btn');
-      if (btn) handleDeleteClick();
-    });
+    // Attach handler directly to button, every time after render
+    function attachDeleteButtonHandler() {
+      const btn = document.querySelector('#toolbar-delete-shape-btn');
+      if (btn) {
+        btn.removeEventListener('click', handleDeleteClick); // Remove any previous
+        btn.addEventListener('click', handleDeleteClick);
+      }
+    }
 
     // --- Enable/disable Delete button based on selection ---
     function updateDeleteButtonState() {
       const selectedCount = getState().selectedShapes?.length ?? 0;
       setButtonEnabledById('toolbar-delete-shape-btn', selectedCount > 0);
+      attachDeleteButtonHandler();
     }
     // Initial state
     updateDeleteButtonState();
@@ -338,7 +335,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       updateDeleteButtonState();
     });
 
-    log("INFO", "[toolbar] Toolbar panel fully initialized (compact, scalable, single row, Delete button disables if none selected, robust DOM sync)");
+    log("INFO", "[toolbar] Toolbar panel fully initialized (Delete button bugfix: direct button reference, handler attached, state sync)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
@@ -352,3 +349,4 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
+
