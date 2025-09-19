@@ -154,4 +154,3 @@ function safeShapeSummary(shape) {
     radius: shape.radius
   };
 }
-

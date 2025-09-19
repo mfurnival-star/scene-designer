@@ -421,4 +421,3 @@ export function buildCanvasPanel({ element, title, componentName }) {
     stateAfter: {...getState()}
   });
 }
-

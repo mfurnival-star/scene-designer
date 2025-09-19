@@ -272,4 +272,3 @@ function generateShapeId(type = "shape") {
   log("DEBUG", "[shapes] generateShapeId", { type, id });
   return id;
 }
-
