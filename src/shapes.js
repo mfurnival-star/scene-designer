@@ -1,7 +1,7 @@
 /**
  * shapes.js
  * -----------------------------------------------------------
- * Scene Designer – Shape Factory Module (Fabric.js Migration, Zustand Refactor, ESM ONLY, Full DEBUG Logging Sweep)
+ * Scene Designer – Shape Factory Module (Fabric.js Migration, Zustand Refactor, ESM ONLY, Full DEBUG Logging Sweep, Diagnostic Labels Edition)
  * - Centralizes all Fabric.js shape construction, event attachment, and per-shape config.
  * - Exports: makePointShape, makeRectShape, makeCircleShape, fixStrokeWidthAfterTransform.
  * - Every shape/group gets a unique _id at creation for sidebar/selection robustness.
@@ -10,6 +10,7 @@
  * - No global variables, no window.* usage.
  * - Logging via log.js (EXHAUSTIVE DEBUG logging: creation, config, events).
  * - Stroke width: always stays at 1px regardless of scaling or transform.
+ * - **NEW: Each shape has a visible diagnostic label displaying its _label and _id.**
  * -----------------------------------------------------------
  */
 
@@ -76,6 +77,35 @@ function setShapeStrokeWidth(shape, width = 1) {
 }
 
 /**
+ * Helper: Create diagnostic label as a Fabric.Text object.
+ * @param {string} label
+ * @param {string} id
+ * @param {number} x
+ * @param {number} y
+ * @returns {fabric.Text}
+ */
+function makeDiagnosticLabel(label, id, x, y) {
+  // Use Fabric.js Text object; place above shape by default
+  // Use small font, grey color, and monospace for clarity
+  const text = new window.fabric.Text(`${label}\n${id}`, {
+    left: x,
+    top: y - 18,
+    fontSize: 11,
+    fontFamily: 'monospace',
+    fill: '#666',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    selectable: false,
+    evented: false,
+    fontWeight: 'normal',
+    textAlign: 'center',
+    originX: 'center',
+    originY: 'top'
+  });
+  text._isDiagnosticLabel = true;
+  return text;
+}
+
+/**
  * Make a point shape (crosshair/halo/transparent hit area, for annotation).
  */
 export function makePointShape(x, y) {
@@ -124,7 +154,10 @@ export function makePointShape(x, y) {
     { stroke: strokeColor, strokeWidth: currentStrokeWidth, selectable: false, evented: false }
   );
 
-  const pointGroup = new Group([hitCircle, halo, crossH, crossV], {
+  const pointId = generateShapeId('point');
+  const label = makeDiagnosticLabel("Point", pointId, x, y);
+
+  const pointGroup = new Group([hitCircle, halo, crossH, crossV, label], {
     left: x,
     top: y,
     selectable: true,
@@ -134,7 +167,7 @@ export function makePointShape(x, y) {
   pointGroup._type = 'point';
   pointGroup._label = 'Point';
   pointGroup.locked = false;
-  pointGroup._id = generateShapeId('point');
+  pointGroup._id = pointId;
 
   log("DEBUG", "[shapes] makePointShape: creation", {
     type: pointGroup._type,
@@ -174,6 +207,7 @@ export function makeRectShape(x, y, w, h) {
     strokeColor, fillColor
   });
 
+  const rectId = generateShapeId('rect');
   const rect = new Rect({
     left: x,
     top: y,
@@ -188,28 +222,43 @@ export function makeRectShape(x, y, w, h) {
   rect._type = 'rect';
   rect._label = 'Rect';
   rect.locked = false;
-  rect._id = generateShapeId('rect');
+  rect._id = rectId;
+
+  // Place diagnostic label above center of rect
+  const label = makeDiagnosticLabel("Rect", rectId, x + w / 2, y);
+
+  // Group rect + label as one shape
+  const rectGroup = new Group([rect, label], {
+    left: x,
+    top: y,
+    selectable: true,
+    evented: true
+  });
+  rectGroup._type = 'rect';
+  rectGroup._label = 'Rect';
+  rectGroup.locked = false;
+  rectGroup._id = rectId;
 
   log("DEBUG", "[shapes] makeRectShape: creation", {
-    type: rect._type,
-    label: rect._label,
-    _id: rect._id
+    type: rectGroup._type,
+    label: rectGroup._label,
+    _id: rectGroup._id
   });
 
-  rect.on("modified", () => {
-    log("DEBUG", "[shapes] makeRectShape: modified event fired", { shapeId: rect._id });
-    setShapeStrokeWidth(rect, 1);
+  rectGroup.on("modified", () => {
+    log("DEBUG", "[shapes] makeRectShape: modified event fired", { shapeId: rectGroup._id });
+    setShapeStrokeWidth(rectGroup, 1);
     if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
   });
 
-  setShapeState(rect, 'default');
+  setShapeState(rectGroup, 'default');
   log("DEBUG", "[shapes] makeRectShape EXIT", {
-    type: rect._type,
-    label: rect._label,
-    _id: rect._id
+    type: rectGroup._type,
+    label: rectGroup._label,
+    _id: rectGroup._id
   });
 
-  return rect;
+  return rectGroup;
 }
 
 /**
@@ -227,6 +276,7 @@ export function makeCircleShape(x, y, r) {
     strokeColor, fillColor
   });
 
+  const circleId = generateShapeId('circle');
   const circle = new Circle({
     left: x - r,
     top: y - r,
@@ -240,28 +290,43 @@ export function makeCircleShape(x, y, r) {
   circle._type = 'circle';
   circle._label = 'Circle';
   circle.locked = false;
-  circle._id = generateShapeId('circle');
+  circle._id = circleId;
+
+  // Place diagnostic label above center of circle
+  const label = makeDiagnosticLabel("Circle", circleId, x, y - r);
+
+  // Group circle + label as one shape
+  const circleGroup = new Group([circle, label], {
+    left: x - r,
+    top: y - r,
+    selectable: true,
+    evented: true
+  });
+  circleGroup._type = 'circle';
+  circleGroup._label = 'Circle';
+  circleGroup.locked = false;
+  circleGroup._id = circleId;
 
   log("DEBUG", "[shapes] makeCircleShape: creation", {
-    type: circle._type,
-    label: circle._label,
-    _id: circle._id
+    type: circleGroup._type,
+    label: circleGroup._label,
+    _id: circleGroup._id
   });
 
-  circle.on("modified", () => {
-    log("DEBUG", "[shapes] makeCircleShape: modified event fired", { shapeId: circle._id });
-    setShapeStrokeWidth(circle, 1);
+  circleGroup.on("modified", () => {
+    log("DEBUG", "[shapes] makeCircleShape: modified event fired", { shapeId: circleGroup._id });
+    setShapeStrokeWidth(circleGroup, 1);
     if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
   });
 
-  setShapeState(circle, 'default');
+  setShapeState(circleGroup, 'default');
   log("DEBUG", "[shapes] makeCircleShape EXIT", {
-    type: circle._type,
-    label: circle._label,
-    _id: circle._id
+    type: circleGroup._type,
+    label: circleGroup._label,
+    _id: circleGroup._id
   });
 
-  return circle;
+  return circleGroup;
 }
 
 /**
