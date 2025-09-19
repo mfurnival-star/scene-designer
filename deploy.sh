@@ -1,9 +1,9 @@
 #!/bin/bash
-# Scene Designer Deploy Script (prod or dev, auto FORCE settings/Eruda/Console.Re injection, clean-up logic)
+# Scene Designer Deploy Script (prod or dev, auto FORCE settings/Eruda injection, clean-up logic)
 # ---------------------------------------------------------------------------
 # Usage:
 #   [VAR=VALUE ...] ./deploy.sh [prod|dev]
-#   e.g. LOG_LEVEL="Trace (very verbose)" LOG_OUTPUT_DEST=server LOG_SERVER_URL="http://..." ./deploy.sh dev
+#   e.g. LOG_LEVEL="Debug" LOG_OUTPUT_DEST=console INTERCEPT_CONSOLE=1 ./deploy.sh dev
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -32,12 +32,13 @@ Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
 
 Environment variables:
   INJECT_ERUDA     1 to add Eruda debug console, 0 otherwise   [default: 0]
-  INJECT_CONSOLERE 1 to add Console.Re log streaming, 0 otherwise
+  INJECT_CONSOLERE 1 to add Console.Re log streaming, 0 otherwise (now ignored in dev mode)
   <any FORCE setting key>
-    e.g. LOG_LEVEL, LOG_OUTPUT_DEST, LOG_SERVER_URL, INTERCEPT_CONSOLE
+    e.g. LOG_LEVEL, LOG_OUTPUT_DEST, INTERCEPT_CONSOLE
 
 Examples:
-  INJECT_CONSOLERE=1 ./deploy.sh dev
+  ./deploy.sh dev
+  INJECT_ERUDA=1 ./deploy.sh dev
   INJECT_ERUDA=1 ./deploy.sh prod
 
 EOF
@@ -86,9 +87,9 @@ function inject_eruda() {
 }
 
 function inject_consolere() {
-  echo "[$DATESTAMP] === (Re)inserting Console.Re (if enabled) ==="
+  echo "[$DATESTAMP] === (Re)inserting Console.Re (prod only, if enabled) ==="
   sed -i '/<!-- BEGIN CONSOLERE -->/,/<!-- END CONSOLERE -->/d' "$INDEX_HTML"
-  if [[ "$INJECT_CONSOLERE" == "1" ]]; then
+  if [[ "$INJECT_CONSOLERE" == "1" && "$MODE" == "prod" ]]; then
     awk '
       /<script type="module" src="\/src\/main.js">/ {
         print "  <!-- BEGIN CONSOLERE -->";
@@ -108,23 +109,18 @@ function inject_consolere() {
       }
       { print }
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
-    echo "[$DATESTAMP] === Injected Console.Re CDN script into $INDEX_HTML (before main.js entry) ==="
+    echo "[$DATESTAMP] === Injected Console.Re CDN script into $INDEX_HTML (before main.js entry, prod only) ==="
   else
-    echo "[$DATESTAMP] === Console.Re injection not requested. Skipping. ==="
+    echo "[$DATESTAMP] === Console.Re injection not requested or running in dev mode. Skipping. ==="
   fi
 }
 
 function inject_force_settings_block() {
   echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settings.js keys ==="
-  # Remove any previous FORCE block first
   sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
-
-  # Extract all setting keys and types from settings.js
   local keys types
   keys=$(grep -oP 'key:\s*"\K[^"]+' "$SETTINGS_JS" | sort | uniq)
   types=$(grep -oP 'type:\s*"\K[^"]+' "$SETTINGS_JS" | paste -d, -s)
-
-  # Build a key:type map
   declare -A key_type
   while read -r line; do
     key=$(echo "$line" | grep -oP 'key:\s*"\K[^"]+')
@@ -133,7 +129,6 @@ function inject_force_settings_block() {
       key_type["$key"]="$type"
     fi
   done < <(grep -E 'key:|type:' "$SETTINGS_JS" | paste - -)
-
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
   for key in $keys; do
@@ -192,7 +187,6 @@ EOF
   npm run dev
 }
 
-# --- Main logic ---
 if [[ "$MODE" == "-h" || "$MODE" == "--help" ]]; then usage; fi
 
 git_commit_push
@@ -202,14 +196,14 @@ if [[ "$MODE" == "prod" ]]; then
   build_project
   prepare_index_html
   inject_eruda
-  inject_consolere
+  inject_consolere   # Only inject Console.Re CDN in prod!
   inject_force_settings_block
   deploy_to_prod
 else
   INDEX_HTML="$ROOT_INDEX_HTML"
   prepare_index_html
   inject_eruda
-  inject_consolere
+  # DO NOT inject Console.Re CDN script in dev mode!
   inject_force_settings_block
   start_dev_server
 fi
