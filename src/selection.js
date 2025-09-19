@@ -32,7 +32,15 @@ import {
 function getCanonicalShapeById(shapeLike) {
   if (!shapeLike || !shapeLike._id) return null;
   const shapes = getState().shapes || [];
-  return shapes.find(s => s._id === shapeLike._id) || null;
+  const result = shapes.find(s => s._id === shapeLike._id) || null;
+  log("TRACE", "[selection] getCanonicalShapeById", {
+    input: shapeLike,
+    inputId: shapeLike?._id,
+    found: !!result,
+    result,
+    allStoreIds: shapes.map(s => s._id)
+  });
+  return result;
 }
 
 /**
@@ -139,6 +147,13 @@ export function setSelectedShapes(arr) {
   const newArr = Array.isArray(arr)
     ? arr.map(shape => getCanonicalShapeById(shape)).filter(s => !!s)
     : [];
+
+  log("TRACE", "[selection] setSelectedShapes - canonical resolved array", {
+    inputArr: arr,
+    resolvedArr: newArr,
+    resolvedIds: newArr.map(s => s._id),
+    allStoreIds: shapesInStore.map(s => s._id)
+  });
 
   // Always deselect previous selection
   if (getState().selectedShapes && Array.isArray(getState().selectedShapes)) {
@@ -358,4 +373,5 @@ if (typeof window !== "undefined") {
   window.getSelectedShapes = getSelectedShapes;
   window.attachSelectionHandlers = attachSelectionHandlers;
 }
+
 

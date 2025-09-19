@@ -1,13 +1,14 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Fabric.js Panel (Debug Logging Edition)
+ * Scene Designer – Canvas/Fabric.js Panel (Debug Logging Edition, Enhanced Diagnostics)
  * - Fabric.js canvas creation, image background, shape management.
  * - All selection/deselection/multiselect handled in a single canvas event handler.
  * - State is managed via Zustand store from state.js.
  * - Exports: buildCanvasPanel({ element, title, componentName })
  * - Panel factory for MiniLayout; renders the main canvas panel.
  * - DEBUG logging everywhere for robust bug diagnosis—especially selection!
+ * - **Enhanced: Logs state/canvas shapes and selection refs on every selection and deletion.**
  * -----------------------------------------------------------
  */
 
@@ -69,6 +70,31 @@ function dumpSelectedShapes(tag = "") {
       left: s?.left,
       top: s?.top,
       locked: s?.locked
+    }))
+  );
+}
+
+/**
+ * Utility: dump all canvas objects for diagnostics.
+ */
+function dumpCanvasObjects(tag = "") {
+  const canvas = getState().fabricCanvas;
+  if (!canvas) {
+    log("DEBUG", `[canvas][${tag}] No Fabric.js canvas present.`);
+    return;
+  }
+  const objs = canvas.getObjects();
+  log("DEBUG", `[canvas][${tag}] Canvas objects:`,
+    objs.map((obj, i) => ({
+      idx: i,
+      label: obj?._label,
+      type: obj?._type,
+      _id: obj?._id,
+      left: obj?.left,
+      top: obj?.top,
+      locked: obj?.locked,
+      refEqStore: getState().shapes.some(s => s === obj),
+      refEqById: getState().shapes.some(s => s._id === obj._id)
     }))
   );
 }
@@ -172,6 +198,7 @@ function centralizedCanvasPointerHandler(e) {
   });
   dumpAllShapes("before-selection");
   dumpSelectedShapes("before-selection");
+  dumpCanvasObjects("before-selection");
 
   const state = getState();
   const canvas = state.fabricCanvas;
@@ -189,6 +216,7 @@ function centralizedCanvasPointerHandler(e) {
       stateAfter: {...getState()}
     });
     dumpSelectedShapes("after-deselect");
+    dumpCanvasObjects("after-deselect");
     return;
   }
 
@@ -206,6 +234,15 @@ function centralizedCanvasPointerHandler(e) {
 
   // --- Always resolve to canonical reference from state.shapes via _id ---
   const shape = getCanonicalShapeById(shapeEventObj);
+  log("DEBUG", "[canvas] centralized handler: getCanonicalShapeById results", {
+    shapeEventObj,
+    canonicalShape: shape,
+    refEq: shape === shapeEventObj,
+    foundInStore: !!shape
+  });
+  dumpAllShapes("after-canonical-resolve");
+  dumpCanvasObjects("after-canonical-resolve");
+
   if (!shape) {
     log("ERROR", "[canvas] centralized handler: shape clicked, but could not resolve canonical reference", {
       eventObj: shapeEventObj
@@ -255,6 +292,7 @@ function centralizedCanvasPointerHandler(e) {
     });
   }
   dumpSelectedShapes("after-selection");
+  dumpCanvasObjects("after-selection");
 
   canvas.setActiveObject(shape);
   canvas.renderAll();
@@ -366,6 +404,8 @@ export function buildCanvasPanel({ element, title, componentName }) {
     sceneDesignerStore.subscribe(() => {
       const state = getState();
       log("DEBUG", "[canvas] store.subscribe fired", { state });
+      dumpAllShapes("store.subscribe");
+      dumpCanvasObjects("store.subscribe");
       if (state.imageObj !== prevImageObj || state.imageURL !== prevImageURL) {
         log("DEBUG", "[canvas] store.subscribe: imageObj/imageURL changed", {
           prevImageObj, prevImageURL, stateImageObj: state.imageObj, stateImageURL: state.imageURL
@@ -398,6 +438,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
       });
       state.fabricCanvas?.renderAll();
       log("DEBUG", "[canvas] store.subscribe: canvas.renderAll called");
+      dumpCanvasObjects("store.subscribe-after-sync");
     });
 
     if (getState().imageObj) {
@@ -421,3 +462,4 @@ export function buildCanvasPanel({ element, title, componentName }) {
     stateAfter: {...getState()}
   });
 }
+
