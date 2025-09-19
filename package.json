@@ -11,11 +11,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "console-remote-client": "^2.1.18",
     "fabric": "^5.3.0",
     "golden-layout": "^2.5.0",
+    "localforage": "^1.10.0",
     "tabulator-tables": "^6.2.0",
-    "tweakpane": "^4.0.0",
-    "localforage": "^1.10.0"
+    "tweakpane": "^4.0.0"
   },
   "devDependencies": {
     "vite": "^5.0.0"
