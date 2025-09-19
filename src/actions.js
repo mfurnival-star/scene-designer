@@ -72,12 +72,18 @@ export function addShapeOfType(type, opts = {}) {
 /**
  * Delete all currently selected, unlocked shapes.
  * Always clears selection and detaches transformer after deletion.
+ * Now guarded: if nothing is selected, do nothing.
  */
 export function deleteSelectedShapes() {
   log("DEBUG", "[actions] deleteSelectedShapes ENTRY", {
     selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
   const selected = getState().selectedShapes || [];
+  if (!selected.length) {
+    log("INFO", "[actions] deleteSelectedShapes: No shapes selected, nothing to delete.");
+    log("DEBUG", "[actions] deleteSelectedShapes EXIT (no action)");
+    return; // EARLY RETURN: do nothing if none selected
+  }
   const unlockedToDelete = selected.filter(s => !s.locked);
   log("DEBUG", "[actions] deleteSelectedShapes: unlocked shapes to delete", { unlockedToDelete });
   unlockedToDelete.forEach(shape => {
