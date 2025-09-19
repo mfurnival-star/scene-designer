@@ -260,7 +260,7 @@ export function deselectAll() {
     selectedShapes: getState().selectedShapes.map(s => ({
       _id: s?._id,
       _type: s?._type,
-      _label: s?._label
+      _label: s._label
     })),
     storeShapes: getState().shapes.map(s => ({
       _id: s._id,

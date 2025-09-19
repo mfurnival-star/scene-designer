@@ -383,9 +383,9 @@ export function buildCanvasPanel({ element, title, componentName }) {
           state.fabricCanvas.add(shape);
           moveShapesToFront();
           log("DEBUG", "[canvas] subscribe: shape added to canvas", {
-            type: shape?._type,
-            label: shape?._label,
-            id: shape?._id
+            type: shape._type,
+            label: shape._label,
+            id: shape._id
           });
         }
       });

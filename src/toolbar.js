@@ -1,10 +1,11 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (ESM ONLY, Manifesto-compliant, Actions Decoupled)
- * - Factory for all toolbar controls: image upload, server image select, shape type, shape actions.
+ * Scene Designer – Modular Toolbar UI Factory (Simplified Edition, Actions Decoupled)
+ * - Factory for toolbar controls: image upload, server image select, shape type, add/delete.
+ * - Only working buttons are visible; others hidden for now.
+ * - Double toolbar height for dev/test ergonomics.
  * - ES module only, all dependencies imported.
- * - No direct use of window.*, no legacy code.
  * - All shape/scene actions are emitted as intents to actions.js.
  * - NO business logic, selection, or state mutation.
  * - Logging via log.js at appropriate levels.
@@ -14,20 +15,16 @@
 
 import { log } from './log.js';
 import { getState, setImage } from './state.js';
-import { selectAllShapes } from './selection.js';
 import {
   addShapeOfType,
-  deleteSelectedShapes,
-  duplicateSelectedShapes,
-  lockSelectedShapes,
-  unlockSelectedShapes
+  deleteSelectedShapes
 } from './actions.js';
 
 /**
  * Build the canvas toolbar panel.
  * - All UI events are handled here.
  * - Only the toolbar panel creates the controls.
- * - All events are routed via ES module APIs.
+ * - Only working buttons shown; others hidden for now.
  * - MiniLayout compliance: accepts { element, title, componentName }.
  */
 export function buildCanvasToolbarPanel({ element, title, componentName }) {
@@ -44,31 +41,31 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     style.textContent = `
       #canvas-toolbar-container {
         width: 100%;
-        min-height: 44px;
+        min-height: 88px; /* DOUBLE height for dev/test */
         background: #f8f8fa;
         border-bottom: 1px solid #bbb;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 10px;
-        padding: 8px 12px;
+        gap: 14px;
+        padding: 16px 18px;
       }
       #canvas-toolbar-container .toolbar-btn,
       #canvas-toolbar-container select {
-        font-size: 1em;
+        font-size: 1.14em;
         font-family: inherit;
         border: 1px solid #888;
         background: #fff;
         color: #222;
-        border-radius: 3px;
-        padding: 5px 12px;
-        margin: 0 2px 2px 0;
+        border-radius: 4px;
+        padding: 9px 16px;
+        margin: 4px 3px 3px 0;
         outline: none;
         box-shadow: none;
         transition: background 0.15s;
         cursor: pointer;
-        min-width: 48px;
-        min-height: 32px;
+        min-width: 54px;
+        min-height: 44px;
       }
       #canvas-toolbar-container .toolbar-btn:hover {
         background: #e8eff8;
@@ -78,22 +75,27 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       }
       #canvas-toolbar-container label[for="toolbar-image-upload"] {
         display: inline-block;
-        font-size: 1em;
+        font-size: 1.13em;
         border: 1px solid #888;
         background: #fff;
         color: #222;
-        border-radius: 3px;
-        padding: 6px 16px;
-        margin: 0 2px 2px 0;
+        border-radius: 4px;
+        padding: 10px 18px;
+        margin: 4px 2px 2px 0;
         cursor: pointer;
-        min-width: 48px;
-        min-height: 32px;
+        min-width: 54px;
+        min-height: 44px;
         outline: none;
         box-shadow: none;
         transition: background 0.15s;
       }
       #canvas-toolbar-container label[for="toolbar-image-upload"]:hover {
         background: #e8eff8;
+      }
+      /* Hide unused buttons for now */
+      #canvas-toolbar-container .toolbar-btn.hidden,
+      #canvas-toolbar-container .toolbar-btn[aria-hidden="true"] {
+        display: none !important;
       }
     `;
     document.head.appendChild(style);
@@ -106,7 +108,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       componentName
     });
 
-    // Toolbar HTML (image controls + shape controls, standard/classic buttons, responsive)
+    // Toolbar HTML (only show working controls)
     element.innerHTML = `
       <div id="canvas-toolbar-container">
         <label for="toolbar-image-upload" title="Upload image">Upload Image</label>
@@ -124,10 +126,11 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
         </select>
         <button id="toolbar-add-shape-btn" class="toolbar-btn">Add</button>
         <button id="toolbar-delete-shape-btn" class="toolbar-btn">Delete</button>
-        <button id="toolbar-duplicate-shape-btn" class="toolbar-btn">Duplicate</button>
-        <button id="toolbar-select-all-btn" class="toolbar-btn">Select All</button>
-        <button id="toolbar-lock-btn" class="toolbar-btn">Lock</button>
-        <button id="toolbar-unlock-btn" class="toolbar-btn">Unlock</button>
+        <!-- Hidden buttons, will be unhidden when implemented -->
+        <button id="toolbar-duplicate-shape-btn" class="toolbar-btn hidden" aria-hidden="true">Duplicate</button>
+        <button id="toolbar-select-all-btn" class="toolbar-btn hidden" aria-hidden="true">Select All</button>
+        <button id="toolbar-lock-btn" class="toolbar-btn hidden" aria-hidden="true">Lock</button>
+        <button id="toolbar-unlock-btn" class="toolbar-btn hidden" aria-hidden="true">Unlock</button>
       </div>
     `;
 
@@ -138,10 +141,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     const shapeTypeSelect = element.querySelector('#toolbar-shape-type-select');
     const addShapeBtn = element.querySelector('#toolbar-add-shape-btn');
     const deleteShapeBtn = element.querySelector('#toolbar-delete-shape-btn');
-    const duplicateShapeBtn = element.querySelector('#toolbar-duplicate-shape-btn');
-    const selectAllBtn = element.querySelector('#toolbar-select-all-btn');
-    const lockBtn = element.querySelector('#toolbar-lock-btn');
-    const unlockBtn = element.querySelector('#toolbar-unlock-btn');
+    // Other buttons are present but hidden; will be registered later
 
     // --- IMAGE UPLOAD ---
     imageUploadLabel.addEventListener('click', (e) => {
@@ -164,7 +164,6 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       reader.readAsDataURL(file);
       // Clear server select
       if (serverImageSelect) serverImageSelect.value = "";
-      // Remove filename from label (cannot show filename in label)
     });
 
     // --- SERVER IMAGE SELECT ---
@@ -188,7 +187,6 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     // --- ADD SHAPE BUTTON ---
     addShapeBtn.addEventListener('click', () => {
       const type = shapeTypeSelect.value;
-      // Emit intent to actions.js: centralized add/select/strokeWidth logic
       addShapeOfType(type);
       log("INFO", `[toolbar] Add shape intent emitted`, { type });
     });
@@ -196,36 +194,10 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     // --- DELETE SHAPE BUTTON ---
     deleteShapeBtn.addEventListener('click', () => {
       log("INFO", "[toolbar] Delete button clicked");
-      // Emit intent to actions.js
       deleteSelectedShapes();
     });
 
-    // --- DUPLICATE SHAPE BUTTON ---
-    duplicateShapeBtn.addEventListener('click', () => {
-      log("INFO", "[toolbar] Duplicate button clicked");
-      // Emit intent to actions.js
-      duplicateSelectedShapes();
-    });
-
-    // --- SELECT ALL BUTTON ---
-    selectAllBtn.addEventListener('click', () => {
-      selectAllShapes();
-      log("INFO", "[toolbar] Select All button clicked");
-    });
-
-    // --- LOCK/UNLOCK BUTTONS ---
-    lockBtn.addEventListener('click', () => {
-      log("INFO", "[toolbar] Lock button clicked");
-      // Emit intent to actions.js
-      lockSelectedShapes();
-    });
-    unlockBtn.addEventListener('click', () => {
-      log("INFO", "[toolbar] Unlock button clicked");
-      // Emit intent to actions.js
-      unlockSelectedShapes();
-    });
-
-    log("INFO", "[toolbar] Toolbar panel fully initialized (image + shape controls, ESM only, actions decoupled)");
+    log("INFO", "[toolbar] Toolbar panel fully initialized (simplified, only working controls, ESM only)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
@@ -239,4 +211,3 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
-
