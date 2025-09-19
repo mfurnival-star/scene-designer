@@ -35,7 +35,7 @@ import {
  * @param {Object} [opts] - Optional settings override (position, etc)
  */
 export function addShapeOfType(type, opts = {}) {
-  log("TRACE", "[actions] addShapeOfType ENTRY", { type, opts });
+  log("DEBUG", "[actions] addShapeOfType ENTRY", { type, opts });
   const store = getState();
   const w = store.settings?.defaultRectWidth || 50;
   const h = store.settings?.defaultRectHeight || 30;
@@ -66,7 +66,7 @@ export function addShapeOfType(type, opts = {}) {
   } else {
     log("WARN", "[actions] addShapeOfType: Failed to create shape", { type, opts });
   }
-  log("TRACE", "[actions] addShapeOfType EXIT");
+  log("DEBUG", "[actions] addShapeOfType EXIT");
 }
 
 /**
@@ -74,19 +74,19 @@ export function addShapeOfType(type, opts = {}) {
  * Always clears selection and detaches transformer after deletion.
  */
 export function deleteSelectedShapes() {
-  log("TRACE", "[actions] deleteSelectedShapes ENTRY", {
+  log("DEBUG", "[actions] deleteSelectedShapes ENTRY", {
     selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
   const selected = getState().selectedShapes || [];
   const unlockedToDelete = selected.filter(s => !s.locked);
-  log("TRACE", "[actions] deleteSelectedShapes: unlocked shapes to delete", { unlockedToDelete });
+  log("DEBUG", "[actions] deleteSelectedShapes: unlocked shapes to delete", { unlockedToDelete });
   unlockedToDelete.forEach(shape => {
     removeShape(shape);
   });
   // Always deselect all after deletion
   deselectAll();
   log("INFO", "[actions] deleteSelectedShapes: Deleted shapes, selection cleared");
-  log("TRACE", "[actions] deleteSelectedShapes EXIT", {
+  log("DEBUG", "[actions] deleteSelectedShapes EXIT", {
     shapesInStoreAfter: getState().shapes.map(s => ({
       _id: s._id, _type: s._type, _label: s._label
     }))
@@ -98,7 +98,7 @@ export function deleteSelectedShapes() {
  * The new shapes are selected after duplication.
  */
 export function duplicateSelectedShapes() {
-  log("TRACE", "[actions] duplicateSelectedShapes ENTRY", {
+  log("DEBUG", "[actions] duplicateSelectedShapes ENTRY", {
     selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
   const selected = getState().selectedShapes || [];
@@ -126,14 +126,14 @@ export function duplicateSelectedShapes() {
       newShapes: newShapes.map(s => s._id)
     });
   }
-  log("TRACE", "[actions] duplicateSelectedShapes EXIT");
+  log("DEBUG", "[actions] duplicateSelectedShapes EXIT");
 }
 
 /**
  * Lock all currently selected shapes.
  */
 export function lockSelectedShapes() {
-  log("TRACE", "[actions] lockSelectedShapes ENTRY", {
+  log("DEBUG", "[actions] lockSelectedShapes ENTRY", {
     selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
   const selected = getState().selectedShapes || [];
@@ -146,14 +146,14 @@ export function lockSelectedShapes() {
   log("INFO", "[actions] lockSelectedShapes: Locked shapes and cleared selection", {
     lockedShapes: selected.map(s => s._id)
   });
-  log("TRACE", "[actions] lockSelectedShapes EXIT");
+  log("DEBUG", "[actions] lockSelectedShapes EXIT");
 }
 
 /**
  * Unlock all currently selected shapes.
  */
 export function unlockSelectedShapes() {
-  log("TRACE", "[actions] unlockSelectedShapes ENTRY", {
+  log("DEBUG", "[actions] unlockSelectedShapes ENTRY", {
     selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
   const selected = getState().selectedShapes || [];
@@ -165,6 +165,6 @@ export function unlockSelectedShapes() {
   log("INFO", "[actions] unlockSelectedShapes: Unlocked shapes", {
     unlockedShapes: selected.map(s => s._id)
   });
-  log("TRACE", "[actions] unlockSelectedShapes EXIT");
+  log("DEBUG", "[actions] unlockSelectedShapes EXIT");
 }
 

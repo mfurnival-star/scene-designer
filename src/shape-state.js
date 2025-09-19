@@ -16,9 +16,9 @@ import { log } from './log.js';
  * @param {Object} shape - Fabric.js object or group
  */
 export function initShapeState(shape) {
-  log("TRACE", "[shape-state] initShapeState entry", { shape });
+  log("DEBUG", "[shape-state] initShapeState entry", { shape });
   shape._state = "default";
-  log("TRACE", "[shape-state] initShapeState exit");
+  log("DEBUG", "[shape-state] initShapeState exit");
 }
 
 /**
@@ -27,11 +27,11 @@ export function initShapeState(shape) {
  * @param {string} newState
  */
 export function setShapeState(shape, newState) {
-  log("TRACE", "[shape-state] setShapeState entry", { shape, newState });
+  log("DEBUG", "[shape-state] setShapeState entry", { shape, newState });
   const prevState = shape._state;
   shape._state = newState;
   log("DEBUG", "[shape-state] Shape state changed", { shape: safeShapeSummary(shape), prevState, newState });
-  log("TRACE", "[shape-state] setShapeState exit");
+  log("DEBUG", "[shape-state] setShapeState exit");
 }
 
 /**
@@ -40,9 +40,9 @@ export function setShapeState(shape, newState) {
  * @returns {string}
  */
 export function getShapeState(shape) {
-  log("TRACE", "[shape-state] getShapeState entry", { shape });
+  log("DEBUG", "[shape-state] getShapeState entry", { shape });
   const state = shape._state || "default";
-  log("TRACE", "[shape-state] getShapeState exit", { state });
+  log("DEBUG", "[shape-state] getShapeState exit", { state });
   return state;
 }
 
@@ -51,9 +51,9 @@ export function getShapeState(shape) {
  * @param {Object} shape
  */
 export function selectShape(shape) {
-  log("TRACE", "[shape-state] selectShape entry", { shape });
+  log("DEBUG", "[shape-state] selectShape entry", { shape });
   setShapeState(shape, 'selected');
-  log("TRACE", "[shape-state] selectShape exit");
+  log("DEBUG", "[shape-state] selectShape exit");
 }
 
 /**
@@ -61,9 +61,9 @@ export function selectShape(shape) {
  * @param {Object} shape
  */
 export function deselectShape(shape) {
-  log("TRACE", "[shape-state] deselectShape entry", { shape });
+  log("DEBUG", "[shape-state] deselectShape entry", { shape });
   setShapeState(shape, 'default');
-  log("TRACE", "[shape-state] deselectShape exit");
+  log("DEBUG", "[shape-state] deselectShape exit");
 }
 
 /**
@@ -71,9 +71,9 @@ export function deselectShape(shape) {
  * @param {Object} shape
  */
 export function startDraggingShape(shape) {
-  log("TRACE", "[shape-state] startDraggingShape entry", { shape });
+  log("DEBUG", "[shape-state] startDraggingShape entry", { shape });
   setShapeState(shape, 'dragging');
-  log("TRACE", "[shape-state] startDraggingShape exit");
+  log("DEBUG", "[shape-state] startDraggingShape exit");
 }
 
 /**
@@ -81,9 +81,9 @@ export function startDraggingShape(shape) {
  * @param {Object} shape
  */
 export function stopDraggingShape(shape) {
-  log("TRACE", "[shape-state] stopDraggingShape entry", { shape });
+  log("DEBUG", "[shape-state] stopDraggingShape entry", { shape });
   setShapeState(shape, 'selected');
-  log("TRACE", "[shape-state] stopDraggingShape exit");
+  log("DEBUG", "[shape-state] stopDraggingShape exit");
 }
 
 /**
@@ -91,13 +91,13 @@ export function stopDraggingShape(shape) {
  * @param {Object} shape
  */
 export function lockShape(shape) {
-  log("TRACE", "[shape-state] lockShape entry", { shape });
+  log("DEBUG", "[shape-state] lockShape entry", { shape });
   setShapeState(shape, 'locked');
   shape.locked = true;
   // Fabric.js: disable drag/resize/selection
   shape.selectable = false;
   shape.evented = false;
-  log("TRACE", "[shape-state] lockShape exit");
+  log("DEBUG", "[shape-state] lockShape exit");
 }
 
 /**
@@ -105,12 +105,12 @@ export function lockShape(shape) {
  * @param {Object} shape
  */
 export function unlockShape(shape) {
-  log("TRACE", "[shape-state] unlockShape entry", { shape });
+  log("DEBUG", "[shape-state] unlockShape entry", { shape });
   setShapeState(shape, 'default');
   shape.locked = false;
   shape.selectable = true;
   shape.evented = true;
-  log("TRACE", "[shape-state] unlockShape exit");
+  log("DEBUG", "[shape-state] unlockShape exit");
 }
 
 /**
@@ -119,9 +119,9 @@ export function unlockShape(shape) {
  * @param {boolean} enable
  */
 export function setMultiSelected(shape, enable = true) {
-  log("TRACE", "[shape-state] setMultiSelected entry", { shape, enable });
+  log("DEBUG", "[shape-state] setMultiSelected entry", { shape, enable });
   setShapeState(shape, enable ? "multi-selected" : "default");
-  log("TRACE", "[shape-state] setMultiSelected exit");
+  log("DEBUG", "[shape-state] setMultiSelected exit");
 }
 
 /**
@@ -131,9 +131,9 @@ export function setMultiSelected(shape, enable = true) {
  * @returns {boolean}
  */
 export function isShapeInState(shape, state) {
-  log("TRACE", "[shape-state] isShapeInState entry", { shape, state });
+  log("DEBUG", "[shape-state] isShapeInState entry", { shape, state });
   const result = shape._state === state;
-  log("TRACE", "[shape-state] isShapeInState exit", { result });
+  log("DEBUG", "[shape-state] isShapeInState exit", { result });
   return result;
 }
 

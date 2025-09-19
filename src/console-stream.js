@@ -2,7 +2,7 @@
  * console-stream.js
  * -------------------------------------------------------------------
  * Console Interception and Streaming Module for Scene Designer (ESM).
- * - When enabled, intercepts all console methods (log, error, warn, info, debug, trace).
+ * - When enabled, intercepts all console methods (log, error, warn, info, debug).
  * - Forwards all intercepted logs to the central logger (log.js), preserving log levels.
  * - Optionally preserves original console output for devtools visibility.
  * - Controlled by an explicit enableConsoleInterception() function (import and call in bootstrap).
@@ -29,19 +29,28 @@ export function enableConsoleInterception({ preserveOriginal = true } = {}) {
   interceptionEnabled = true;
   origConsole = origConsole || { ...console };
 
-  const levels = ["log", "info", "warn", "error", "debug", "trace"];
+  const levels = ["log", "info", "warn", "error", "debug"];
   // Map console methods to log() levels
   const levelMap = {
     log: "INFO",
     info: "INFO",
     warn: "WARN",
     error: "ERROR",
-    debug: "DEBUG",
-    trace: "TRACE"
+    debug: "DEBUG"
   };
 
   levels.forEach(method => {
     console[method] = function (...args) {
+      // Skip interception for blank logs (no message or only empty/undefined/null)
+      if (!args.length || args.every(arg =>
+        arg === undefined || arg === null || arg === "" ||
+        (typeof arg === "object" && Object.keys(arg).length === 0 && !(arg instanceof Error))
+      )) {
+        if (preserveOriginal && origConsole && origConsole[method]) {
+          origConsole[method].apply(console, args);
+        }
+        return;
+      }
       try {
         // Forward to the logger for streaming and sinks
         log(levelMap[method], ...args);
@@ -64,7 +73,7 @@ export function enableConsoleInterception({ preserveOriginal = true } = {}) {
  */
 export function disableConsoleInterception() {
   if (!interceptionEnabled || !origConsole) return;
-  ["log", "info", "warn", "error", "debug", "trace"].forEach(method => {
+  ["log", "info", "warn", "error", "debug"].forEach(method => {
     if (origConsole[method]) console[method] = origConsole[method];
   });
   interceptionEnabled = false;
@@ -76,4 +85,3 @@ export function disableConsoleInterception() {
 export function isConsoleInterceptionEnabled() {
   return interceptionEnabled;
 }
-

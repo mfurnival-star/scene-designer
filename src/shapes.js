@@ -1,14 +1,14 @@
 /**
  * shapes.js
  * -----------------------------------------------------------
- * Scene Designer – Shape Factory Module (Fabric.js Migration, Zustand Refactor, ESM ONLY, Full TRACE Logging Sweep)
+ * Scene Designer – Shape Factory Module (Fabric.js Migration, Zustand Refactor, ESM ONLY, Full DEBUG Logging Sweep)
  * - Centralizes all Fabric.js shape construction, event attachment, and per-shape config.
  * - Exports: makePointShape, makeRectShape, makeCircleShape, fixStrokeWidthAfterTransform.
  * - Every shape/group gets a unique _id at creation for sidebar/selection robustness.
  * - NO selection event handlers are attached to shapes (handled centrally in canvas.js).
  * - Handles per-shape config, label, lock, and transformer events.
  * - No global variables, no window.* usage.
- * - Logging via log.js (EXHAUSTIVE TRACE logging: creation, config, events).
+ * - Logging via log.js (EXHAUSTIVE DEBUG logging: creation, config, events).
  * - Stroke width: always stays at 1px regardless of scaling or transform.
  * -----------------------------------------------------------
  */
@@ -33,14 +33,14 @@ let currentStrokeWidth = 1;
  * For now, always sets to 1px.
  */
 export function setStrokeWidthForSelectedShapes(width = 1) {
-  log("TRACE", "[shapes] setStrokeWidthForSelectedShapes ENTRY", { width, selectedShapes: getState().selectedShapes.map(s => s?._id) });
+  log("DEBUG", "[shapes] setStrokeWidthForSelectedShapes ENTRY", { width, selectedShapes: getState().selectedShapes.map(s => s?._id) });
   currentStrokeWidth = width;
   (getState().selectedShapes || []).forEach(shape => {
     setShapeStrokeWidth(shape, width);
-    log("TRACE", "[shapes] setStrokeWidthForSelectedShapes: shape updated", { shapeId: shape._id, type: shape._type });
+    log("DEBUG", "[shapes] setStrokeWidthForSelectedShapes: shape updated", { shapeId: shape._id, type: shape._type });
   });
   if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
-  log("TRACE", "[shapes] setStrokeWidthForSelectedShapes EXIT");
+  log("DEBUG", "[shapes] setStrokeWidthForSelectedShapes EXIT");
 }
 
 /**
@@ -48,20 +48,20 @@ export function setStrokeWidthForSelectedShapes(width = 1) {
  * Call this after any transform event, selection change, or shape resize.
  */
 export function fixStrokeWidthAfterTransform() {
-  log("TRACE", "[shapes] fixStrokeWidthAfterTransform ENTRY", { selectedShapes: getState().selectedShapes.map(s => s?._id) });
+  log("DEBUG", "[shapes] fixStrokeWidthAfterTransform ENTRY", { selectedShapes: getState().selectedShapes.map(s => s?._id) });
   (getState().selectedShapes || []).forEach(shape => {
     setShapeStrokeWidth(shape, 1);
-    log("TRACE", "[shapes] fixStrokeWidthAfterTransform: shape updated", { shapeId: shape._id, type: shape._type });
+    log("DEBUG", "[shapes] fixStrokeWidthAfterTransform: shape updated", { shapeId: shape._id, type: shape._type });
   });
   if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
-  log("TRACE", "[shapes] fixStrokeWidthAfterTransform EXIT");
+  log("DEBUG", "[shapes] fixStrokeWidthAfterTransform EXIT");
 }
 
 /**
  * Helper: forcibly set stroke width for a shape (rect, circle, point group).
  */
 function setShapeStrokeWidth(shape, width = 1) {
-  log("TRACE", "[shapes] setShapeStrokeWidth ENTRY", { shapeId: shape?._id, type: shape?._type, width });
+  log("DEBUG", "[shapes] setShapeStrokeWidth ENTRY", { shapeId: shape?._id, type: shape?._type, width });
   if (shape._type === 'rect' || shape._type === 'circle') {
     shape.set({ strokeWidth: width });
   } else if (shape._type === 'point') {
@@ -72,14 +72,14 @@ function setShapeStrokeWidth(shape, width = 1) {
       });
     }
   }
-  log("TRACE", "[shapes] setShapeStrokeWidth EXIT", { shapeId: shape?._id, type: shape?._type, width });
+  log("DEBUG", "[shapes] setShapeStrokeWidth EXIT", { shapeId: shape?._id, type: shape?._type, width });
 }
 
 /**
  * Make a point shape (crosshair/halo/transparent hit area, for annotation).
  */
 export function makePointShape(x, y) {
-  log("TRACE", "[shapes] makePointShape ENTRY", { x, y, settings: getState().settings });
+  log("DEBUG", "[shapes] makePointShape ENTRY", { x, y, settings: getState().settings });
 
   // Settings for point visuals
   const settings = getState().settings || {};
@@ -89,7 +89,7 @@ export function makePointShape(x, y) {
   const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
   const fillColor = settings.defaultFillColor ?? '#00000000';
 
-  log("TRACE", "[shapes] makePointShape: settings", {
+  log("DEBUG", "[shapes] makePointShape: settings", {
     hitRadius, haloRadius, crossLen, strokeColor, fillColor
   });
 
@@ -136,7 +136,7 @@ export function makePointShape(x, y) {
   pointGroup.locked = false;
   pointGroup._id = generateShapeId('point');
 
-  log("TRACE", "[shapes] makePointShape: creation", {
+  log("DEBUG", "[shapes] makePointShape: creation", {
     type: pointGroup._type,
     label: pointGroup._label,
     _id: pointGroup._id,
@@ -144,13 +144,13 @@ export function makePointShape(x, y) {
   });
 
   pointGroup.on("modified", () => {
-    log("TRACE", "[shapes] makePointShape: modified event fired", { shapeId: pointGroup._id });
+    log("DEBUG", "[shapes] makePointShape: modified event fired", { shapeId: pointGroup._id });
     setShapeStrokeWidth(pointGroup, 1);
     if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
   });
 
   setShapeState(pointGroup, 'default');
-  log("TRACE", "[shapes] makePointShape EXIT", {
+  log("DEBUG", "[shapes] makePointShape EXIT", {
     type: pointGroup._type,
     label: pointGroup._label,
     _id: pointGroup._id
@@ -163,14 +163,14 @@ export function makePointShape(x, y) {
  * Make a rectangle shape.
  */
 export function makeRectShape(x, y, w, h) {
-  log("TRACE", "[shapes] makeRectShape ENTRY", { x, y, w, h, settings: getState().settings });
+  log("DEBUG", "[shapes] makeRectShape ENTRY", { x, y, w, h, settings: getState().settings });
 
   // Read settings for rect shape defaults
   const settings = getState().settings || {};
   const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
   const fillColor = settings.defaultFillColor ?? '#00000000';
 
-  log("TRACE", "[shapes] makeRectShape: settings", {
+  log("DEBUG", "[shapes] makeRectShape: settings", {
     strokeColor, fillColor
   });
 
@@ -190,20 +190,20 @@ export function makeRectShape(x, y, w, h) {
   rect.locked = false;
   rect._id = generateShapeId('rect');
 
-  log("TRACE", "[shapes] makeRectShape: creation", {
+  log("DEBUG", "[shapes] makeRectShape: creation", {
     type: rect._type,
     label: rect._label,
     _id: rect._id
   });
 
   rect.on("modified", () => {
-    log("TRACE", "[shapes] makeRectShape: modified event fired", { shapeId: rect._id });
+    log("DEBUG", "[shapes] makeRectShape: modified event fired", { shapeId: rect._id });
     setShapeStrokeWidth(rect, 1);
     if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
   });
 
   setShapeState(rect, 'default');
-  log("TRACE", "[shapes] makeRectShape EXIT", {
+  log("DEBUG", "[shapes] makeRectShape EXIT", {
     type: rect._type,
     label: rect._label,
     _id: rect._id
@@ -216,14 +216,14 @@ export function makeRectShape(x, y, w, h) {
  * Make a circle shape.
  */
 export function makeCircleShape(x, y, r) {
-  log("TRACE", "[shapes] makeCircleShape ENTRY", { x, y, r, settings: getState().settings });
+  log("DEBUG", "[shapes] makeCircleShape ENTRY", { x, y, r, settings: getState().settings });
 
   // Read settings for circle shape defaults
   const settings = getState().settings || {};
   const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
   const fillColor = settings.defaultFillColor ?? '#00000000';
 
-  log("TRACE", "[shapes] makeCircleShape: settings", {
+  log("DEBUG", "[shapes] makeCircleShape: settings", {
     strokeColor, fillColor
   });
 
@@ -242,20 +242,20 @@ export function makeCircleShape(x, y, r) {
   circle.locked = false;
   circle._id = generateShapeId('circle');
 
-  log("TRACE", "[shapes] makeCircleShape: creation", {
+  log("DEBUG", "[shapes] makeCircleShape: creation", {
     type: circle._type,
     label: circle._label,
     _id: circle._id
   });
 
   circle.on("modified", () => {
-    log("TRACE", "[shapes] makeCircleShape: modified event fired", { shapeId: circle._id });
+    log("DEBUG", "[shapes] makeCircleShape: modified event fired", { shapeId: circle._id });
     setShapeStrokeWidth(circle, 1);
     if (getState().fabricCanvas) getState().fabricCanvas.renderAll();
   });
 
   setShapeState(circle, 'default');
-  log("TRACE", "[shapes] makeCircleShape EXIT", {
+  log("DEBUG", "[shapes] makeCircleShape EXIT", {
     type: circle._type,
     label: circle._label,
     _id: circle._id
@@ -269,7 +269,7 @@ export function makeCircleShape(x, y, r) {
  */
 function generateShapeId(type = "shape") {
   const id = `${type}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
-  log("TRACE", "[shapes] generateShapeId", { type, id });
+  log("DEBUG", "[shapes] generateShapeId", { type, id });
   return id;
 }
 

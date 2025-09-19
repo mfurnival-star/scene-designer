@@ -75,51 +75,51 @@ function dumpSelectedShapes(tag = "") {
 
 function moveShapesToFront() {
   const store = getState();
-  log("TRACE", "[canvas] moveShapesToFront ENTRY", { store });
+  log("DEBUG", "[canvas] moveShapesToFront ENTRY", { store });
   if (!store.fabricCanvas) {
-    log("TRACE", "[canvas] moveShapesToFront EXIT (no canvas)");
+    log("DEBUG", "[canvas] moveShapesToFront EXIT (no canvas)");
     return;
   }
   const objs = store.fabricCanvas.getObjects();
-  log("TRACE", "[canvas] moveShapesToFront: canvas objects", objs);
+  log("DEBUG", "[canvas] moveShapesToFront: canvas objects", objs);
   if (!objs.length) {
-    log("TRACE", "[canvas] moveShapesToFront EXIT (no objects)");
+    log("DEBUG", "[canvas] moveShapesToFront EXIT (no objects)");
     return;
   }
   const bgImg = store.bgFabricImage;
   objs.forEach((obj) => {
     if (obj !== bgImg) {
       obj.moveTo(store.fabricCanvas.getObjects().length - 1);
-      log("TRACE", "[canvas] moveShapesToFront: moved", {
+      log("DEBUG", "[canvas] moveShapesToFront: moved", {
         objType: obj._type, objId: obj._id
       });
     }
   });
   store.fabricCanvas.renderAll();
-  log("TRACE", "[canvas] moveShapesToFront EXIT");
+  log("DEBUG", "[canvas] moveShapesToFront EXIT");
 }
 
 function updateBackgroundImage(containerDiv, element) {
-  log("TRACE", "[canvas] updateBackgroundImage ENTRY", {
+  log("DEBUG", "[canvas] updateBackgroundImage ENTRY", {
     containerDiv, element, state: getState()
   });
   const store = getState();
   const canvas = store.fabricCanvas;
   if (!canvas) {
-    log("TRACE", "[canvas] updateBackgroundImage EXIT (no canvas)");
+    log("DEBUG", "[canvas] updateBackgroundImage EXIT (no canvas)");
     return;
   }
   if (store.bgFabricImage) {
-    log("TRACE", "[canvas] updateBackgroundImage: removing old bg image", { bgImg: store.bgFabricImage });
+    log("DEBUG", "[canvas] updateBackgroundImage: removing old bg image", { bgImg: store.bgFabricImage });
     canvas.remove(store.bgFabricImage);
     setBgFabricImage(null);
     canvas.renderAll();
   }
   if (store.imageObj) {
     const imgObj = store.imageObj;
-    log("TRACE", "[canvas] updateBackgroundImage: loading new image", { imgObj });
+    log("DEBUG", "[canvas] updateBackgroundImage: loading new image", { imgObj });
     Image.fromURL(imgObj.src || store.imageURL, function(img) {
-      log("TRACE", "[canvas] updateBackgroundImage: Image.fromURL loaded", { img });
+      log("DEBUG", "[canvas] updateBackgroundImage: Image.fromURL loaded", { img });
       img.set({
         left: 0,
         top: 0,
@@ -146,10 +146,10 @@ function updateBackgroundImage(containerDiv, element) {
       log("DEBUG", "[canvas] updateBackgroundImage: image added", {
         type: img.type, width: img.width, height: img.height
       });
-      log("TRACE", "[canvas] updateBackgroundImage EXIT (image loaded)");
+      log("DEBUG", "[canvas] updateBackgroundImage EXIT (image loaded)");
     });
   } else {
-    log("TRACE", "[canvas] updateBackgroundImage EXIT (no imageObj)");
+    log("DEBUG", "[canvas] updateBackgroundImage EXIT (no imageObj)");
   }
 }
 
@@ -263,7 +263,7 @@ function centralizedCanvasPointerHandler(e) {
 }
 
 export function buildCanvasPanel({ element, title, componentName }) {
-  log("TRACE", "[canvas] buildCanvasPanel ENTRY", {
+  log("DEBUG", "[canvas] buildCanvasPanel ENTRY", {
     elementType: element?.tagName,
     title,
     componentName,
@@ -278,7 +278,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
 
     const store = getState();
     if (store.fabricCanvas && typeof store.fabricCanvas.dispose === "function") {
-      log("TRACE", "[canvas] buildCanvasPanel: disposing previous canvas", { canvas: store.fabricCanvas });
+      log("DEBUG", "[canvas] buildCanvasPanel: disposing previous canvas", { canvas: store.fabricCanvas });
       store.fabricCanvas.dispose();
       log("DEBUG", "[canvas] buildCanvasPanel: previous canvas disposed");
     }
@@ -319,15 +319,15 @@ export function buildCanvasPanel({ element, title, componentName }) {
     // --- Centralized selection/deselection handler ---
     canvas.off("mouse:down.centralized");
     canvas.on("mouse:down.centralized", centralizedCanvasPointerHandler);
-    log("TRACE", "[canvas] buildCanvasPanel: centralizedCanvasPointerHandler attached");
+    log("DEBUG", "[canvas] buildCanvasPanel: centralizedCanvasPointerHandler attached");
 
     // --- Sync shapes on canvas panel creation ---
-    log("TRACE", "[canvas] buildCanvasPanel: Syncing shapes on init", { shapes: getState().shapes });
+    log("DEBUG", "[canvas] buildCanvasPanel: Syncing shapes on init", { shapes: getState().shapes });
     const shapes = getState().shapes;
     if (Array.isArray(shapes) && shapes.length > 0) {
       log("DEBUG", "[canvas] Syncing existing shapes to canvas on panel build", { shapes });
       shapes.forEach((shape, idx) => {
-        log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} sync`, {
+        log("DEBUG", `[canvas] buildCanvasPanel: Shape ${idx} sync`, {
           type: shape?._type,
           label: shape?._label,
           id: shape?._id
@@ -335,7 +335,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
         if (getState().fabricCanvas && !getState().fabricCanvas.getObjects().includes(shape)) {
           getState().fabricCanvas.add(shape);
           moveShapesToFront();
-          log("TRACE", `[canvas] buildCanvasPanel: Shape ${idx} added to canvas`, {
+          log("DEBUG", `[canvas] buildCanvasPanel: Shape ${idx} added to canvas`, {
             type: shape?._type,
             label: shape?._label,
             id: shape?._id
@@ -349,22 +349,22 @@ export function buildCanvasPanel({ element, title, componentName }) {
         }
       });
       getState().fabricCanvas.renderAll();
-      log("TRACE", "[canvas] buildCanvasPanel: All shapes rendered");
+      log("DEBUG", "[canvas] buildCanvasPanel: All shapes rendered");
     } else {
       log("DEBUG", "[canvas] buildCanvasPanel: No shapes to sync on init");
     }
 
     // Subscribe to store for image and shape changes (FILTERED)
-    log("TRACE", "[canvas] Subscribing to store state changes");
+    log("DEBUG", "[canvas] Subscribing to store state changes");
 
     let prevImageObj = null;
     let prevImageURL = null;
 
     sceneDesignerStore.subscribe(() => {
       const state = getState();
-      log("TRACE", "[canvas] store.subscribe fired", { state });
+      log("DEBUG", "[canvas] store.subscribe fired", { state });
       if (state.imageObj !== prevImageObj || state.imageURL !== prevImageURL) {
-        log("TRACE", "[canvas] store.subscribe: imageObj/imageURL changed", {
+        log("DEBUG", "[canvas] store.subscribe: imageObj/imageURL changed", {
           prevImageObj, prevImageURL, stateImageObj: state.imageObj, stateImageURL: state.imageURL
         });
         updateBackgroundImage(containerDiv, element);
@@ -374,12 +374,12 @@ export function buildCanvasPanel({ element, title, componentName }) {
       // Add shapes
       const canvasShapes = state.fabricCanvas?.getObjects() || [];
       const stateShapes = state.shapes || [];
-      log("TRACE", "[canvas] store.subscribe: shape sync", { canvasShapes, stateShapes });
+      log("DEBUG", "[canvas] store.subscribe: shape sync", { canvasShapes, stateShapes });
       stateShapes.forEach(shape => {
         if (state.fabricCanvas && !canvasShapes.includes(shape)) {
           state.fabricCanvas.add(shape);
           moveShapesToFront();
-          log("TRACE", "[canvas] subscribe: shape added to canvas", {
+          log("DEBUG", "[canvas] subscribe: shape added to canvas", {
             type: shape?._type,
             label: shape?._label,
             id: shape?._id
@@ -389,16 +389,16 @@ export function buildCanvasPanel({ element, title, componentName }) {
       // Remove shapes
       canvasShapes.forEach(obj => {
         if (!stateShapes.includes(obj) && obj !== state.bgFabricImage) {
-          log("TRACE", "[canvas] subscribe: removing shape from canvas", { obj });
+          log("DEBUG", "[canvas] subscribe: removing shape from canvas", { obj });
           state.fabricCanvas.remove(obj);
         }
       });
       state.fabricCanvas?.renderAll();
-      log("TRACE", "[canvas] store.subscribe: canvas.renderAll called");
+      log("DEBUG", "[canvas] store.subscribe: canvas.renderAll called");
     });
 
     if (getState().imageObj) {
-      log("TRACE", "[canvas] buildCanvasPanel: imageObj present, loading background image", { imageObj: getState().imageObj });
+      log("DEBUG", "[canvas] buildCanvasPanel: imageObj present, loading background image", { imageObj: getState().imageObj });
       updateBackgroundImage(containerDiv, element);
       prevImageObj = getState().imageObj;
       prevImageURL = getState().imageURL;
@@ -411,7 +411,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
     alert("CanvasPanel ERROR: " + e.message);
     throw e;
   }
-  log("TRACE", "[canvas] buildCanvasPanel EXIT", {
+  log("DEBUG", "[canvas] buildCanvasPanel EXIT", {
     elementType: element?.tagName,
     title,
     componentName,

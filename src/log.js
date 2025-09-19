@@ -4,7 +4,7 @@
  * Centralized, pluggable logging system for Scene Designer (ESM only, numeric log levels).
  * - All logs routed through log() at appropriate level/tag.
  * - Supports runtime config of level, destination, and sinks.
- * - Log level is an integer (0=SILENT, 1=ERROR, ... 5=TRACE), no string compat.
+ * - Log level is an integer (0=SILENT, 1=ERROR, ... 4=DEBUG), no string compat.
  * - Pluggable log sinks (console, remote, etc).
  * - Safe serialization (handles cyclic/Error objects).
  * - Zero use of window.*, no globals except optional debug attach.
@@ -16,12 +16,12 @@
  */
 
 export const LOG_LEVELS = {
-  SILENT: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4, TRACE: 5
+  SILENT: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4
 };
-export const LOG_LEVEL_NUMS = [0,1,2,3,4,5];
-export const LOG_LEVEL_NUM_TO_NAME = ["SILENT", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"];
+export const LOG_LEVEL_NUMS = [0, 1, 2, 3, 4];
+export const LOG_LEVEL_NUM_TO_NAME = ["SILENT", "ERROR", "WARN", "INFO", "DEBUG"];
 export const LOG_LEVEL_NAME_TO_NUM = {
-  "SILENT": 0, "ERROR": 1, "WARN": 2, "INFO": 3, "DEBUG": 4, "TRACE": 5
+  "SILENT": 0, "ERROR": 1, "WARN": 2, "INFO": 3, "DEBUG": 4
 };
 
 const LOGGER_INSTANCE_ID = Math.random().toString(36).slice(2) + "-" + Date.now();
@@ -41,14 +41,14 @@ export function registerLogSink(sink) {
 }
 
 /**
- * Set the log level at runtime using a number (0–5).
+ * Set the log level at runtime using a number (0–4).
  * @param {number} num
  */
 export function setLogLevel(num) {
   curLogLevelNum = normalizeLevelNum(num);
 }
 /**
- * Get current log level as number (0–5).
+ * Get current log level as number (0–4).
  */
 export function getLogLevel() {
   return curLogLevelNum;
@@ -71,7 +71,7 @@ export function configureLogging({ level, dest }) {
 }
 
 /**
- * Normalize log level to valid number (0–5).
+ * Normalize log level to valid number (0–4).
  */
 function normalizeLevelNum(n) {
   if (typeof n === "number" && LOG_LEVEL_NUMS.includes(n)) return n;
@@ -144,12 +144,21 @@ function safeLogArg(arg) {
 
 /**
  * Central log function (all modules must use this!).
- * @param {number|string} levelNum - Numeric log level (0–5) or string name
+ * @param {number|string} levelNum - Numeric log level (0–4) or string name
  * @param  {...any} args
  */
 export function log(levelNum, ...args) {
   const msgLevelNum = normalizeLevelNum(levelNum);
   const curLevelNum = curLogLevelNum;
+
+  // Guard: Skip logs with no meaningful message/payload
+  if (!args.length || args.every(arg =>
+    arg === undefined || arg === null || arg === "" ||
+    (typeof arg === "object" && Object.keys(arg).length === 0 && !(arg instanceof Error))
+  )) {
+    // Optionally warn or skip silently
+    return;
+  }
 
   // Always show errors even in SILENT mode
   if (msgLevelNum === LOG_LEVELS.ERROR) {
@@ -183,7 +192,7 @@ export function log(levelNum, ...args) {
       if (msgLevelNum === 1 && console.error) console.error(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
       else if (msgLevelNum === 2 && console.warn) console.warn(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
       else if (msgLevelNum === 3 && console.info) console.info(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
-      else if ((msgLevelNum === 4 || msgLevelNum === 5) && console.debug) console.debug(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      else if (msgLevelNum === 4 && console.debug) console.debug(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
       else if (console.log) console.log(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
     }
   }
@@ -216,4 +225,3 @@ if (typeof window !== "undefined") {
   window.LOG_LEVELS = LOG_LEVELS;
   window.__loggerInstanceId = LOGGER_INSTANCE_ID;
 }
-

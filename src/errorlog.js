@@ -51,3 +51,4 @@ export function registerErrorLogSink() {
   // No-op: panel is passive when streaming is in use.
   log("TRACE", "[errorlog] registerErrorLogSink exit");
 }
+
