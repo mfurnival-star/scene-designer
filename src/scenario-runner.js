@@ -132,18 +132,111 @@ export async function runRegisteredScenario(name, opts = {}) {
   return await runScenario(steps, opts);
 }
 
-// --- Example: Register a defect1 test scenario on module load ---
+// --- Enhanced diagnostic scenarios for defect1 and related selection/delete bugs ---
+
 registerScenario("defect1-delete-flow", [
+  { type: "comment", text: "Create a rectangle shape at (100,120)" },
   { fn: "addShapeOfType", args: ["rect", {x:100, y:120}] },
   { type: "log", expr: () => State.getState().shapes },
+  { type: "comment", text: "Deselect all shapes" },
   { fn: "setSelectedShapes", args: [[]] },
   { type: "assert", expr: () => State.getState().selectedShapes.length === 0 },
+  { type: "comment", text: "Reselect the first shape (should be the rectangle)" },
   { fn: "setSelectedShapes", args: [[() => State.getState().shapes[0]]] },
   { type: "log", expr: () => State.getState().selectedShapes },
+  { type: "comment", text: "Delete selected shape" },
   { fn: "deleteSelectedShapes" },
   { type: "dump", expr: () => State.getState().shapes },
   { type: "assert", expr: () => State.getState().shapes.length === 0 },
   { type: "comment", text: "End of defect1 scenario" }
+]);
+
+registerScenario("defect1-server-image-delete", [
+  { type: "comment", text: "Load sample1.png as server image" },
+  { fn: "setImage", args: ["./images/sample1.png", null] },
+  { type: "log", expr: () => State.getState().imageURL },
+  { type: "comment", text: "Create a rectangle shape at (140, 140)" },
+  { fn: "addShapeOfType", args: ["rect", {x:140, y:140}] },
+  { type: "log", expr: () => State.getState().shapes },
+  { type: "comment", text: "Deselect all shapes" },
+  { fn: "setSelectedShapes", args: [[]] },
+  { type: "assert", expr: () => State.getState().selectedShapes.length === 0 },
+  { type: "comment", text: "Reselect the first shape (should be the rectangle)" },
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes[0]]] },
+  { type: "log", expr: () => State.getState().selectedShapes },
+  { type: "comment", text: "Delete selected shape" },
+  { fn: "deleteSelectedShapes" },
+  { type: "dump", expr: () => State.getState().shapes },
+  { type: "assert", expr: () => State.getState().shapes.length === 0 },
+  { type: "comment", text: "End of server image defect1 scenario" }
+]);
+
+registerScenario("defect1-point-delete", [
+  { type: "comment", text: "Create a point shape at (70, 80)" },
+  { fn: "addShapeOfType", args: ["point", {x:70, y:80}] },
+  { type: "log", expr: () => State.getState().shapes },
+  { type: "comment", text: "Deselect all shapes" },
+  { fn: "setSelectedShapes", args: [[]] },
+  { type: "assert", expr: () => State.getState().selectedShapes.length === 0 },
+  { type: "comment", text: "Reselect the point shape" },
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes[0]]] },
+  { type: "log", expr: () => State.getState().selectedShapes },
+  { type: "comment", text: "Delete selected point" },
+  { fn: "deleteSelectedShapes" },
+  { type: "dump", expr: () => State.getState().shapes },
+  { type: "assert", expr: () => State.getState().shapes.length === 0 },
+  { type: "comment", text: "End of defect1 point scenario" }
+]);
+
+registerScenario("defect1-multiselect-delete", [
+  { type: "comment", text: "Create two rectangle shapes" },
+  { fn: "addShapeOfType", args: ["rect", {x:60, y:60}] },
+  { fn: "addShapeOfType", args: ["rect", {x:160, y:160}] },
+  { type: "log", expr: () => State.getState().shapes },
+  { type: "comment", text: "Multi-select both shapes" },
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes[0], () => State.getState().shapes[1]]] },
+  { type: "log", expr: () => State.getState().selectedShapes },
+  { type: "comment", text: "Delete selected shapes" },
+  { fn: "deleteSelectedShapes" },
+  { type: "dump", expr: () => State.getState().shapes },
+  { type: "assert", expr: () => State.getState().shapes.length === 0 },
+  { type: "comment", text: "End of defect1 multiselect scenario" }
+]);
+
+registerScenario("defect1-locked-shape-delete", [
+  { type: "comment", text: "Create a rectangle shape and lock it" },
+  { fn: "addShapeOfType", args: ["rect", {x:200, y:60}] },
+  { type: "log", expr: () => State.getState().shapes },
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes[0]]] },
+  { fn: "lockSelectedShapes" },
+  { type: "log", expr: () => State.getState().selectedShapes },
+  { type: "comment", text: "Try to delete locked shape" },
+  { fn: "deleteSelectedShapes" },
+  { type: "dump", expr: () => State.getState().shapes },
+  { type: "assert", expr: () => State.getState().shapes.length === 1 },
+  { type: "comment", text: "Unlock and delete shape" },
+  { fn: "unlockSelectedShapes" },
+  { fn: "deleteSelectedShapes" },
+  { type: "dump", expr: () => State.getState().shapes },
+  { type: "assert", expr: () => State.getState().shapes.length === 0 },
+  { type: "comment", text: "End of defect1 locked shape scenario" }
+]);
+
+registerScenario("defect1-circle-delete", [
+  { type: "comment", text: "Create a circle shape at (80, 110)" },
+  { fn: "addShapeOfType", args: ["circle", {x:80, y:110}] },
+  { type: "log", expr: () => State.getState().shapes },
+  { type: "comment", text: "Deselect all shapes" },
+  { fn: "setSelectedShapes", args: [[]] },
+  { type: "assert", expr: () => State.getState().selectedShapes.length === 0 },
+  { type: "comment", text: "Reselect the circle shape" },
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes[0]]] },
+  { type: "log", expr: () => State.getState().selectedShapes },
+  { type: "comment", text: "Delete selected circle" },
+  { fn: "deleteSelectedShapes" },
+  { type: "dump", expr: () => State.getState().shapes },
+  { type: "assert", expr: () => State.getState().shapes.length === 0 },
+  { type: "comment", text: "End of defect1 circle scenario" }
 ]);
 
 /*
@@ -155,4 +248,5 @@ Example scenario step:
 */
 
 // Future: scenario-panel.js can import getRegisteredScenarios() and runRegisteredScenario(name)
+
 
