@@ -258,6 +258,47 @@ registerScenario("defect1-circle-delete", [
   { type: "comment", text: "End of defect1 circle scenario" }
 ]);
 
+// --- New complex scenario for multi-step test flow ---
+registerScenario("complex-rect-flow", [
+  { type: "comment", text: "Load server image sample1.png" },
+  { fn: "setImage", args: ["./images/sample1.png", null] },
+
+  { type: "comment", text: "Add rect 'recta' and move NE" },
+  { fn: "addShapeOfType", args: ["rect", {x:390, y:60}] }, // NE position
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes.at(-1)]] },
+  { fn: "setSetting", args: ["defaultRectWidth", 60] }, // Optionally adjust width
+  { fn: "setSetting", args: ["defaultRectHeight", 40] },
+  // Set label to "recta"
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes.at(-1)]] },
+  { type: "log", expr: () => State.getState().selectedShapes },
+  // Direct label property set via scenario step (if label editing API exists)
+  { type: "comment", text: "Label recta (direct property set)" },
+  { fn: "setSceneName", args: ["recta"] },
+
+  { type: "comment", text: "Add rect 'rectb' and move SE" },
+  { fn: "addShapeOfType", args: ["rect", {x:390, y:280}] }, // SE position
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes.at(-1)]] },
+  { type: "log", expr: () => State.getState().selectedShapes },
+  { type: "comment", text: "Label rectb (direct property set)" },
+  { fn: "setSceneName", args: ["rectb"] },
+
+  { type: "comment", text: "Add rect 'rectc' and move E" },
+  { fn: "addShapeOfType", args: ["rect", {x:430, y:170}] }, // E position
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes.at(-1)]] },
+  { type: "log", expr: () => State.getState().selectedShapes },
+  { type: "comment", text: "Label rectc (direct property set)" },
+  { fn: "setSceneName", args: ["rectc"] },
+
+  { type: "comment", text: "Delete recta" },
+  // Select recta by label (search shapes for label == "recta")
+  { fn: "setSelectedShapes", args: [[() => State.getState().shapes.find(s => s._label === "recta")]] },
+  { fn: "deleteSelectedShapes" },
+
+  { type: "dump", expr: () => State.getState().shapes },
+  { type: "assert", expr: () => State.getState().shapes.length === 2 },
+  { type: "comment", text: "End of complex-rect-flow scenario" }
+]);
+
 /*
 Example scenario step:
 { fn: "addShapeOfType", args: ["rect", {x:100, y:120}] }
@@ -267,5 +308,4 @@ Example scenario step:
 */
 
 // Future: scenario-panel.js can import getRegisteredScenarios() and runRegisteredScenario(name)
-
 
