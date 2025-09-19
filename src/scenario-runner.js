@@ -23,6 +23,17 @@ const API = { ...Actions, ...Selection, ...State };
 const _scenarioRegistry = {};
 
 /**
+ * Utility: Create a valid Image object for server image loading.
+ * @param {string} url
+ * @returns {HTMLImageElement}
+ */
+function makeServerImageObj(url) {
+  const img = new window.Image();
+  img.src = url;
+  return img;
+}
+
+/**
  * Register a named scenario (array of steps).
  * @param {string} name
  * @param {Array} steps
@@ -41,15 +52,24 @@ export function getRegisteredScenarios() {
 
 /**
  * Recursively evaluate all args, resolving functions to their return value.
- * Used to make scenario steps robust.
+ * For setImage: if args is [url, null] and url looks like a server image, create a valid Image object.
  * @param {Array} args
+ * @param {string} fnName - Scenario step function name (for special handling)
  * @returns {Array}
  */
-function evalArgs(args) {
+function evalArgs(args, fnName) {
   if (Array.isArray(args)) {
+    // Special handling for setImage: auto-create Image object if needed
+    if (fnName === "setImage" && args.length === 2 && typeof args[0] === "string" && (args[1] === null || args[1] === undefined)) {
+      const url = args[0];
+      // Only trigger for local/server images (not data URLs)
+      if (url && (url.startsWith("./images/") || url.startsWith("/images/"))) {
+        return [url, makeServerImageObj(url)];
+      }
+    }
     return args.map(a => {
       if (typeof a === "function") return a();
-      if (Array.isArray(a)) return evalArgs(a);
+      if (Array.isArray(a)) return evalArgs(a, fnName);
       return a;
     });
   }
@@ -65,7 +85,7 @@ export async function runScenarioStep(step) {
   try {
     if (step.fn && API[step.fn]) {
       // Evaluate any function args before passing to API
-      const args = evalArgs(step.args || []);
+      const args = evalArgs(step.args || [], step.fn);
       log("TRACE", `[scenario-runner] Step args evaluated`, { fn: step.fn, rawArgs: step.args, resolvedArgs: args });
       const result = await API[step.fn](...args);
       log("INFO", `[scenario-runner] Ran action: ${step.fn}`, { args, result });
@@ -266,12 +286,10 @@ registerScenario("complex-rect-flow", [
   { type: "comment", text: "Add rect 'recta' and move NE" },
   { fn: "addShapeOfType", args: ["rect", {x:390, y:60}] }, // NE position
   { fn: "setSelectedShapes", args: [[() => State.getState().shapes.at(-1)]] },
-  { fn: "setSetting", args: ["defaultRectWidth", 60] }, // Optionally adjust width
+  { fn: "setSetting", args: ["defaultRectWidth", 60] },
   { fn: "setSetting", args: ["defaultRectHeight", 40] },
-  // Set label to "recta"
   { fn: "setSelectedShapes", args: [[() => State.getState().shapes.at(-1)]] },
   { type: "log", expr: () => State.getState().selectedShapes },
-  // Direct label property set via scenario step (if label editing API exists)
   { type: "comment", text: "Label recta (direct property set)" },
   { fn: "setSceneName", args: ["recta"] },
 
@@ -290,7 +308,6 @@ registerScenario("complex-rect-flow", [
   { fn: "setSceneName", args: ["rectc"] },
 
   { type: "comment", text: "Delete recta" },
-  // Select recta by label (search shapes for label == "recta")
   { fn: "setSelectedShapes", args: [[() => State.getState().shapes.find(s => s._label === "recta")]] },
   { fn: "deleteSelectedShapes" },
 
