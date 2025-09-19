@@ -5,11 +5,17 @@
   <title>Scene Designer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="scene-designer.css">
+  <!-- BEGIN ERUDA -->
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+  <script>eruda.init();</script>
+  <!-- END ERUDA -->
   <!-- BEGIN FORCE SETTINGS -->
   <script>
     window.SCENE_DESIGNER_FORCE = true;
     window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};
-    window.SCENE_DESIGNER_FORCE_SETTINGS["DEBUG_LOG_LEVEL"] = "Info";
+    window.SCENE_DESIGNER_FORCE_SETTINGS["DEBUG_LOG_LEVEL"] = "Debug";
+    window.SCENE_DESIGNER_FORCE_SETTINGS["INTERCEPT_CONSOLE"] = "0";
+    window.SCENE_DESIGNER_FORCE_SETTINGS["LOG_OUTPUT_DEST"] = "both";
   </script>
   <!-- END FORCE SETTINGS -->
 </head>
@@ -19,5 +25,11 @@
   <!-- Main entry point for Vite: -->
   <script type="module" src="/src/main.js"></script>
   <!-- Console.Re integration will be injected by deploy.sh if enabled -->
+  <!-- BEGIN CONSOLERE -->
+  <script type="module">
+    import { initConsoleRe } from "./src/console.re.js";
+    initConsoleRe("scene-designer");
+  </script>
+  <!-- END CONSOLERE -->
 </body>
 </html>
