@@ -42,7 +42,25 @@ if (typeof consoleReInit === "function") {
   log("WARN", "[main.js] Console.Re init not found – remote logging not active");
 }
 
+// --- DEBUG: Attach state helpers to window for diagnostics (remove for production) ---
+import * as State from './state.js';
+if (typeof window !== "undefined") {
+  window.getState = State.getState;
+  window.setShapes = State.setShapes;
+  window.setSelectedShapes = State.setSelectedShapes;
+  window.addShape = State.addShape;
+  window.removeShape = State.removeShape;
+  window.setImage = State.setImage;
+  window.setFabricCanvas = State.setFabricCanvas;
+  window.setBgFabricImage = State.setBgFabricImage;
+  window.setSettings = State.setSettings;
+  window.setSetting = State.setSetting;
+  window.getSetting = State.getSetting;
+  window.setSceneName = State.setSceneName;
+  window.setSceneLogic = State.setSceneLogic;
+  window.sceneDesignerStore = State.sceneDesignerStore;
+}
+
 // No legacy global code, no logToBox, no direct DOM mutation.
 // If you need a fallback message for classic index.html usage, re-add as a separate module.
-
 
