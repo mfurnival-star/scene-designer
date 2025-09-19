@@ -1,7 +1,7 @@
 /**
  * actions.js
  * -----------------------------------------------------------
- * Scene Designer – Centralized Business Logic for Scene Actions (ESM ONLY, Manifesto-compliant)
+ * Scene Designer – Centralized Business Logic for Scene Actions (ESM ONLY, Manifesto-compliant, DEBUG Logging Sweep)
  * - Centralizes all scene actions: add shape, delete, duplicate, lock, unlock, select, etc.
  * - All business rules (selection, stroke width, transformer handling) are here.
  * - UI (toolbars, keyboard, etc.) emit only intents and never mutate state or selection directly.
@@ -36,7 +36,7 @@ import {
  * @param {Object} [opts] - Optional settings override (position, etc)
  */
 export function addShapeOfType(type, opts = {}) {
-  log("DEBUG", "[actions] addShapeOfType ENTRY", { type, opts });
+  log("DEBUG", "[actions] addShapeOfType ENTRY", { type, opts, stateBefore: {...getState()} });
   const store = getState();
   const w = store.settings?.defaultRectWidth || 50;
   const h = store.settings?.defaultRectHeight || 30;
@@ -57,9 +57,12 @@ export function addShapeOfType(type, opts = {}) {
     shape = makePointShape(x, y);
   }
   if (shape) {
+    log("DEBUG", "[actions] addShapeOfType: shape created", { type, shape, shapeId: shape._id });
     addShape(shape);
+    log("DEBUG", "[actions] addShapeOfType: shape added to store", { shapesAfter: getState().shapes.map(s=>s._id) });
     // Always select and enter edit mode for new shape (only here, not in toolbar)
     selectionSetSelectedShapes([shape]);
+    log("DEBUG", "[actions] addShapeOfType: selection set", { selectedShape: shape._id, selectedShapes: getState().selectedShapes.map(s=>s._id) });
     // Set stroke width as a business rule (from settings or default)
     const strokeWidth = store.settings?.defaultStrokeWidth ?? 1;
     setStrokeWidthForSelectedShapes(strokeWidth);
@@ -67,7 +70,7 @@ export function addShapeOfType(type, opts = {}) {
   } else {
     log("WARN", "[actions] addShapeOfType: Failed to create shape", { type, opts });
   }
-  log("DEBUG", "[actions] addShapeOfType EXIT");
+  log("DEBUG", "[actions] addShapeOfType EXIT", { stateAfter: {...getState()} });
 }
 
 /**
@@ -78,18 +81,24 @@ export function addShapeOfType(type, opts = {}) {
  */
 export function deleteSelectedShapes() {
   log("DEBUG", "[actions] deleteSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
+    selectedShapes: getState().selectedShapes.map(s => ({
+      _id: s?._id, _type: s?._type, _label: s?._label
+    })),
+    shapesBefore: getState().shapes.map(s => ({
+      _id: s?._id, _type: s?._type, _label: s?._label
+    }))
   });
   const selected = getState().selectedShapes || [];
   if (!selected.length) {
     log("INFO", "[actions] deleteSelectedShapes: No shapes selected, nothing to delete.");
-    log("DEBUG", "[actions] deleteSelectedShapes EXIT (no action)");
+    log("DEBUG", "[actions] deleteSelectedShapes EXIT (no action)", { shapesAfter: getState().shapes.map(s=>s._id) });
     return; // EARLY RETURN: do nothing if none selected
   }
   const unlockedToDeleteIds = selected.filter(s => !s.locked).map(s => s._id);
   log("DEBUG", "[actions] deleteSelectedShapes: unlocked shapes to delete", { unlockedToDeleteIds });
   // Remove all shapes by _id at once
   const newShapes = getState().shapes.filter(s => !unlockedToDeleteIds.includes(s._id));
+  log("DEBUG", "[actions] deleteSelectedShapes: newShapes array after filter", { newShapesIds: newShapes.map(s=>s._id) });
   setShapes(newShapes);
   // Always deselect all after deletion
   deselectAll();
@@ -97,7 +106,8 @@ export function deleteSelectedShapes() {
   log("DEBUG", "[actions] deleteSelectedShapes EXIT", {
     shapesInStoreAfter: getState().shapes.map(s => ({
       _id: s._id, _type: s._type, _label: s._label
-    }))
+    })),
+    selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
   });
 }
 
@@ -107,7 +117,12 @@ export function deleteSelectedShapes() {
  */
 export function duplicateSelectedShapes() {
   log("DEBUG", "[actions] duplicateSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
+    selectedShapes: getState().selectedShapes.map(s => ({
+      _id: s?._id, _type: s?._type, _label: s?._label
+    })),
+    shapesBefore: getState().shapes.map(s => ({
+      _id: s?._id, _type: s?._type, _label: s?._label
+    }))
   });
   const selected = getState().selectedShapes || [];
   const unlockedToDuplicate = selected.filter(s => !s.locked);
@@ -125,6 +140,7 @@ export function duplicateSelectedShapes() {
     if (clone) {
       addShape(clone);
       newShapes.push(clone);
+      log("DEBUG", "[actions] duplicateSelectedShapes: new shape created and added", { clone, cloneId: clone._id });
     }
   });
   if (newShapes.length > 0) {
@@ -134,7 +150,12 @@ export function duplicateSelectedShapes() {
       newShapes: newShapes.map(s => s._id)
     });
   }
-  log("DEBUG", "[actions] duplicateSelectedShapes EXIT");
+  log("DEBUG", "[actions] duplicateSelectedShapes EXIT", {
+    shapesInStoreAfter: getState().shapes.map(s => ({
+      _id: s._id, _type: s._type, _label: s._label
+    })),
+    selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
+  });
 }
 
 /**
@@ -142,19 +163,27 @@ export function duplicateSelectedShapes() {
  */
 export function lockSelectedShapes() {
   log("DEBUG", "[actions] lockSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
+    selectedShapes: getState().selectedShapes.map(s => ({
+      _id: s?._id, _type: s?._type, _label: s?._label
+    }))
   });
   const selected = getState().selectedShapes || [];
   selected.forEach(shape => {
     shape.locked = true;
     shape.selectable = false;
     shape.evented = false;
+    log("DEBUG", "[actions] lockSelectedShapes: shape locked", { shapeId: shape._id, type: shape._type, label: shape._label });
   });
   selectionSetSelectedShapes([]); // Deselect all after lock
   log("INFO", "[actions] lockSelectedShapes: Locked shapes and cleared selection", {
     lockedShapes: selected.map(s => s._id)
   });
-  log("DEBUG", "[actions] lockSelectedShapes EXIT");
+  log("DEBUG", "[actions] lockSelectedShapes EXIT", {
+    shapesInStoreAfter: getState().shapes.map(s => ({
+      _id: s._id, _type: s._type, _label: s._label
+    })),
+    selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
+  });
 }
 
 /**
@@ -162,17 +191,25 @@ export function lockSelectedShapes() {
  */
 export function unlockSelectedShapes() {
   log("DEBUG", "[actions] unlockSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
+    selectedShapes: getState().selectedShapes.map(s => ({
+      _id: s?._id, _type: s?._type, _label: s?._label
+    }))
   });
   const selected = getState().selectedShapes || [];
   selected.forEach(shape => {
     shape.locked = false;
     shape.selectable = true;
     shape.evented = true;
+    log("DEBUG", "[actions] unlockSelectedShapes: shape unlocked", { shapeId: shape._id, type: shape._type, label: shape._label });
   });
   log("INFO", "[actions] unlockSelectedShapes: Unlocked shapes", {
     unlockedShapes: selected.map(s => s._id)
   });
-  log("DEBUG", "[actions] unlockSelectedShapes EXIT");
+  log("DEBUG", "[actions] unlockSelectedShapes EXIT", {
+    shapesInStoreAfter: getState().shapes.map(s => ({
+      _id: s._id, _type: s._type, _label: s._label
+    })),
+    selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
+  });
 }
 
