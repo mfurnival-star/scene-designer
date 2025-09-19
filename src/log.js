@@ -9,6 +9,7 @@
  * - Safe serialization (handles cyclic/Error objects).
  * - Zero use of window.*, no globals except optional debug attach.
  * - Compatible with console interception and global error handlers.
+ * - Forwards logs to Console.Re remote logger if available (injects connector.js as global).
  * - Exports: log, setLogLevel/getLogLevel, setLogDestination, configureLogging, registerLogSink.
  * -------------------------------------------------------------------
  * Dependencies: None (uses built-in fetch, Date, etc).
@@ -178,6 +179,14 @@ export function log(levelNum, ...args) {
         }
       }
     }
+    // Forward to Console.Re remote logger if available
+    if (typeof console !== "undefined" && console.re && typeof console.re.error === "function") {
+      try {
+        console.re.error(...args);
+      } catch (e) {
+        // fail silently for remote logging errors
+      }
+    }
     return;
   }
 
@@ -207,6 +216,24 @@ export function log(levelNum, ...args) {
       }
     }
   }
+  // Forward to Console.Re remote logger if available
+  if (typeof console !== "undefined" && console.re) {
+    try {
+      if (msgLevelNum === LOG_LEVELS.ERROR && typeof console.re.error === "function") {
+        console.re.error(...args);
+      } else if (msgLevelNum === LOG_LEVELS.WARN && typeof console.re.warn === "function") {
+        console.re.warn(...args);
+      } else if (msgLevelNum === LOG_LEVELS.INFO && typeof console.re.info === "function") {
+        console.re.info(...args);
+      } else if (msgLevelNum === LOG_LEVELS.DEBUG && typeof console.re.debug === "function") {
+        console.re.debug(...args);
+      } else if (typeof console.re.log === "function") {
+        console.re.log(...args);
+      }
+    } catch (e) {
+      // fail silently for remote logging errors
+    }
+  }
 }
 
 /**
@@ -225,3 +252,4 @@ if (typeof window !== "undefined") {
   window.LOG_LEVELS = LOG_LEVELS;
   window.__loggerInstanceId = LOGGER_INSTANCE_ID;
 }
+
