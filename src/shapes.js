@@ -11,6 +11,7 @@
  * - Logging via log.js (EXHAUSTIVE DEBUG logging: creation, config, events).
  * - Stroke width: always stays at 1px regardless of scaling or transform.
  * - **NEW: Each shape has a visible diagnostic label displaying its _label and _id.**
+ * - **FIX: Only the Group is selectable/evented; all children are not.**
  * -----------------------------------------------------------
  */
 
@@ -102,11 +103,15 @@ function makeDiagnosticLabel(label, id, x, y) {
     originY: 'top'
   });
   text._isDiagnosticLabel = true;
+  // Ensure not selectable/evented
+  text.selectable = false;
+  text.evented = false;
   return text;
 }
 
 /**
  * Make a point shape (crosshair/halo/transparent hit area, for annotation).
+ * Only the Group is selectable/evented; children are not.
  */
 export function makePointShape(x, y) {
   log("DEBUG", "[shapes] makePointShape ENTRY", { x, y, settings: getState().settings });
@@ -128,10 +133,10 @@ export function makePointShape(x, y) {
     top: y - hitRadius,
     radius: hitRadius,
     fill: "#fff",
-    opacity: 0,
-    selectable: true,
-    evented: true
+    opacity: 0
   });
+  hitCircle.selectable = false;
+  hitCircle.evented = false;
 
   const halo = new Circle({
     left: x - haloRadius,
@@ -140,19 +145,24 @@ export function makePointShape(x, y) {
     stroke: strokeColor,
     strokeWidth: currentStrokeWidth,
     fill: fillColor,
-    opacity: 0.4,
-    selectable: false,
-    evented: false
+    opacity: 0.4
   });
+  halo.selectable = false;
+  halo.evented = false;
 
   const crossH = new Line(
     [x - crossLen / 2, y, x + crossLen / 2, y],
-    { stroke: strokeColor, strokeWidth: currentStrokeWidth, selectable: false, evented: false }
+    { stroke: strokeColor, strokeWidth: currentStrokeWidth }
   );
+  crossH.selectable = false;
+  crossH.evented = false;
+
   const crossV = new Line(
     [x, y - crossLen / 2, x, y + crossLen / 2],
-    { stroke: strokeColor, strokeWidth: currentStrokeWidth, selectable: false, evented: false }
+    { stroke: strokeColor, strokeWidth: currentStrokeWidth }
   );
+  crossV.selectable = false;
+  crossV.evented = false;
 
   const pointId = generateShapeId('point');
   const label = makeDiagnosticLabel("Point", pointId, x, y);
@@ -194,6 +204,7 @@ export function makePointShape(x, y) {
 
 /**
  * Make a rectangle shape.
+ * Only the Group is selectable/evented; children are not.
  */
 export function makeRectShape(x, y, w, h) {
   log("DEBUG", "[shapes] makeRectShape ENTRY", { x, y, w, h, settings: getState().settings });
@@ -215,14 +226,14 @@ export function makeRectShape(x, y, w, h) {
     height: h,
     stroke: strokeColor,
     strokeWidth: currentStrokeWidth,
-    fill: fillColor,
-    selectable: true,
-    evented: true
+    fill: fillColor
   });
   rect._type = 'rect';
   rect._label = 'Rect';
   rect.locked = false;
   rect._id = rectId;
+  rect.selectable = false;
+  rect.evented = false;
 
   // Place diagnostic label above center of rect
   const label = makeDiagnosticLabel("Rect", rectId, x + w / 2, y);
@@ -263,6 +274,7 @@ export function makeRectShape(x, y, w, h) {
 
 /**
  * Make a circle shape.
+ * Only the Group is selectable/evented; children are not.
  */
 export function makeCircleShape(x, y, r) {
   log("DEBUG", "[shapes] makeCircleShape ENTRY", { x, y, r, settings: getState().settings });
@@ -283,14 +295,14 @@ export function makeCircleShape(x, y, r) {
     radius: r,
     stroke: strokeColor,
     strokeWidth: currentStrokeWidth,
-    fill: fillColor,
-    selectable: true,
-    evented: true
+    fill: fillColor
   });
   circle._type = 'circle';
   circle._label = 'Circle';
   circle.locked = false;
   circle._id = circleId;
+  circle.selectable = false;
+  circle.evented = false;
 
   // Place diagnostic label above center of circle
   const label = makeDiagnosticLabel("Circle", circleId, x, y - r);

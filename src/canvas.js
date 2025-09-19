@@ -1,7 +1,7 @@
 /**
  * canvas.js
  * -----------------------------------------------------------
- * Scene Designer – Canvas/Fabric.js Panel (Debug Logging Edition, Enhanced Diagnostics)
+ * Scene Designer – Canvas/Fabric.js Panel (Debug Logging Edition, Enhanced Diagnostics, Parent Group Selection Fix)
  * - Fabric.js canvas creation, image background, shape management.
  * - All selection/deselection/multiselect handled in a single canvas event handler.
  * - State is managed via Zustand store from state.js.
@@ -9,6 +9,7 @@
  * - Panel factory for MiniLayout; renders the main canvas panel.
  * - DEBUG logging everywhere for robust bug diagnosis—especially selection!
  * - **Enhanced: Logs state/canvas shapes and selection refs on every selection and deletion.**
+ * - **FIX: Always resolves selection to parent Group if a child is clicked.**
  * -----------------------------------------------------------
  */
 
@@ -36,6 +37,30 @@ function getCanonicalShapeById(shapeLike) {
   if (!shapeLike || !shapeLike._id) return null;
   const shapes = getState().shapes || [];
   return shapes.find(s => s._id === shapeLike._id) || null;
+}
+
+/**
+ * Utility: If the clicked object is a child of a Group, walk up to the parent Group.
+ * @param {Object} obj - Fabric.js object from pointer event
+ * @returns {Object|null} parent Group or self if already a Group
+ */
+function getParentGroup(obj) {
+  // Fabric.js stores group as .group or .parent or .__group
+  // Prefer .group, fallback to .parent, fallback to self
+  let current = obj;
+  let guard = 0;
+  while (current && current.type !== 'group' && guard < 5) {
+    if (current.group) {
+      current = current.group;
+    } else if (current.parent) {
+      current = current.parent;
+    } else {
+      break;
+    }
+    guard++;
+  }
+  if (current && current.type === 'group') return current;
+  return obj && obj.type === 'group' ? obj : null;
 }
 
 /**
@@ -184,6 +209,7 @@ function updateBackgroundImage(containerDiv, element) {
 /**
  * Centralized canvas pointer event handler for selection/deselection/multiselect.
  * Now with extra logging for shape selection debugging!
+ * **Always resolves selection to parent Group if a child is clicked.**
  */
 function centralizedCanvasPointerHandler(e) {
   log("DEBUG", "[canvas] centralizedCanvasPointerHandler FIRED", {
@@ -220,8 +246,25 @@ function centralizedCanvasPointerHandler(e) {
     return;
   }
 
-  // If a shape is clicked
-  const shapeEventObj = e.target;
+  // Always resolve to parent Group if child is clicked
+  let shapeEventObj = e.target;
+  const parentGroup = getParentGroup(shapeEventObj);
+  if (parentGroup) {
+    shapeEventObj = parentGroup;
+    log("DEBUG", "[canvas] centralized handler: resolved to parent group", {
+      originalType: e.target.type,
+      resolvedType: parentGroup.type,
+      resolvedId: parentGroup._id,
+      label: parentGroup._label
+    });
+  } else {
+    log("DEBUG", "[canvas] centralized handler: target is already a group or no parent group found", {
+      originalType: e.target.type,
+      id: e.target._id,
+      label: e.target._label
+    });
+  }
+
   log("DEBUG", "[canvas] centralized handler: shape clicked", {
     shapeType: shapeEventObj._type,
     shapeLabel: shapeEventObj._label,
