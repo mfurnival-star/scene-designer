@@ -19,6 +19,11 @@ UI/transformer allows resizing/expansion of point shapes, which should be fixed.
 ### defect5: MiniLayout panel sizes not saved/restored
 Panel sizing changes via splitters are not preserved between reloads.
 
+### defect8: No scroll bars on canvas for large images
+When loading an image larger than the canvas/panel, the expected scroll bars do not appear and the image/canvas is clipped to the panel size.  
+**Expected:** Scroll bars (horizontal/vertical) should appear when the image is larger than the visible canvas area, allowing the user to pan and view the entire image.  
+**Observed:** No scroll bars are shown; overflow is hidden, so large images cannot be fully viewed.
+
 ---
 
 ## Resolved Defects
@@ -49,4 +54,3 @@ FORCE values set via `window.SCENE_DESIGNER_FORCE_SETTINGS` (from index.html) di
 ---
 
 *Last updated: 2025-09-19*
-
