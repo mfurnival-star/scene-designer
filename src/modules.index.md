@@ -19,6 +19,8 @@ minilayout.js
 minilayout-ui.js
 minilayout.css
 minilayout.DOCS.md
+scenario-runner.js
+scenario-panel.js
 ```
 
 ---
@@ -104,8 +106,19 @@ minilayout.DOCS.md
 - **minilayout.DOCS.md**  
   Documentation and API reference for MiniLayout (native layout engine).
 
+- **scenario-runner.js**  
+  Scenario runner module:
+  - Runs scripted scenarios for automated testing (calls any exported function, log/dump/assert steps).
+  - Registry for named scenarios.
+  - Logging via log.js.
+
+- **scenario-panel.js**  
+  Scenario Runner UI panel (MiniLayout):
+  - Select, run, and view logs/results for registered scenarios.
+  - Uses scenario-runner.js API.
+  - Logging via log.js.
+
 ---
 
 **Instructions:**  
 Keep this file updated per SCENE_DESIGNER_MANIFESTO.md.
-
