@@ -1,10 +1,10 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (Simplified Edition, Actions Decoupled)
+ * Scene Designer – Modular Toolbar UI Factory (Enhanced Styling Edition)
  * - Factory for toolbar controls: image upload, server image select, shape type, add/delete.
- * - Only working buttons are visible; others hidden for now.
- * - Double toolbar height for dev/test ergonomics.
+ * - All controls are visually grouped, evenly sized, and aligned.
+ * - Improved color, spacing, rounded corners, subtle shadow, and hover effects.
  * - ES module only, all dependencies imported.
  * - All shape/scene actions are emitted as intents to actions.js.
  * - NO business logic, selection, or state mutation.
@@ -24,7 +24,7 @@ import {
  * Build the canvas toolbar panel.
  * - All UI events are handled here.
  * - Only the toolbar panel creates the controls.
- * - Only working buttons shown; others hidden for now.
+ * - Enhanced styling: grouped controls, uniform height, subtle shadow, hover, alignment.
  * - MiniLayout compliance: accepts { element, title, componentName }.
  */
 export function buildCanvasToolbarPanel({ element, title, componentName }) {
@@ -34,67 +34,77 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 
-  // Inject toolbar styles (once per document)
+  // Inject improved toolbar styles (once per document)
   if (typeof document !== "undefined" && !document.getElementById("scene-designer-toolbar-style")) {
     const style = document.createElement("style");
     style.id = "scene-designer-toolbar-style";
     style.textContent = `
       #canvas-toolbar-container {
         width: 100%;
-        min-height: 88px; /* DOUBLE height for dev/test */
-        background: #f8f8fa;
-        border-bottom: 1px solid #bbb;
+        min-height: 62px;
+        background: linear-gradient(90deg, #f4f8ff 0%, #e6eaf9 100%);
+        border-bottom: 1.5px solid #b8c6e6;
         display: flex;
-        flex-wrap: wrap;
         align-items: center;
-        gap: 14px;
-        padding: 16px 18px;
+        gap: 18px;
+        padding: 18px 24px 14px 24px;
+        box-shadow: 0 1.5px 6px -2px #b8c6e6;
+        border-radius: 0 0 13px 13px;
       }
-      #canvas-toolbar-container .toolbar-btn,
-      #canvas-toolbar-container select {
-        font-size: 1.14em;
+      #canvas-toolbar-container > * {
+        margin: 0 3px;
+      }
+      .toolbar-group {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        border-radius: 8px;
+        background: #f8fbff;
+        padding: 7px 12px;
+        box-shadow: 0 1px 5px -4px #2176ff;
+        margin-right: 12px;
+      }
+      .toolbar-label {
+        font-size: 1.10em;
+        color: #345;
+        font-weight: 600;
+        margin-right: 10px;
+        margin-left: 10px;
+      }
+      .toolbar-btn,
+      #canvas-toolbar-container select,
+      label[for="toolbar-image-upload"] {
+        font-size: 1.16em;
         font-family: inherit;
-        border: 1px solid #888;
+        border: 1.5px solid #8ca6c6;
         background: #fff;
-        color: #222;
-        border-radius: 4px;
-        padding: 9px 16px;
-        margin: 4px 3px 3px 0;
+        color: #234;
+        border-radius: 7px;
+        padding: 11px 24px;
+        min-width: 94px;
+        min-height: 45px;
+        height: 45px;
         outline: none;
-        box-shadow: none;
-        transition: background 0.15s;
+        box-shadow: 0 1.5px 3px -1px #e3f0fa;
+        transition: background 0.15s, box-shadow 0.14s, border-color 0.12s;
         cursor: pointer;
-        min-width: 54px;
-        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
-      #canvas-toolbar-container .toolbar-btn:hover {
-        background: #e8eff8;
+      .toolbar-btn:hover,
+      label[for="toolbar-image-upload"]:hover,
+      #canvas-toolbar-container select:hover {
+        background: #eaf2fc;
+        border-color: #2176ff;
+        box-shadow: 0 2px 7px -2px #b8c6e6;
       }
-      #canvas-toolbar-container input[type="file"] {
+      input[type="file"] {
         display: none;
       }
-      #canvas-toolbar-container label[for="toolbar-image-upload"] {
-        display: inline-block;
-        font-size: 1.13em;
-        border: 1px solid #888;
-        background: #fff;
-        color: #222;
-        border-radius: 4px;
-        padding: 10px 18px;
-        margin: 4px 2px 2px 0;
-        cursor: pointer;
-        min-width: 54px;
-        min-height: 44px;
-        outline: none;
-        box-shadow: none;
-        transition: background 0.15s;
-      }
-      #canvas-toolbar-container label[for="toolbar-image-upload"]:hover {
-        background: #e8eff8;
-      }
       /* Hide unused buttons for now */
-      #canvas-toolbar-container .toolbar-btn.hidden,
-      #canvas-toolbar-container .toolbar-btn[aria-hidden="true"] {
+      .toolbar-btn.hidden,
+      .toolbar-btn[aria-hidden="true"] {
         display: none !important;
       }
     `;
@@ -108,29 +118,33 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       componentName
     });
 
-    // Toolbar HTML (only show working controls)
+    // Enhanced toolbar HTML with visual grouping
     element.innerHTML = `
       <div id="canvas-toolbar-container">
-        <label for="toolbar-image-upload" title="Upload image">Upload Image</label>
-        <input type="file" id="toolbar-image-upload" accept="image/*">
-        <select id="toolbar-server-image-select" title="Choose server image">
-          <option value="">[Server image]</option>
-          <option value="sample1.png">sample1.png</option>
-          <option value="sample2.png">sample2.png</option>
-        </select>
-        <span style="margin-left:8px;">Shape:</span>
-        <select id="toolbar-shape-type-select">
-          <option value="point">Point</option>
-          <option value="rect">Rectangle</option>
-          <option value="circle">Circle</option>
-        </select>
-        <button id="toolbar-add-shape-btn" class="toolbar-btn">Add</button>
-        <button id="toolbar-delete-shape-btn" class="toolbar-btn">Delete</button>
-        <!-- Hidden buttons, will be unhidden when implemented -->
-        <button id="toolbar-duplicate-shape-btn" class="toolbar-btn hidden" aria-hidden="true">Duplicate</button>
-        <button id="toolbar-select-all-btn" class="toolbar-btn hidden" aria-hidden="true">Select All</button>
-        <button id="toolbar-lock-btn" class="toolbar-btn hidden" aria-hidden="true">Lock</button>
-        <button id="toolbar-unlock-btn" class="toolbar-btn hidden" aria-hidden="true">Unlock</button>
+        <div class="toolbar-group">
+          <label for="toolbar-image-upload" class="toolbar-btn" title="Upload image">Upload Image</label>
+          <input type="file" id="toolbar-image-upload" accept="image/*">
+          <select id="toolbar-server-image-select" class="toolbar-btn" title="Choose server image">
+            <option value="">[Server image]</option>
+            <option value="sample1.png">sample1.png</option>
+            <option value="sample2.png">sample2.png</option>
+          </select>
+        </div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Shape:</span>
+          <select id="toolbar-shape-type-select" class="toolbar-btn">
+            <option value="point">Point</option>
+            <option value="rect">Rectangle</option>
+            <option value="circle">Circle</option>
+          </select>
+          <button id="toolbar-add-shape-btn" class="toolbar-btn" title="Add shape">&#x2795; Add</button>
+          <button id="toolbar-delete-shape-btn" class="toolbar-btn" title="Delete shape">&#x1F5D1; Delete</button>
+          <!-- Hidden buttons, will be unhidden when implemented -->
+          <button id="toolbar-duplicate-shape-btn" class="toolbar-btn hidden" aria-hidden="true">Duplicate</button>
+          <button id="toolbar-select-all-btn" class="toolbar-btn hidden" aria-hidden="true">Select All</button>
+          <button id="toolbar-lock-btn" class="toolbar-btn hidden" aria-hidden="true">Lock</button>
+          <button id="toolbar-unlock-btn" class="toolbar-btn hidden" aria-hidden="true">Unlock</button>
+        </div>
       </div>
     `;
 
@@ -197,7 +211,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       deleteSelectedShapes();
     });
 
-    log("INFO", "[toolbar] Toolbar panel fully initialized (simplified, only working controls, ESM only)");
+    log("INFO", "[toolbar] Toolbar panel fully initialized (enhanced, grouped, ESM only)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
