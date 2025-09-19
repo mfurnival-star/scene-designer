@@ -12,7 +12,8 @@
  * - All shape/scene actions are emitted as intents to actions.js.
  * - NO business logic, selection, or state mutation.
  * - Logging via log.js.
- * - **NEW: Delete button is disabled if no shape is selected (UX improvement).**
+ * - **Delete button is disabled if no shape is selected (UX improvement).**
+ * - **FIX: Delete button always updates on any selection change (defect1 fix).**
  * -----------------------------------------------------------
  */
 
@@ -313,22 +314,12 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     }
     // Initial state
     updateDeleteButtonState();
-    // Subscribe to selection changes
-    sceneDesignerStore.subscribe((state, details) => {
-      if (
-        details &&
-        (
-          details.type === "setSelectedShapes" ||
-          details.type === "setState" ||
-          details.type === "removeShape" ||
-          details.type === "addShape"
-        )
-      ) {
-        updateDeleteButtonState();
-      }
+    // Subscribe to ALL state changes (no filter!) for selection changes
+    sceneDesignerStore.subscribe(() => {
+      updateDeleteButtonState();
     });
 
-    log("INFO", "[toolbar] Toolbar panel fully initialized (compact, scalable, single row, Delete button disables if none selected)");
+    log("INFO", "[toolbar] Toolbar panel fully initialized (compact, scalable, single row, Delete button disables if none selected, defect1 fix)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
