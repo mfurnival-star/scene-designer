@@ -129,10 +129,12 @@ function updateBackgroundImage(containerDiv, element) {
         hasControls: false,
         hoverCursor: 'default'
       });
+      // Set canvas and container to image size
       canvas.setWidth(img.width);
       canvas.setHeight(img.height);
       containerDiv.style.width = img.width + "px";
       containerDiv.style.height = img.height + "px";
+      // Clamp parent panel body to panel size, overflow: auto
       if (element) {
         element.style.overflow = "auto";
         element.style.width = "100%";
@@ -289,12 +291,13 @@ export function buildCanvasPanel({ element, title, componentName }) {
     const containerDiv = document.createElement('div');
     containerDiv.id = "fabric-canvas-div";
     containerDiv.style.position = "relative";
-    containerDiv.style.width = width + "px";
-    containerDiv.style.height = height + "px";
-    containerDiv.style.overflow = "auto";
     containerDiv.style.background = "#f7f9fc";
+    // NOTE: Do NOT set width/height here; let image size dictate after load
+    containerDiv.style.overflow = "visible"; // allow child to overflow, panel body will scroll
     element.innerHTML = "";
     element.style.overflow = "auto";
+    element.style.width = "100%";
+    element.style.height = "100%";
     element.appendChild(containerDiv);
 
     const canvasEl = document.createElement('canvas');
