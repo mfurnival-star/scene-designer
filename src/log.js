@@ -238,20 +238,12 @@ let _logStreamErrorInProgress = false;
 
 /**
  * Async log streaming to external server (safe serialization).
- * Now with extra TRACE-level logs before and after streaming for diagnostics.
  * Prevents recursion if streaming itself fails.
  */
 export async function logStream(levelNum, ...args) {
   if (!externalLogServerURL) return;
   try {
-    // --- Added: TRACE log before streaming ---
-    log(LOG_LEVELS.TRACE, "[logStream] Preparing to stream log", {
-      levelNum,
-      levelName: levelName(levelNum),
-      args,
-      serverURL: externalLogServerURL,
-      token: externalLogServerToken
-    });
+    // TRACE-level logs inside logStream were removed to prevent recursion.
 
     const payload = {
       level: levelNum,
@@ -264,16 +256,13 @@ export async function logStream(levelNum, ...args) {
       loggerInstance: LOGGER_INSTANCE_ID
     };
 
-    // --- Added: TRACE log with payload ---
-    log(LOG_LEVELS.TRACE, "[logStream] Streaming payload", payload);
-
     const resp = await fetch(externalLogServerURL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
-    // --- Added: INFO log after successful streaming ---
+    // INFO log after successful streaming
     if (resp.ok) {
       log(LOG_LEVELS.INFO, "[logStream] Log streamed successfully", {
         status: resp.status,
