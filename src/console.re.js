@@ -17,6 +17,11 @@ import { ConsoleRemoteClient } from 'console-remote-client';
  * @param {string} channel - Your Console.Re channel name.
  */
 export function initConsoleRe(channel) {
+  // Diagnostic log: confirm channel passed
+  import('./log.js').then(({ log }) => {
+    log("TRACE", "[console.re] initConsoleRe called", { channel });
+  }).catch(() => {});
+
   const client = new ConsoleRemoteClient({
     channel,
     interceptConsole: true // Ensures all native console logs are streamed
@@ -24,3 +29,4 @@ export function initConsoleRe(channel) {
   });
   client.open();
 }
+
