@@ -1,5 +1,5 @@
 #!/bin/bash
-# Scene Designer Deploy Script (prod or dev, auto FORCE settings/Eruda injection, clean-up logic)
+# Scene Designer Deploy Script (prod or dev, auto FORCE settings/Eruda/Console.Re injection, clean-up logic)
 # ---------------------------------------------------------------------------
 # Usage:
 #   [VAR=VALUE ...] ./deploy.sh [prod|dev]
@@ -21,6 +21,8 @@ MODE="${1:-prod}"
 if [[ $# -gt 0 ]]; then shift; fi
 
 INJECT_ERUDA="${INJECT_ERUDA:-0}"
+INJECT_CONSOLERE="${INJECT_CONSOLERE:-0}"
+CONSOLERE_TOKEN="${CONSOLERE_TOKEN:-}"
 
 function usage() {
   cat <<EOF
@@ -31,12 +33,14 @@ Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
 
 Environment variables:
   INJECT_ERUDA     1 to add Eruda debug console, 0 otherwise   [default: 0]
+  INJECT_CONSOLERE 1 to add Console.Re log streaming, 0 otherwise
+  CONSOLERE_TOKEN  Console.Re API token (required if injecting Console.Re)
   <any FORCE setting key>
     e.g. LOG_LEVEL, LOG_OUTPUT_DEST, LOG_SERVER_URL, INTERCEPT_CONSOLE
 
 Examples:
+  INJECT_CONSOLERE=1 CONSOLERE_TOKEN=YOUR_TOKEN ./deploy.sh dev
   INJECT_ERUDA=1 ./deploy.sh prod
-  LOG_LEVEL="Trace (very verbose)" LOG_OUTPUT_DEST=server ./deploy.sh dev
 
 EOF
   exit 0
@@ -83,6 +87,27 @@ function inject_eruda() {
   fi
 }
 
+function inject_consolere() {
+  echo "[$DATESTAMP] === (Re)inserting Console.Re (if enabled) ==="
+  sed -i '/<!-- BEGIN CONSOLERE -->/,/<!-- END CONSOLERE -->/d' "$INDEX_HTML"
+  if [[ "$INJECT_CONSOLERE" == "1" && -n "$CONSOLERE_TOKEN" ]]; then
+    awk -v token="$CONSOLERE_TOKEN" '
+      /<\/body>/ {
+        print "  <!-- BEGIN CONSOLERE -->";
+        print "  <script type=\"module\">";
+        print "    import { initConsoleRe } from \x22./src/console.re.js\x22;";
+        print "    initConsoleRe(\x22" token "\x22);";
+        print "  </script>";
+        print "  <!-- END CONSOLERE -->";
+      }
+      { print }
+    ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
+    echo "[$DATESTAMP] === Injected Console.Re script into $INDEX_HTML ==="
+  else
+    echo "[$DATESTAMP] === Console.Re injection not requested or token missing. Skipping. ==="
+  fi
+}
+
 function inject_force_settings_block() {
   echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settings.js keys ==="
   # Remove any previous FORCE block first
@@ -103,44 +128,6 @@ function inject_force_settings_block() {
     fi
   done < <(grep -E 'key:|type:' "$SETTINGS_JS" | paste - -)
 
-  # --- Debug listing: show all env vars and settings keys ---
-  echo "[$DATESTAMP] === ENV VAR DEBUG LIST ==="
-  echo "  (Env var name) | (Value) | (Settings key match)"
-  echo "-----------------|--------|----------------------"
-  for var in $(env | cut -d= -f1 | sort); do
-    [[ "$var" =~ ^BASH_ ]] && continue
-    [[ "$var" =~ ^SHLVL$ ]] && continue
-    [[ "$var" =~ ^PWD$ ]] && continue
-    [[ "$var" =~ ^OLDPWD$ ]] && continue
-    [[ "$var" =~ ^_$ ]] && continue
-    [[ "$var" =~ ^LS_COLORS$ ]] && continue
-    [[ "$var" =~ ^PATH$ ]] && continue
-    [[ "$var" =~ ^HOME$ ]] && continue
-    [[ "$var" =~ ^LANG$ ]] && continue
-    [[ "$var" =~ ^TERM$ ]] && continue
-    [[ "$var" =~ ^USER$ ]] && continue
-    [[ "$var" =~ ^LOGNAME$ ]] && continue
-    [[ "$var" =~ ^SHELL$ ]] && continue
-    [[ "$var" =~ ^HOSTNAME$ ]] && continue
-    [[ "$var" =~ ^MAIL$ ]] && continue
-    val="${!var}"
-    match="NO MATCH"
-    for key in $keys; do
-      if [[ "$var" == "$key" ]]; then
-        match="MATCH"
-        break
-      fi
-    done
-    echo "  $var | $val | $match"
-  done
-  echo "-----------------|--------|----------------------"
-  echo "  Settings keys from $SETTINGS_JS:"
-  for key in $keys; do
-    echo "    $key (type: ${key_type[$key]:-UNKNOWN})"
-  done
-  echo "-----------------|--------|----------------------"
-
-  # --- Build FORCE block ---
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
   for key in $keys; do
@@ -172,7 +159,6 @@ function inject_force_settings_block() {
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
     echo "[$DATESTAMP] === FORCE settings injected into $INDEX_HTML ==="
   else
-    # Remove any old block if present (already done above)
     echo "[$DATESTAMP] === No FORCE settings found in env. Previous block removed. ==="
   fi
 }
@@ -191,8 +177,12 @@ function deploy_to_prod() {
 function start_dev_server() {
   echo "[$DATESTAMP] === Starting DEV SERVER (npm run dev) ==="
   export INJECT_ERUDA="$INJECT_ERUDA"
+  export INJECT_CONSOLERE="$INJECT_CONSOLERE"
+  export CONSOLERE_TOKEN="$CONSOLERE_TOKEN"
   cat > .env.local <<EOF
 VITE_INJECT_ERUDA=$INJECT_ERUDA
+VITE_INJECT_CONSOLERE=$INJECT_CONSOLERE
+VITE_CONSOLERE_TOKEN=$CONSOLERE_TOKEN
 EOF
   echo "  (env written to .env.local)"
   npm run dev
@@ -208,16 +198,16 @@ if [[ "$MODE" == "prod" ]]; then
   build_project
   prepare_index_html
   inject_eruda
+  inject_consolere
   inject_force_settings_block
   deploy_to_prod
 else
   INDEX_HTML="$ROOT_INDEX_HTML"
   prepare_index_html
   inject_eruda
+  inject_consolere
   inject_force_settings_block
   start_dev_server
 fi
 
 exit 0
-
-

@@ -22,8 +22,8 @@ import {
   log,
   setLogLevel,
   setLogDestination,
-  setLogServerURL,
-  setLogServerToken
+  // setLogServerURL,
+  // setLogServerToken
 } from './log.js';
 import {
   enableConsoleInterception,
@@ -117,14 +117,14 @@ export const settingsRegistry = [
     label: "Log Output Destination",
     type: "select",
     options: [
-      { value: "console", label: "console" },
-      { value: "server", label: "server" },
-      { value: "both", label: "both" }
+      { value: "console", label: "console" }
+      // { value: "server", label: "server" },
+      // { value: "both", label: "both" }
     ],
     default: "console"
   },
-  { key: "LOG_SERVER_URL", label: "Log Server URL", type: "text", default: "" },
-  { key: "LOG_SERVER_TOKEN", label: "Log Server Token", type: "text", default: "" },
+  // { key: "LOG_SERVER_URL", label: "Log Server URL", type: "text", default: "" },
+  // { key: "LOG_SERVER_TOKEN", label: "Log Server Token", type: "text", default: "" },
   { key: "INTERCEPT_CONSOLE", label: "Intercept All Console Logs (for Mobile/Dev)", type: "boolean", default: false },
   { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true }
 ];
@@ -306,14 +306,14 @@ function updateLogConfigFromSettings(settings) {
     setLogLevelByNum(num);
   }
   if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
-  if ("LOG_SERVER_URL" in settings) setLogServerURL(settings.LOG_SERVER_URL);
-  if ("LOG_SERVER_TOKEN" in settings) setLogServerToken(settings.LOG_SERVER_TOKEN);
+  // if ("LOG_SERVER_URL" in settings) setLogServerURL(settings.LOG_SERVER_URL);
+  // if ("LOG_SERVER_TOKEN" in settings) setLogServerToken(settings.LOG_SERVER_TOKEN);
   // --- Added TRACE log after logging config updated ---
   log("TRACE", "[settings] Logging config updated", {
     logLevel: settings.DEBUG_LOG_LEVEL,
-    logDest: settings.LOG_OUTPUT_DEST,
-    logServerURL: settings.LOG_SERVER_URL,
-    logServerToken: settings.LOG_SERVER_TOKEN
+    logDest: settings.LOG_OUTPUT_DEST
+    // logServerURL: settings.LOG_SERVER_URL,
+    // logServerToken: settings.LOG_SERVER_TOKEN
   });
 }
 

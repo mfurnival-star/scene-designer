@@ -28,8 +28,8 @@ export const LOG_LEVEL_NAME_TO_NUM = {
 const LOGGER_INSTANCE_ID = Math.random().toString(36).slice(2) + "-" + Date.now();
 let curLogLevelNum = 3; // Default: INFO
 let logDest = "console"; // "console", "server", or "both"
-let externalLogServerURL = "";
-let externalLogServerToken = "";
+// let externalLogServerURL = "";
+// let externalLogServerToken = "";
 
 // Pluggable sinks: each receives (levelNum, ...args)
 const logSinks = [];
@@ -68,25 +68,20 @@ export function getLogDestination() {
   return logDest;
 }
 
-/**
- * Set external log server URL/token.
- */
-export function setLogServerURL(url) {
-  externalLogServerURL = url || "";
-}
-export function setLogServerToken(token) {
-  externalLogServerToken = token || "";
-}
+// Commented out: log server config
+// export function setLogServerURL(url) {
+//   externalLogServerURL = url || "";
+// }
+// export function setLogServerToken(token) {
+//   externalLogServerToken = token || "";
+// }
 
-/**
- * Configure all logging params at once (used by settings.js).
- * Accepts log level as number (0–5).
- */
-export function configureLogging({ level, dest, serverURL, token }) {
+// Commented out: configure server logging
+export function configureLogging({ level, dest /*, serverURL, token */ }) {
   if (typeof level === "number") setLogLevel(level);
   if (dest) setLogDestination(dest);
-  if (serverURL) setLogServerURL(serverURL);
-  if (token) setLogServerToken(token);
+  // if (serverURL) setLogServerURL(serverURL);
+  // if (token) setLogServerToken(token);
 }
 
 /**
@@ -173,7 +168,7 @@ export function log(levelNum, ...args) {
   const curLevelNum = curLogLevelNum;
 
   // Detect if this is the "[logStream] Failed to stream log" error
-  const isLogStreamError = args[0] && typeof args[0] === "string" && args[0].includes("[logStream] Failed to stream log");
+  // const isLogStreamError = args[0] && typeof args[0] === "string" && args[0].includes("[logStream] Failed to stream log");
 
   // Always show errors even in SILENT mode
   if (msgLevelNum === LOG_LEVELS.ERROR) {
@@ -193,10 +188,10 @@ export function log(levelNum, ...args) {
         }
       }
     }
-    // Only stream to server if NOT a logStream error
-    if (!isLogStreamError && (logDest === "server" || logDest === "both") && externalLogServerURL) {
-      logStream(msgLevelNum, ...args);
-    }
+    // Disabled: server streaming
+    // if (!isLogStreamError && (logDest === "server" || logDest === "both") && externalLogServerURL) {
+    //   logStream(msgLevelNum, ...args);
+    // }
     return;
   }
 
@@ -216,10 +211,10 @@ export function log(levelNum, ...args) {
       else if (console.log) console.log(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
     }
   }
-  // Server streaming
-  if ((logDest === "server" || logDest === "both") && externalLogServerURL) {
-    logStream(msgLevelNum, ...args);
-  }
+  // Disabled: server streaming
+  // if ((logDest === "server" || logDest === "both") && externalLogServerURL) {
+  //   logStream(msgLevelNum, ...args);
+  // }
   // Panel sinks
   for (const sink of logSinks) {
     try {
@@ -234,69 +229,66 @@ export function log(levelNum, ...args) {
 }
 
 // --- Recursion guard for logStream errors ---
-let _logStreamErrorInProgress = false;
+// let _logStreamErrorInProgress = false;
 
 /**
  * Async log streaming to external server (safe serialization).
  * Prevents recursion if streaming itself fails.
  */
-export async function logStream(levelNum, ...args) {
-  if (!externalLogServerURL) return;
-  try {
-    // TRACE-level logs inside logStream were removed to prevent recursion.
-
-    const payload = {
-      level: levelNum,
-      levelName: levelName(levelNum),
-      message: args.map(safeStringify).join(" "),
-      timestamp: (new Date()).toISOString(),
-      page: typeof location === "object" && location.pathname,
-      userAgent: typeof navigator === "object" && navigator.userAgent,
-      token: externalLogServerToken,
-      loggerInstance: LOGGER_INSTANCE_ID
-    };
-
-    const resp = await fetch(externalLogServerURL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    // INFO log after successful streaming
-    if (resp.ok) {
-      log(LOG_LEVELS.INFO, "[logStream] Log streamed successfully", {
-        status: resp.status,
-        statusText: resp.statusText,
-        payload
-      });
-    } else {
-      log(LOG_LEVELS.ERROR, "[logStream] Log streaming failed", {
-        status: resp.status,
-        statusText: resp.statusText,
-        payload
-      });
-    }
-  } catch (e) {
-    // --- Prevent recursion ---
-    if (_logStreamErrorInProgress) return; // Don't log if already inside a logStream error
-    _logStreamErrorInProgress = true;
-    try {
-      // Only log to console and sinks, not to server
-      log(LOG_LEVELS.ERROR, "[logStream] Failed to stream log", ...args, e);
-      if (typeof console !== "undefined" && console.error) {
-        console.error(`[log][${LOGGER_INSTANCE_ID}]`, levelName(levelNum), "Failed to stream log", ...args, e);
-      }
-    } finally {
-      _logStreamErrorInProgress = false;
-    }
-  }
-}
+// export async function logStream(levelNum, ...args) {
+//   if (!externalLogServerURL) return;
+//   try {
+//     // TRACE-level logs inside logStream were removed to prevent recursion.
+//     const payload = {
+//       level: levelNum,
+//       levelName: levelName(levelNum),
+//       message: args.map(safeStringify).join(" "),
+//       timestamp: (new Date()).toISOString(),
+//       page: typeof location === "object" && location.pathname,
+//       userAgent: typeof navigator === "object" && navigator.userAgent,
+//       token: externalLogServerToken,
+//       loggerInstance: LOGGER_INSTANCE_ID
+//     };
+//     const resp = await fetch(externalLogServerURL, {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       body: JSON.stringify(payload)
+//     });
+//     // INFO log after successful streaming
+//     if (resp.ok) {
+//       log(LOG_LEVELS.INFO, "[logStream] Log streamed successfully", {
+//         status: resp.status,
+//         statusText: resp.statusText,
+//         payload
+//       });
+//     } else {
+//       log(LOG_LEVELS.ERROR, "[logStream] Log streaming failed", {
+//         status: resp.status,
+//         statusText: resp.statusText,
+//         payload
+//       });
+//     }
+//   } catch (e) {
+//     // --- Prevent recursion ---
+//     if (_logStreamErrorInProgress) return; // Don't log if already inside a logStream error
+//     _logStreamErrorInProgress = true;
+//     try {
+//       // Only log to console and sinks, not to server
+//       log(LOG_LEVELS.ERROR, "[logStream] Failed to stream log", ...args, e);
+//       if (typeof console !== "undefined" && console.error) {
+//         console.error(`[log][${LOGGER_INSTANCE_ID}]`, levelName(levelNum), "Failed to stream log", ...args, e);
+//       }
+//     } finally {
+//       _logStreamErrorInProgress = false;
+//     }
+//   }
+// }
 
 /**
  * For settings.js to fully re-sync config (optional).
  */
-export function reconfigureLoggingFromSettings({ level, dest, serverURL, token }) {
-  configureLogging({ level, dest, serverURL, token });
+export function reconfigureLoggingFromSettings({ level, dest /*, serverURL, token */ }) {
+  configureLogging({ level, dest /*, serverURL, token */ });
 }
 
 // Optionally attach to window for debugging (dev only, not for prod use)
@@ -305,8 +297,8 @@ if (typeof window !== "undefined") {
   window.setLogLevel = setLogLevel;
   window.getLogLevel = getLogLevel;
   window.setLogDestination = setLogDestination;
-  window.setLogServerURL = setLogServerURL;
-  window.setLogServerToken = setLogServerToken;
+  // window.setLogServerURL = setLogServerURL;
+  // window.setLogServerToken = setLogServerToken;
   window.LOG_LEVELS = LOG_LEVELS;
   window.__loggerInstanceId = LOGGER_INSTANCE_ID;
 }
