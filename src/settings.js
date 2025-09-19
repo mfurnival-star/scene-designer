@@ -1,12 +1,13 @@
 /**
  * settings.js
  * -------------------------------------------------------------------
- * Scene Designer – Settings Core/Panel (ESM ONLY, Zustand Migration)
+ * Scene Designer – Settings Core/Panel (ESM ONLY, Zustand Migration, Logging Refactor)
  * - Robust settings system, ES module only, no window/global usage.
  * - Persistent settings via localForage, force mode via window.SCENE_DESIGNER_FORCE_SETTINGS if present.
  * - All config values from Zustand store.
  * - Settings panel uses Tweakpane.
  * - Logging via log.js.
+ * - **Logging destination is now only 'console' or 'both' (no custom server, no error pane sink).**
  * -------------------------------------------------------------------
  */
 
@@ -22,8 +23,6 @@ import {
   log,
   setLogLevel,
   setLogDestination,
-  // setLogServerURL,
-  // setLogServerToken
 } from './log.js';
 import {
   enableConsoleInterception,
@@ -117,14 +116,11 @@ export const settingsRegistry = [
     label: "Log Output Destination",
     type: "select",
     options: [
-      { value: "console", label: "console" }
-      // { value: "server", label: "server" },
-      // { value: "both", label: "both" }
+      { value: "console", label: "console" },
+      { value: "both", label: "both" }
     ],
     default: "console"
   },
-  // { key: "LOG_SERVER_URL", label: "Log Server URL", type: "text", default: "" },
-  // { key: "LOG_SERVER_TOKEN", label: "Log Server Token", type: "text", default: "" },
   { key: "INTERCEPT_CONSOLE", label: "Intercept All Console Logs (for Mobile/Dev)", type: "boolean", default: false },
   { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true }
 ];
@@ -196,7 +192,6 @@ export async function loadSettings() {
     updateLogConfigFromSettings(merged);
     updateConsoleInterceptionFromSettings(merged);
     log("DEBUG", "[settings] Settings loaded and applied", merged);
-    // --- Added TRACE log to dump all settings after load ---
     log("TRACE", "[settings] Full settings after load", { settings: getState().settings });
     log("TRACE", "[settings] loadSettings exit");
     return merged;
@@ -229,7 +224,6 @@ export async function saveSettings() {
     updateLogConfigFromSettings(getState().settings);
     updateConsoleInterceptionFromSettings(getState().settings);
     log("DEBUG", "[settings] Settings saved", toSave);
-    // --- Added TRACE log after saving settings ---
     log("TRACE", "[settings] Full settings after save", { settings: getState().settings });
     log("TRACE", "[settings] saveSettings exit");
   } catch (e) {
@@ -256,7 +250,6 @@ export async function setSettingAndSave(key, value) {
   }
   setSetting(key, valToSet);
   log("DEBUG", "[settings] setSettingAndSave: after setSetting", getState().settings);
-  // --- Added TRACE log after setting changed ---
   log("TRACE", `[settings] setSettingAndSave: setting '${key}' changed`, { value: valToSet, fullSettings: getState().settings });
   await saveSettings();
   if (key === "showErrorLogPanel") setErrorLogPanelVisible(valToSet);
@@ -285,7 +278,6 @@ export async function setSettingsAndSave(settingsObj) {
   }
   setSettings(settingsObj);
   log("DEBUG", "[settings] setSettingsAndSave: after setSettings", getState().settings);
-  // --- Added TRACE log after all settings changed ---
   log("TRACE", "[settings] setSettingsAndSave: all settings changed", { fullSettings: getState().settings });
   await saveSettings();
   if ("showErrorLogPanel" in settingsObj) setErrorLogPanelVisible(settingsObj.showErrorLogPanel);
@@ -295,7 +287,6 @@ export async function setSettingsAndSave(settingsObj) {
 function setLogLevelByNum(numLevel) {
   let name = LOG_LEVEL_NUM_TO_LABEL[numLevel] ?? "Silent";
   setLogLevel(numLevel);
-  // --- Added TRACE log after log level change ---
   log("TRACE", "[settings] Log level changed", { numLevel, name });
 }
 
@@ -306,14 +297,9 @@ function updateLogConfigFromSettings(settings) {
     setLogLevelByNum(num);
   }
   if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
-  // if ("LOG_SERVER_URL" in settings) setLogServerURL(settings.LOG_SERVER_URL);
-  // if ("LOG_SERVER_TOKEN" in settings) setLogServerToken(settings.LOG_SERVER_TOKEN);
-  // --- Added TRACE log after logging config updated ---
   log("TRACE", "[settings] Logging config updated", {
     logLevel: settings.DEBUG_LOG_LEVEL,
     logDest: settings.LOG_OUTPUT_DEST
-    // logServerURL: settings.LOG_SERVER_URL,
-    // logServerToken: settings.LOG_SERVER_TOKEN
   });
 }
 
