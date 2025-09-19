@@ -4,14 +4,9 @@
  * Scene Designer – MiniLayout Engine (GL-inspired, splitters/draggable resize, compact neutral greys, fullscreen-safe)
  * - Minimal ES module layout engine for Scene Designer prototypes.
  * - Supports: rows, columns, stacks (tabs), component panels, flexible header config.
- * - GL-inspired: neutral greys, compact headers, optional close button per panel, header "tab" effect.
- * - Panel header: sticks out as a "tab" with rounded top corners.
- * - Panel config: { closable: true/false }, { headerHeight }, { headerFontSize }
+ * - Per-panel scrollbars: style/size/color fully configurable via layout config scrollbarStyle property.
  * - All code is ES module only; no global/window usage.
  * - Logging via log.js.
- * - Splitter bars between columns/rows, drag-to-resize enabled (vertical and horizontal) including mobile/touch support.
- * - Fixes overflow: no scrollbars on fullscreen, all borders/margins included in sizing.
- * - NEW: Per-panel scrollbars/overflow config via `scrollbars` property on component nodes.
  * -----------------------------------------------------------
  * Exports: MiniLayout
  * Dependencies: log.js
@@ -22,6 +17,44 @@ import { log } from './log.js';
 // Helper: Deep clone config object (to avoid mutation)
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
+}
+
+// Helper: Generate a unique CSS class name for a panel body
+function makePanelBodyClass(panelName) {
+  return `minilayout-panel-body--${panelName.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}`;
+}
+
+// Helper: Inject per-panel scrollbar CSS
+function injectPanelScrollbarCSS(className, styleObj) {
+  if (typeof document === "undefined" || document.getElementById(`scrollbar-style-${className}`)) return;
+  const style = document.createElement("style");
+  style.id = `scrollbar-style-${className}`;
+  let css = `.${className} { scrollbar-width: ${styleObj.width || "auto"}; scrollbar-color: ${styleObj.color || "#2176ff"} ${styleObj.track || "#e0e4ec"}; }`;
+  css += `
+    .${className}::-webkit-scrollbar {
+      width: ${styleObj.width || "12px"};
+      height: ${styleObj.height || styleObj.width || "12px"};
+      background: ${styleObj.track || "#e0e4ec"};
+      border-radius: ${styleObj.radius || "7px"};
+    }
+    .${className}::-webkit-scrollbar-thumb {
+      background: ${styleObj.color || "#2176ff"};
+      border-radius: ${styleObj.radius || "7px"};
+      border: 4px solid ${styleObj.track || "#e0e4ec"};
+      min-height: 36px;
+      min-width: 36px;
+    }
+    .${className}::-webkit-scrollbar-thumb:hover {
+      background: ${styleObj.hover || "#0057d8"};
+    }
+    .${className}::-webkit-scrollbar-track {
+      background: ${styleObj.track || "#e0e4ec"};
+      border-radius: ${styleObj.radius || "7px"};
+      border: 2px solid #bbb;
+    }
+  `;
+  style.textContent = css;
+  document.head.appendChild(style);
 }
 
 /**
@@ -88,7 +121,7 @@ export class MiniLayout {
     let item = { config: node, parent: parentItem };
     let el = document.createElement("div");
 
-    // Row/column logic
+    // Row/column logic (unchanged from previous)
     if (node.type === "row" || node.type === "column") {
       el.className = "minilayout-panel";
       el.style.display = "flex";
@@ -103,7 +136,6 @@ export class MiniLayout {
       const children = [];
       if (node.content && Array.isArray(node.content)) {
         node.content.forEach((child, idx) => {
-          // Insert splitter bar between children except before the first
           if (idx > 0) {
             const splitter = this._makeSplitter(node.type, el);
             el.appendChild(splitter);
@@ -161,13 +193,11 @@ export class MiniLayout {
       el.style.padding = "0";
       el.style.boxSizing = "border-box";
 
-      // --- Panel header with GL-like "tab" style, optional close button ---
+      // Panel header
       const header = document.createElement("div");
       header.className = "minilayout-panel-header";
       header.style.setProperty("--header-height", node.headerHeight ? node.headerHeight + "px" : "28px");
       header.style.fontSize = node.headerFontSize ?? "0.96em";
-
-      // Panel "tab" effect: slightly protruding, rounded top corners
       header.style.position = "relative";
       header.style.top = "-2px";
       header.style.left = "-2px";
@@ -185,7 +215,6 @@ export class MiniLayout {
       header.style.height = "var(--header-height)";
       header.style.padding = "2px 10px 2px 10px";
 
-      // Title/tag (sticks out to left)
       const titleTag = document.createElement("span");
       titleTag.className = "minilayout-panel-title";
       titleTag.textContent = node.title || node.componentName || "Panel";
@@ -199,7 +228,6 @@ export class MiniLayout {
       titleTag.style.userSelect = "none";
       header.appendChild(titleTag);
 
-      // --- Optional close "x" button (right side, only if closable) ---
       let showClose = node.closable === true;
       if (showClose) {
         const closeBtn = document.createElement("button");
@@ -225,51 +253,41 @@ export class MiniLayout {
 
       // --- Panel body ---
       const bodyDiv = document.createElement("div");
-      bodyDiv.className = "minilayout-panel-body";
+      // Generate unique class for panel body
+      const panelBodyClass = makePanelBodyClass(node.componentName || node.title || "panel");
+      bodyDiv.className = `minilayout-panel-body ${panelBodyClass}`;
       bodyDiv.style.flex = "1 1 0";
       bodyDiv.style.height = "100%";
       bodyDiv.style.background = node.bodyBg ?? "#f3f3f3";
       bodyDiv.style.padding = "0";
 
-      // --- NEW: Scrollbar/overflow config ---
-      // If node.scrollbars is present, set overflow explicitly
+      // --- Per-panel scrollbars/overflow config ---
       if (node.scrollbars !== undefined) {
-        // Supported values: 'auto', 'both', 'x', 'y', 'always', 'hidden', 'visible'
         switch (node.scrollbars) {
-          case 'auto': // default
-            bodyDiv.style.overflow = "auto";
-            break;
-          case 'both':
-            bodyDiv.style.overflowX = "auto";
-            bodyDiv.style.overflowY = "auto";
-            break;
-          case 'x':
-            bodyDiv.style.overflowX = "auto";
-            bodyDiv.style.overflowY = "hidden";
-            break;
-          case 'y':
-            bodyDiv.style.overflowX = "hidden";
-            bodyDiv.style.overflowY = "auto";
-            break;
-          case 'always':
-            bodyDiv.style.overflow = "scroll";
-            break;
-          case 'hidden':
-            bodyDiv.style.overflow = "hidden";
-            break;
-          case 'visible':
-            bodyDiv.style.overflow = "visible";
-            break;
-          default:
-            bodyDiv.style.overflow = "auto";
+          case 'auto': bodyDiv.style.overflow = "auto"; break;
+          case 'both': bodyDiv.style.overflowX = "auto"; bodyDiv.style.overflowY = "auto"; break;
+          case 'x': bodyDiv.style.overflowX = "auto"; bodyDiv.style.overflowY = "hidden"; break;
+          case 'y': bodyDiv.style.overflowX = "hidden"; bodyDiv.style.overflowY = "auto"; break;
+          case 'always': bodyDiv.style.overflow = "scroll"; break;
+          case 'hidden': bodyDiv.style.overflow = "hidden"; break;
+          case 'visible': bodyDiv.style.overflow = "visible"; break;
+          default: bodyDiv.style.overflow = "auto";
         }
         log("INFO", "[minilayout] Panel scrollbars config applied", {
           componentName: node.componentName,
           scrollbars: node.scrollbars
         });
       } else {
-        // Default: overflow auto
         bodyDiv.style.overflow = "auto";
+      }
+
+      // --- NEW: Per-panel scrollbar style config ---
+      if (node.scrollbarStyle && typeof node.scrollbarStyle === "object") {
+        injectPanelScrollbarCSS(panelBodyClass, node.scrollbarStyle);
+        log("INFO", "[minilayout] Panel scrollbarStyle config applied", {
+          componentName: node.componentName,
+          scrollbarStyle: node.scrollbarStyle
+        });
       }
 
       el.appendChild(bodyDiv);
@@ -295,7 +313,6 @@ export class MiniLayout {
       this._panelRefs.push({ node, el, bodyDiv });
     }
 
-    // Sizing and flex logic for top-level panels
     if (!parentItem) {
       el.style.position = "absolute";
       el.style.top = "0";
@@ -312,10 +329,7 @@ export class MiniLayout {
     return item;
   }
 
-  /**
-   * Create a splitter bar for rows/columns. Vertical (between columns), horizontal (between rows).
-   * Mobile/touch support included.
-   */
+  /** Splitter code unchanged **/
   _makeSplitter(type, parentEl) {
     const splitter = document.createElement("div");
     splitter.className = "minilayout-splitter";
@@ -327,40 +341,33 @@ export class MiniLayout {
     splitter.style.margin = "0";
     splitter.style.padding = "0";
     splitter.style.boxSizing = "border-box";
-
     if (type === "row") {
-      // Vertical splitter between columns
       splitter.style.width = "7px";
       splitter.style.height = "100%";
       splitter.style.cursor = "col-resize";
       splitter.style.borderLeft = "1.5px solid #bbb";
       splitter.style.borderRight = "1.5px solid #bbb";
     } else {
-      // Horizontal splitter between rows
       splitter.style.height = "7px";
       splitter.style.width = "100%";
       splitter.style.cursor = "row-resize";
       splitter.style.borderTop = "1.5px solid #bbb";
       splitter.style.borderBottom = "1.5px solid #bbb";
     }
-
-    // --- Desktop Drag-to-resize ---
+    // Drag-to-resize code unchanged
     splitter.addEventListener("mousedown", (e) => {
       e.preventDefault();
       document.body.style.cursor = splitter.style.cursor;
       let startX = e.clientX, startY = e.clientY;
-
       let prev = splitter.previousElementSibling;
       let next = splitter.nextElementSibling;
       if (!prev || !next) return;
-
       let prevRect = prev.getBoundingClientRect();
       let nextRect = next.getBoundingClientRect();
       let parentRect = parentEl.getBoundingClientRect();
       let totalSize = type === "row" ? parentRect.width : parentRect.height;
       let prevSize = type === "row" ? prevRect.width : prevRect.height;
       let nextSize = type === "row" ? nextRect.width : nextRect.height;
-
       function onMove(ev) {
         let clientX = ev.type === "touchmove" ? ev.touches[0].clientX : ev.clientX;
         let clientY = ev.type === "touchmove" ? ev.touches[0].clientY : ev.clientY;
@@ -382,7 +389,6 @@ export class MiniLayout {
           next.style.flex = `0 0 ${newNext}%`;
         }
       }
-
       function onUp(ev) {
         document.body.style.cursor = "";
         window.removeEventListener("mousemove", onMove);
@@ -390,30 +396,24 @@ export class MiniLayout {
         window.removeEventListener("touchmove", onMove);
         window.removeEventListener("touchend", onUp);
       }
-
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
       window.addEventListener("touchmove", onMove, { passive: false });
       window.addEventListener("touchend", onUp, { passive: false });
     });
-
-    // --- Mobile/Touch Drag-to-resize ---
     splitter.addEventListener("touchstart", (e) => {
       e.preventDefault();
       document.body.style.cursor = splitter.style.cursor;
       let startX = e.touches[0].clientX, startY = e.touches[0].clientY;
-
       let prev = splitter.previousElementSibling;
       let next = splitter.nextElementSibling;
       if (!prev || !next) return;
-
       let prevRect = prev.getBoundingClientRect();
       let nextRect = next.getBoundingClientRect();
       let parentRect = parentEl.getBoundingClientRect();
       let totalSize = type === "row" ? parentRect.width : parentRect.height;
       let prevSize = type === "row" ? prevRect.width : prevRect.height;
       let nextSize = type === "row" ? nextRect.width : nextRect.height;
-
       function onMove(ev) {
         let clientX = ev.type === "touchmove" ? ev.touches[0].clientX : ev.clientX;
         let clientY = ev.type === "touchmove" ? ev.touches[0].clientY : ev.clientY;
@@ -435,7 +435,6 @@ export class MiniLayout {
           next.style.flex = `0 0 ${newNext}%`;
         }
       }
-
       function onUp(ev) {
         document.body.style.cursor = "";
         window.removeEventListener("mousemove", onMove);
@@ -443,13 +442,11 @@ export class MiniLayout {
         window.removeEventListener("touchmove", onMove);
         window.removeEventListener("touchend", onUp);
       }
-
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
       window.addEventListener("touchmove", onMove, { passive: false });
       window.addEventListener("touchend", onUp, { passive: false });
     });
-
     return splitter;
   }
 
@@ -466,7 +463,7 @@ export class MiniLayout {
   }
 }
 
-// --- Styles: inject once per document ---
+// --- Styles: inject once per document (unchanged from previous) ---
 if (typeof document !== "undefined" && !document.getElementById("minilayout-styles")) {
   const style = document.createElement("style");
   style.id = "minilayout-styles";

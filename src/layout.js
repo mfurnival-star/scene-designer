@@ -114,12 +114,6 @@ function rebuildLayout(includeErrorLogPanel) {
       type: 'row',
       content: [
         // REMOVED SIDEBAR PANEL
-        // {
-        //   type: 'component',
-        //   componentName: 'SidebarPanel',
-        //   title: 'Sidebar',
-        //   width: 20,
-        // },
         {
           type: 'column',
           width: 70, // Increase width for canvas/toolbar after removing sidebar
@@ -135,7 +129,14 @@ function rebuildLayout(includeErrorLogPanel) {
               componentName: 'CanvasPanel',
               title: 'Canvas',
               height: 82,
-              scrollbars: 'both' // <-- Enable both scrollbars for CanvasPanel
+              scrollbars: 'both',
+              scrollbarStyle: {
+                width: '28px',
+                color: '#2176ff',
+                track: '#e0e4ec',
+                radius: '14px',
+                hover: '#0057d8'
+              }
             }
           ]
         },
@@ -143,7 +144,7 @@ function rebuildLayout(includeErrorLogPanel) {
           type: 'component',
           componentName: 'SettingsPanel',
           title: 'Settings',
-          width: 30,
+          width: 30
         }
       ]
     }
@@ -208,5 +209,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initial layout build
   rebuildLayout(showErrorLogPanelSetting);
 });
+
 
 
