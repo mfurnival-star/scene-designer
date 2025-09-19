@@ -20,7 +20,8 @@ import { buildCanvasToolbarPanel } from './toolbar.js';
 import { buildScenarioPanel } from './scenario-panel.js';
 import { getSetting, subscribe } from './state.js';
 import { log } from './log.js';
-import { setErrorLogPanelVisible } from './settings.js';
+// FIX: Remove import of setErrorLogPanelVisible
+// import { setErrorLogPanelVisible } from './settings.js';
 
 let layout = null;
 let mlRoot = null;
