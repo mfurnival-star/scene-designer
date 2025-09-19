@@ -40,6 +40,18 @@ export function getRegisteredScenarios() {
 }
 
 /**
+ * Evaluate all args, resolving any functions to their return value.
+ * Used to make scenario steps robust.
+ * @param {Array} args
+ * @returns {Array}
+ */
+function evalArgs(args) {
+  return Array.isArray(args)
+    ? args.map(a => typeof a === "function" ? a() : a)
+    : [];
+}
+
+/**
  * Run a single scenario step.
  * @param {object} step - { fn: "functionName", args: [...], type: "log"/"assert"/"comment"/"dump", expr, text }
  * @returns {Promise<any>} result of the function or log/assert output
@@ -47,9 +59,10 @@ export function getRegisteredScenarios() {
 export async function runScenarioStep(step) {
   try {
     if (step.fn && API[step.fn]) {
-      // Call exported function by name with arguments
-      const result = await API[step.fn](...(step.args || []));
-      log("INFO", `[scenario-runner] Ran action: ${step.fn}`, { args: step.args, result });
+      // Evaluate any function args before passing to API
+      const args = evalArgs(step.args || []);
+      const result = await API[step.fn](...args);
+      log("INFO", `[scenario-runner] Ran action: ${step.fn}`, { args, result });
       return result;
     }
     // Special step types
