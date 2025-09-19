@@ -24,6 +24,28 @@ When loading an image larger than the canvas/panel, the expected scroll bars do 
 **Expected:** Scroll bars (horizontal/vertical) should appear when the image is larger than the visible canvas area, allowing the user to pan and view the entire image.  
 **Observed:** No scroll bars are shown; overflow is hidden, so large images cannot be fully viewed.
 
+### defect9: Canvas panel cannot scroll on mobile due to gesture conflicts with marquee select and custom input
+**Summary:**  
+On mobile devices (Safari/iOS and similar), users cannot scroll/pan the Canvas panel when the image is larger than the visible panel. This is due to gesture/event conflicts with custom input features such as marquee selection, multi-select drag, or other pointer event listeners attached to the canvas.
+
+**Details:**
+- On desktop, scrollbars appear and the user can pan the Canvas panel as expected.
+- On mobile (Safari/iOS), native scroll gestures are blocked by custom touch event handlers (marquee select, multi-select, etc), so the panel cannot be scrolled.
+- The marquee select box and shape selection logic currently use touchstart/touchmove on the canvas panel/background, which prevents browser-native scrolling.
+- As a result, users cannot pan to see the full image, making annotation difficult for large/tall screenshots on mobile.
+
+**Expected:**
+- On mobile, the user should be able to scroll/pan the Canvas panel using native swipe gestures if the image overflows the panel area.
+- Marquee select and other custom gestures should not block scroll/pan, or should be triggered via a different gesture (e.g., long-press, two-finger, button-activated mode).
+
+**Future considerations:**
+- Consider refactoring touch/gesture logic to allow native scroll/pan on mobile, or provide a mode toggle between selection and pan.
+- May require rethinking event delegation and gesture mapping for mobile platforms.
+- For now, desktop users can test scroll/pan; mobile fix can wait.
+
+**Status:**
+Low priority; desktop testing is available and sufficient for now. Documenting for future UX improvements.
+
 ---
 
 ## Resolved Defects
@@ -54,3 +76,4 @@ FORCE values set via `window.SCENE_DESIGNER_FORCE_SETTINGS` (from index.html) di
 ---
 
 *Last updated: 2025-09-19*
+
