@@ -12,6 +12,7 @@
  * - All shape/scene actions are emitted as intents to actions.js.
  * - NO business logic, selection, or state mutation.
  * - Logging via log.js.
+ * - **NEW: Delete button is disabled if no shape is selected (UX improvement).**
  * -----------------------------------------------------------
  */
 
@@ -21,6 +22,24 @@ import {
   addShapeOfType,
   deleteSelectedShapes
 } from './actions.js';
+
+/**
+ * Utility: Enable or disable a toolbar button by id.
+ * @param {HTMLElement} btn
+ * @param {boolean} enabled
+ */
+function setButtonEnabled(btn, enabled) {
+  if (!btn) return;
+  btn.disabled = !enabled;
+  btn.setAttribute("aria-disabled", !enabled ? "true" : "false");
+  if (!enabled) {
+    btn.classList.add("disabled");
+    btn.title = "Select a shape to delete";
+  } else {
+    btn.classList.remove("disabled");
+    btn.title = "Delete selected shape(s)";
+  }
+}
 
 /**
  * Build the canvas toolbar panel.
@@ -116,6 +135,12 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
         background: #eaf2fc;
         border-color: #2176ff;
         box-shadow: 0 2px 7px -2px #b8c6e6;
+      }
+      .toolbar-btn.disabled,
+      .toolbar-btn[aria-disabled="true"] {
+        opacity: 0.4;
+        cursor: not-allowed;
+        pointer-events: none;
       }
       input[type="file"] {
         display: none;
@@ -280,7 +305,30 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       deleteSelectedShapes();
     });
 
-    log("INFO", "[toolbar] Toolbar panel fully initialized (compact, scalable, single row)");
+    // --- Enable/disable Delete button based on selection ---
+    function updateDeleteButtonState() {
+      const selectedCount = getState().selectedShapes?.length ?? 0;
+      setButtonEnabled(deleteShapeBtn, selectedCount > 0);
+      log("DEBUG", "[toolbar] updateDeleteButtonState", { selectedCount, enabled: selectedCount > 0 });
+    }
+    // Initial state
+    updateDeleteButtonState();
+    // Subscribe to selection changes
+    sceneDesignerStore.subscribe((state, details) => {
+      if (
+        details &&
+        (
+          details.type === "setSelectedShapes" ||
+          details.type === "setState" ||
+          details.type === "removeShape" ||
+          details.type === "addShape"
+        )
+      ) {
+        updateDeleteButtonState();
+      }
+    });
+
+    log("INFO", "[toolbar] Toolbar panel fully initialized (compact, scalable, single row, Delete button disables if none selected)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
@@ -294,3 +342,4 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
+
