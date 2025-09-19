@@ -1,15 +1,16 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (Enhanced Styling Edition)
+ * Scene Designer – Modular Toolbar UI Factory (Strict Alignment Edition)
  * - Factory for toolbar controls: image upload, server image select, shape type, add/delete.
- * - All controls are visually grouped, evenly sized, and aligned.
- * - Improved color, spacing, rounded corners, subtle shadow, and hover effects.
+ * - All controls visually grouped, strictly aligned, and sized identically.
+ * - Enhanced flexbox layout, uniform height, padding, and icon alignment.
+ * - Softer backgrounds, balanced groups, better centering.
+ * - Responsive tweaks for compactness.
  * - ES module only, all dependencies imported.
  * - All shape/scene actions are emitted as intents to actions.js.
  * - NO business logic, selection, or state mutation.
- * - Logging via log.js at appropriate levels.
- * - MiniLayout compliance: panel factory expects { element, title, componentName } argument.
+ * - Logging via log.js.
  * -----------------------------------------------------------
  */
 
@@ -23,8 +24,7 @@ import {
 /**
  * Build the canvas toolbar panel.
  * - All UI events are handled here.
- * - Only the toolbar panel creates the controls.
- * - Enhanced styling: grouped controls, uniform height, subtle shadow, hover, alignment.
+ * - Enhanced styling: grouped controls, strict alignment, uniform height, padding, flexbox balance.
  * - MiniLayout compliance: accepts { element, title, componentName }.
  */
 export function buildCanvasToolbarPanel({ element, title, componentName }) {
@@ -34,63 +34,72 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 
-  // Inject improved toolbar styles (once per document)
+  // Inject refined toolbar styles (once per document)
   if (typeof document !== "undefined" && !document.getElementById("scene-designer-toolbar-style")) {
     const style = document.createElement("style");
     style.id = "scene-designer-toolbar-style";
     style.textContent = `
       #canvas-toolbar-container {
         width: 100%;
-        min-height: 62px;
-        background: linear-gradient(90deg, #f4f8ff 0%, #e6eaf9 100%);
+        min-height: 67px;
+        background: linear-gradient(90deg, #f7faff 0%, #e6eaf9 100%);
         border-bottom: 1.5px solid #b8c6e6;
         display: flex;
-        align-items: center;
-        gap: 18px;
-        padding: 18px 24px 14px 24px;
+        justify-content: center;
+        align-items: stretch;
+        gap: 30px;
+        padding: 16px 36px 12px 36px;
         box-shadow: 0 1.5px 6px -2px #b8c6e6;
         border-radius: 0 0 13px 13px;
-      }
-      #canvas-toolbar-container > * {
-        margin: 0 3px;
+        box-sizing: border-box;
       }
       .toolbar-group {
         display: flex;
         align-items: center;
-        gap: 9px;
-        border-radius: 8px;
-        background: #f8fbff;
-        padding: 7px 12px;
-        box-shadow: 0 1px 5px -4px #2176ff;
-        margin-right: 12px;
+        gap: 14px;
+        border-radius: 13px;
+        background: #f3f6fe;
+        padding: 10px 18px;
+        box-shadow: 0 1.5px 7px -4px #2176ff;
+        margin-right: 0px;
+        height: 55px;
       }
       .toolbar-label {
-        font-size: 1.10em;
+        font-size: 1.13em;
         color: #345;
         font-weight: 600;
         margin-right: 10px;
         margin-left: 10px;
+        height: 45px;
+        display: flex;
+        align-items: center;
       }
       .toolbar-btn,
       #canvas-toolbar-container select,
       label[for="toolbar-image-upload"] {
-        font-size: 1.16em;
+        font-size: 1.14em;
         font-family: inherit;
         border: 1.5px solid #8ca6c6;
         background: #fff;
         color: #234;
-        border-radius: 7px;
-        padding: 11px 24px;
-        min-width: 94px;
-        min-height: 45px;
+        border-radius: 9px;
+        padding: 0 22px;
+        min-width: 110px;
         height: 45px;
+        line-height: 45px;
         outline: none;
-        box-shadow: 0 1.5px 3px -1px #e3f0fa;
-        transition: background 0.15s, box-shadow 0.14s, border-color 0.12s;
+        box-shadow: 0 1.5px 4px -1px #e3f0fa;
+        transition: background 0.14s, box-shadow 0.13s, border-color 0.10s;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        box-sizing: border-box;
+      }
+      .toolbar-btn > svg,
+      .toolbar-btn > span,
+      #canvas-toolbar-container select > option {
+        vertical-align: middle;
       }
       .toolbar-btn:hover,
       label[for="toolbar-image-upload"]:hover,
@@ -102,10 +111,35 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       input[type="file"] {
         display: none;
       }
-      /* Hide unused buttons for now */
       .toolbar-btn.hidden,
       .toolbar-btn[aria-hidden="true"] {
         display: none !important;
+      }
+      @media (max-width: 900px) {
+        #canvas-toolbar-container {
+          padding: 8px 10px 7px 10px;
+          gap: 12px;
+          min-height: 50px;
+        }
+        .toolbar-group {
+          padding: 6px 9px;
+          gap: 7px;
+          margin-right: 0px;
+          height: 40px;
+        }
+        .toolbar-btn,
+        #canvas-toolbar-container select,
+        label[for="toolbar-image-upload"] {
+          font-size: 1em;
+          height: 32px;
+          line-height: 32px;
+          min-width: 70px;
+          padding: 0 8px;
+        }
+        .toolbar-label {
+          font-size: 0.97em;
+          height: 32px;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -118,10 +152,10 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       componentName
     });
 
-    // Enhanced toolbar HTML with visual grouping
+    // Strictly aligned toolbar HTML
     element.innerHTML = `
       <div id="canvas-toolbar-container">
-        <div class="toolbar-group">
+        <div class="toolbar-group" style="min-width:320px;">
           <label for="toolbar-image-upload" class="toolbar-btn" title="Upload image">Upload Image</label>
           <input type="file" id="toolbar-image-upload" accept="image/*">
           <select id="toolbar-server-image-select" class="toolbar-btn" title="Choose server image">
@@ -130,15 +164,19 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
             <option value="sample2.png">sample2.png</option>
           </select>
         </div>
-        <div class="toolbar-group">
+        <div class="toolbar-group" style="min-width:380px;">
           <span class="toolbar-label">Shape:</span>
           <select id="toolbar-shape-type-select" class="toolbar-btn">
             <option value="point">Point</option>
             <option value="rect">Rectangle</option>
             <option value="circle">Circle</option>
           </select>
-          <button id="toolbar-add-shape-btn" class="toolbar-btn" title="Add shape">&#x2795; Add</button>
-          <button id="toolbar-delete-shape-btn" class="toolbar-btn" title="Delete shape">&#x1F5D1; Delete</button>
+          <button id="toolbar-add-shape-btn" class="toolbar-btn" title="Add shape">
+            <span style="font-size:1.14em;margin-right:7px;">&#x2795;</span> Add
+          </button>
+          <button id="toolbar-delete-shape-btn" class="toolbar-btn" title="Delete shape">
+            <span style="font-size:1.14em;margin-right:7px;">&#x1F5D1;</span> Delete
+          </button>
           <!-- Hidden buttons, will be unhidden when implemented -->
           <button id="toolbar-duplicate-shape-btn" class="toolbar-btn hidden" aria-hidden="true">Duplicate</button>
           <button id="toolbar-select-all-btn" class="toolbar-btn hidden" aria-hidden="true">Select All</button>
@@ -211,7 +249,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       deleteSelectedShapes();
     });
 
-    log("INFO", "[toolbar] Toolbar panel fully initialized (enhanced, grouped, ESM only)");
+    log("INFO", "[toolbar] Toolbar panel fully initialized (refined alignment edition)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
