@@ -1,32 +1,35 @@
 /**
  * console.re.js
  * -----------------------------------------------------------
- * Scene Designer – Console.Remote.Client Integration (ESM Only, npm package version)
- * - Streams all browser console logs (log, error, warn, info, debug, trace) to Console.Re remote dashboard.
- * - For development only; not recommended for production or sensitive data.
- * - Usage: import and call initConsoleRe(channel) in your main entry point (e.g., index.html or src/main.js).
+ * Scene Designer – Console.Re Remote Logging Integration (ESM, New API)
+ * - Initializes Console.Re remote logging with all recommended connector options.
+ * - Redirects default console methods (log, warn, error, debug) to remote.
+ * - Streams all logs to the remote console dashboard for the given channel.
+ * - No global or window usage. ES module only.
+ * - Usage: import and call initConsoleRe('scene-designer') in your entry point.
  * - Exports: initConsoleRe(channel)
- * - Dependencies: console-remote-client (installed from npm)
+ * - Dependencies: console-remote-client (npm, ESM)
  * -----------------------------------------------------------
  */
 
-import { ConsoleRemoteClient } from 'console-remote-client';
+import consoleRe from 'console-remote-client';
 
 /**
- * Initialize Console.Re log streaming with the given channel name.
+ * Initialize Console.Re log streaming with given channel.
+ * All console methods are redirected to remote.
  * @param {string} channel - Your Console.Re channel name.
  */
-export function initConsoleRe(channel) {
-  // Diagnostic log: confirm channel passed
+export function initConsoleRe(channel = "default") {
+  // TRACE log for diagnostics (optional)
   import('./log.js').then(({ log }) => {
     log("TRACE", "[console.re] initConsoleRe called", { channel });
   }).catch(() => {});
 
-  const client = new ConsoleRemoteClient({
+  // Initialize Console.Re connector with recommended options
+  consoleRe.init({
     channel,
-    interceptConsole: true // Ensures all native console logs are streamed
-    // You can add options here if needed, e.g.: url, debug, etc.
+    redirectDefaultConsoleToRemote: true,
+    disableDefaultConsoleOutput: false,
+    // server: 'http://console.re' // Only needed for custom server
   });
-  client.open();
 }
-
