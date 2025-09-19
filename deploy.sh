@@ -90,7 +90,7 @@ function inject_consolere() {
   sed -i '/<!-- BEGIN CONSOLERE -->/,/<!-- END CONSOLERE -->/d' "$INDEX_HTML"
   if [[ "$INJECT_CONSOLERE" == "1" ]]; then
     awk '
-      /<\/body>/ {
+      /<script type="module" src="\/src\/main.js">/ {
         print "  <!-- BEGIN CONSOLERE -->";
         print "  <script src=\"https://cdn.jsdelivr.net/npm/console-remote-client\"></script>";
         print "  <script>";
@@ -103,10 +103,12 @@ function inject_consolere() {
         print "    }";
         print "  </script>";
         print "  <!-- END CONSOLERE -->";
+        print;
+        next;
       }
       { print }
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
-    echo "[$DATESTAMP] === Injected Console.Re CDN script into $INDEX_HTML ==="
+    echo "[$DATESTAMP] === Injected Console.Re CDN script into $INDEX_HTML (before main.js entry) ==="
   else
     echo "[$DATESTAMP] === Console.Re injection not requested. Skipping. ==="
   fi
