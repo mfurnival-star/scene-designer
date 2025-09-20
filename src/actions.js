@@ -112,8 +112,17 @@ export function deleteSelectedShapes() {
 }
 
 /**
+ * Internal: Generate a new unique shape id based on type.
+ */
+function _newIdFor(type = "shape") {
+  return `${type}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+}
+
+/**
  * Duplicate all currently selected, unlocked shapes.
  * The new shapes are selected after duplication.
+ * - Preserves all visual properties (size, rotation, stroke/fill, reticle style, etc.).
+ * - Offsets position by a small nudge.
  */
 export function duplicateSelectedShapes() {
   log("DEBUG", "[actions] duplicateSelectedShapes ENTRY", {
@@ -124,42 +133,104 @@ export function duplicateSelectedShapes() {
       _id: s?._id, _type: s?._type, _label: s?._label
     }))
   });
+
   const selected = getState().selectedShapes || [];
   const unlockedToDuplicate = selected.filter(s => !s.locked);
   const offset = 20;
-  let newShapes = [];
-  unlockedToDuplicate.forEach(orig => {
-    let clone;
-    if (orig._type === "rect") {
-      clone = makeRectShape(orig.left + offset, orig.top + offset, orig.width, orig.height);
-    } else if (orig._type === "circle") {
-      clone = makeCircleShape(orig.left + offset, orig.top + offset, orig.radius);
-    } else if (orig._type === "point") {
-      clone = makePointShape(orig.left + offset, orig.top + offset);
-    }
-    if (clone) {
-      addShape(clone);
-      newShapes.push(clone);
-      log("DEBUG", "[actions] duplicateSelectedShapes: new shape created and added", { clone, cloneId: clone._id });
-    }
-  });
-  if (newShapes.length > 0) {
-    selectionSetSelectedShapes(newShapes);
-    setStrokeWidthForSelectedShapes(getState().settings?.defaultStrokeWidth ?? 1);
-    log("INFO", "[actions] duplicateSelectedShapes: Duplicated shapes and selected new", {
-      newShapes: newShapes.map(s => s._id)
-    });
+
+  if (unlockedToDuplicate.length === 0) {
+    log("INFO", "[actions] duplicateSelectedShapes: No unlocked shapes selected");
+    return;
   }
-  log("DEBUG", "[actions] duplicateSelectedShapes EXIT", {
-    shapesInStoreAfter: getState().shapes.map(s => ({
-      _id: s._id, _type: s._type, _label: s._label
-    })),
-    selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
+
+  const canvas = getState().fabricCanvas;
+  let promises = unlockedToDuplicate.map(orig => new Promise((resolve) => {
+    if (typeof orig.clone === "function") {
+      try {
+        orig.clone((cloned) => {
+          try {
+            // Offset and ensure unlocked/selectable
+            cloned.left = (orig.left ?? 0) + offset;
+            cloned.top = (orig.top ?? 0) + offset;
+            cloned.locked = false;
+            cloned.selectable = true;
+            cloned.evented = true;
+
+            // New id, keep label/type
+            cloned._type = orig._type;
+            cloned._label = orig._label;
+            cloned._id = _newIdFor(orig._type || "shape");
+
+            // Remove any selection-outline artifacts from clone, ensure strokeUniform on primitives
+            if (Array.isArray(cloned._objects)) {
+              // Filter out any outlines (if ever cloned)
+              cloned._objects = cloned._objects.filter(obj => !obj._isSelectionOutline);
+              // Re-apply strokeUniform where applicable
+              cloned._objects.forEach(obj => {
+                if ('strokeUniform' in obj) obj.strokeUniform = true;
+              });
+              // Update diagnostic label text to reflect the new id
+              const labelChild = cloned._objects.find(o => o && o._isDiagnosticLabel);
+              if (labelChild && typeof labelChild.set === 'function') {
+                const base = cloned._label || (cloned._type ? (cloned._type[0].toUpperCase() + cloned._type.slice(1)) : "Shape");
+                labelChild.set({ text: `${base}\n${cloned._id}` });
+              }
+            }
+
+            // Add to store; canvas sync will render
+            addShape(cloned);
+            // Keep diagnostic log small
+            log("DEBUG", "[actions] duplicateSelectedShapes: cloned shape added", { cloneId: cloned._id, type: cloned._type });
+            resolve(cloned);
+          } catch (e) {
+            log("ERROR", "[actions] duplicateSelectedShapes: post-clone adjust failed", e);
+            resolve(null);
+          }
+        });
+      } catch (e) {
+        log("ERROR", "[actions] duplicateSelectedShapes: clone() threw", e);
+        resolve(null);
+      }
+    } else {
+      // Fallback: create via factory (less fidelity). Should rarely happen.
+      let clone = null;
+      if (orig._type === "rect") {
+        clone = makeRectShape(orig.left + offset, orig.top + offset, orig.width, orig.height);
+      } else if (orig._type === "circle") {
+        clone = makeCircleShape(orig.left + offset + (orig.radius || 0), orig.top + offset + (orig.radius || 0), orig.radius);
+      } else if (orig._type === "point") {
+        clone = makePointShape(orig.left + offset, orig.top + offset);
+      }
+      if (clone) {
+        addShape(clone);
+        log("WARN", "[actions] duplicateSelectedShapes: used fallback factory clone", { cloneId: clone._id, type: clone._type });
+      }
+      resolve(clone);
+    }
+  }));
+
+  Promise.all(promises).then(newShapes => {
+    const created = newShapes.filter(Boolean);
+    if (created.length > 0) {
+      selectionSetSelectedShapes(created);
+      // Do NOT override stroke widths here; preserve cloned visuals
+      log("INFO", "[actions] duplicateSelectedShapes: Duplicated shapes and selected new", {
+        newShapes: created.map(s => s._id)
+      });
+    }
+    log("DEBUG", "[actions] duplicateSelectedShapes EXIT", {
+      shapesInStoreAfter: getState().shapes.map(s => ({
+        _id: s._id, _type: s._type, _label: s._label
+      })),
+      selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
+    });
   });
 }
 
 /**
  * Lock all currently selected shapes.
+ * - Keeps selection so the Unlock button can act on them.
+ * - Detaches controls via selection/transformer logic automatically.
  */
 export function lockSelectedShapes() {
   log("DEBUG", "[actions] lockSelectedShapes ENTRY", {
@@ -174,8 +245,9 @@ export function lockSelectedShapes() {
     shape.evented = false;
     log("DEBUG", "[actions] lockSelectedShapes: shape locked", { shapeId: shape._id, type: shape._type, label: shape._label });
   });
-  selectionSetSelectedShapes([]); // Deselect all after lock
-  log("INFO", "[actions] lockSelectedShapes: Locked shapes and cleared selection", {
+  // Keep selection; refresh selection module to update outlines/transformer
+  selectionSetSelectedShapes(selected.slice());
+  log("INFO", "[actions] lockSelectedShapes: Locked shapes (selection preserved)", {
     lockedShapes: selected.map(s => s._id)
   });
   log("DEBUG", "[actions] lockSelectedShapes EXIT", {
@@ -187,7 +259,7 @@ export function lockSelectedShapes() {
 }
 
 /**
- * Unlock all currently selected shapes.
+ * Unlock selected shapes; if none selected, unlock all locked shapes in store.
  */
 export function unlockSelectedShapes() {
   log("DEBUG", "[actions] unlockSelectedShapes ENTRY", {
@@ -196,15 +268,29 @@ export function unlockSelectedShapes() {
     }))
   });
   const selected = getState().selectedShapes || [];
-  selected.forEach(shape => {
+  let targets = selected.length > 0
+    ? selected.filter(Boolean)
+    : (getState().shapes || []).filter(s => s.locked);
+
+  targets.forEach(shape => {
     shape.locked = false;
     shape.selectable = true;
     shape.evented = true;
     log("DEBUG", "[actions] unlockSelectedShapes: shape unlocked", { shapeId: shape._id, type: shape._type, label: shape._label });
   });
-  log("INFO", "[actions] unlockSelectedShapes: Unlocked shapes", {
-    unlockedShapes: selected.map(s => s._id)
-  });
+
+  if (targets.length === 0) {
+    log("INFO", "[actions] unlockSelectedShapes: No shapes to unlock");
+  } else {
+    // Refresh selection to update transformer/outlines; preserve current selection
+    const preserve = getState().selectedShapes.slice();
+    selectionSetSelectedShapes(preserve);
+    log("INFO", "[actions] unlockSelectedShapes: Unlocked shapes", {
+      unlockedShapes: targets.map(s => s._id),
+      selectionPreserved: preserve.map(s => s._id)
+    });
+  }
+
   log("DEBUG", "[actions] unlockSelectedShapes EXIT", {
     shapesInStoreAfter: getState().shapes.map(s => ({
       _id: s._id, _type: s._type, _label: s._label
@@ -212,4 +298,5 @@ export function unlockSelectedShapes() {
     selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
   });
 }
+
 

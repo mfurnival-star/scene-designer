@@ -223,7 +223,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
           <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
         </div>
       </div>
-    `;
+    ";
 
     // Query toolbar elements
     const container = element.querySelector('#canvas-toolbar-container');
@@ -375,7 +375,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
         return;
       }
       log("INFO", "[toolbar] Unlock clicked");
-      unlockSelectedShapes();
+      unlockSelectedShapes(); // Handles: unlock selected OR all locked if none selected
     }
     function attachLockUnlockHandlers() {
       if (lockBtn) {
@@ -392,7 +392,13 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     function updateButtonsState() {
       const selected = getState().selectedShapes || [];
       const selectedCount = selected.length;
-      const shapesCount = (getState().shapes || []).length;
+      const shapes = (getState().shapes || []);
+      const shapesCount = shapes.length;
+
+      // Derive lock states
+      const anyUnlockedSelected = selected.some(s => !s.locked);
+      const anyLockedSelected = selected.some(s => s.locked);
+      const anyLockedInStore = shapes.some(s => s.locked);
 
       // Delete
       setButtonEnabledById('toolbar-delete-shape-btn', selectedCount > 0, "Select a shape to delete", "Delete selected shape(s)");
@@ -406,18 +412,33 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       setButtonEnabledById('toolbar-select-all-btn', shapesCount > 0, "No shapes to select", "Select all shapes");
       attachSelectAllHandler();
 
-      // Lock/Unlock
-      const anyUnlockedSelected = selected.some(s => !s.locked);
-      const anyLockedSelected = selected.some(s => s.locked);
-      setButtonEnabledById('toolbar-lock-btn', selectedCount > 0 && anyUnlockedSelected, "Select unlocked shape(s) to lock", "Lock selected shape(s)");
-      setButtonEnabledById('toolbar-unlock-btn', selectedCount > 0 && anyLockedSelected, "Select locked shape(s) to unlock", "Unlock selected shape(s)");
+      // Lock
+      setButtonEnabledById(
+        'toolbar-lock-btn',
+        selectedCount > 0 && anyUnlockedSelected,
+        "Select unlocked shape(s) to lock",
+        "Lock selected shape(s)"
+      );
+
+      // Unlock:
+      // - Enabled if there are selected locked shapes
+      // - OR if nothing is selected but there is at least one locked shape in the scene
+      const unlockEnabled = (selectedCount > 0 && anyLockedSelected) || (selectedCount === 0 && anyLockedInStore);
+      const unlockEnabledTitle = (selectedCount > 0 && anyLockedSelected)
+        ? "Unlock selected shape(s)"
+        : "Unlock all locked shapes";
+      const unlockDisabledTitle = "No locked shapes";
+      setButtonEnabledById('toolbar-unlock-btn', unlockEnabled, unlockDisabledTitle, unlockEnabledTitle);
       attachLockUnlockHandlers();
 
       log("DEBUG", "[toolbar] updateButtonsState", {
         selectedCount,
         shapesCount,
         anyUnlockedSelected,
-        anyLockedSelected
+        anyLockedSelected,
+        anyLockedInStore,
+        unlockEnabled,
+        unlockEnabledTitle
       });
     }
 
