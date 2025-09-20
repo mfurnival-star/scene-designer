@@ -6,7 +6,7 @@
 #   e.g. LOG_LEVEL="Debug" LOG_OUTPUT_DEST=console INTERCEPT_CONSOLE=1 ./deploy.sh dev
 # ---------------------------------------------------------------------------
 
-#set -euo pipefail
+set -euo pipefail
 
 PROJECT_DIR="$HOME/scene-designer"
 BUILD_DIR="$PROJECT_DIR/dist"
