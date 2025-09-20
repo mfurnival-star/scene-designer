@@ -4,13 +4,14 @@
  * Centralized, pluggable logging system for Scene Designer (ESM only, numeric log levels).
  * - All logs routed through log() at appropriate level/tag.
  * - Supports runtime config of level, destination, and sinks.
- * - Log level is an integer (0=SILENT, 1=ERROR, ... 4=DEBUG), no string compat.
+ * - Log level is an integer (0=SILENT, 1=ERROR, 2=WARN, 3=INFO, 4=DEBUG).
+ * - TRACE is NOT a separate level; any "TRACE" string passed to log() is aliased to DEBUG.
  * - Pluggable log sinks (console, remote, etc).
  * - Safe serialization (handles cyclic/Error objects).
  * - Zero use of window.*, no globals except optional debug attach.
  * - Compatible with console interception and global error handlers.
  * - Forwards logs to Console.Re remote logger if available (injects connector.js as global).
- * - Exports: log, setLogLevel/getLogLevel, setLogDestination, configureLogging, registerLogSink.
+ * - Exports: log, setLogLevel/getLogLevel, setLogDestination, configureLogging, registerLogSink, reconfigureLoggingFromSettings
  * -------------------------------------------------------------------
  * Dependencies: None (uses built-in fetch, Date, etc).
  * -------------------------------------------------------------------
@@ -22,7 +23,8 @@ export const LOG_LEVELS = {
 export const LOG_LEVEL_NUMS = [0, 1, 2, 3, 4];
 export const LOG_LEVEL_NUM_TO_NAME = ["SILENT", "ERROR", "WARN", "INFO", "DEBUG"];
 export const LOG_LEVEL_NAME_TO_NUM = {
-  "SILENT": 0, "ERROR": 1, "WARN": 2, "INFO": 3, "DEBUG": 4
+  SILENT: 0, ERROR: 1, WARN: 2, INFO: 3, DEBUG: 4
+  // Note: Do not add TRACE here. We alias it explicitly in normalizeLevelNum().
 };
 
 const LOGGER_INSTANCE_ID = Math.random().toString(36).slice(2) + "-" + Date.now();
@@ -42,8 +44,8 @@ export function registerLogSink(sink) {
 }
 
 /**
- * Set the log level at runtime using a number (0–4).
- * @param {number} num
+ * Set the log level at runtime using a number (0–4) or a level name.
+ * @param {number|string} num
  */
 export function setLogLevel(num) {
   curLogLevelNum = normalizeLevelNum(num);
@@ -67,17 +69,27 @@ export function getLogDestination() {
 }
 
 export function configureLogging({ level, dest }) {
-  if (typeof level === "number") setLogLevel(level);
+  if (level !== undefined) setLogLevel(level);
   if (dest) setLogDestination(dest);
 }
 
 /**
  * Normalize log level to valid number (0–4).
+ * - Accepts numbers directly (0–4).
+ * - Accepts string names (case-insensitive for TRACE alias, otherwise exact keys).
+ * - Aliases:
+ *    "TRACE" -> DEBUG (4)
+ *    "WARNING" -> WARN (2)  [friendly alias, if ever used]
  */
 function normalizeLevelNum(n) {
   if (typeof n === "number" && LOG_LEVEL_NUMS.includes(n)) return n;
-  if (typeof n === "string" && n in LOG_LEVEL_NAME_TO_NUM) return LOG_LEVEL_NAME_TO_NUM[n];
-  return 3; // INFO as default
+  if (typeof n === "string") {
+    const u = n.toUpperCase();
+    if (u === "TRACE") return LOG_LEVELS.DEBUG; // Alias TRACE → DEBUG
+    if (u === "WARNING") return LOG_LEVELS.WARN;
+    if (u in LOG_LEVEL_NAME_TO_NUM) return LOG_LEVEL_NAME_TO_NUM[u];
+  }
+  return LOG_LEVELS.INFO; // default
 }
 
 /**
@@ -157,7 +169,6 @@ export function log(levelNum, ...args) {
     arg === undefined || arg === null || arg === "" ||
     (typeof arg === "object" && Object.keys(arg).length === 0 && !(arg instanceof Error))
   )) {
-    // Optionally warn or skip silently
     return;
   }
 
@@ -183,7 +194,7 @@ export function log(levelNum, ...args) {
     if (typeof console !== "undefined" && console.re && typeof console.re.error === "function") {
       try {
         console.re.error(...args);
-      } catch (e) {
+      } catch {
         // fail silently for remote logging errors
       }
     }
@@ -198,14 +209,14 @@ export function log(levelNum, ...args) {
     const lvlName = levelName(msgLevelNum);
     const safeArgs = args.map(safeLogArg);
     if (typeof console !== "undefined") {
-      if (msgLevelNum === 1 && console.error) console.error(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
-      else if (msgLevelNum === 2 && console.warn) console.warn(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
-      else if (msgLevelNum === 3 && console.info) console.info(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
-      else if (msgLevelNum === 4 && console.debug) console.debug(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      if (msgLevelNum === LOG_LEVELS.ERROR && console.error) console.error(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      else if (msgLevelNum === LOG_LEVELS.WARN && console.warn) console.warn(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      else if (msgLevelNum === LOG_LEVELS.INFO && console.info) console.info(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
+      else if (msgLevelNum === LOG_LEVELS.DEBUG && console.debug) console.debug(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
       else if (console.log) console.log(`[log][${LOGGER_INSTANCE_ID}]`, lvlName, ...safeArgs);
     }
   }
-  // Panel sinks
+  // Panel/other sinks
   for (const sink of logSinks) {
     try {
       if (typeof sink === "function") sink(msgLevelNum, ...args);
@@ -230,7 +241,7 @@ export function log(levelNum, ...args) {
       } else if (typeof console.re.log === "function") {
         console.re.log(...args);
       }
-    } catch (e) {
+    } catch {
       // fail silently for remote logging errors
     }
   }
