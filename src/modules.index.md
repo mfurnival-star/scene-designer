@@ -1,196 +1,129 @@
-File name: src/modules.index.md
-Language: markdown
+# Scene Designer – Engineering & Review Instructions
 
-```filelist
-log.js
-console-stream.js
-console.re.js
-console-re-wrapper.js
-global-errors.js
-state.js
-canvas.js
-canvas-core.js
-canvas-events.js
-selection.js
-settings-core.js
-settings-ui.js
-settings.js
-errorlog.js
-layout.js
-main.js
-toolbar.js
-actions.js
-shapes-core.js
-shapes-point.js
-shapes.js
-transformer.js
-shape-state.js
-shape-defs.js
-sidebar.js
-fabric-wrapper.js
-minilayout.js
-minilayout-ui.js
-minilayout.css
-minilayout.DOCS.md
-scenario-runner.js
-scenario-panel.js
+These instructions are binding for all development, code review, and delivery in the Scene Designer project.
+
+---
+
+## 1. ES Module Enforcement
+
+- All code must use ES module syntax for imports and exports.
+- No use of window.*, global variables, or global libraries.
+- External dependencies (e.g., Konva, Pickr, Golden Layout) must be imported as ES modules.
+
+### 1A. Transitional Exception: Remote Logging via Console.Re
+
+- Remote log streaming must use the official Console.Re connector script:
+  ```html
+  <script src="//console.re/connector.js" data-channel="scene-designer"></script>
+  ```
+- This ensures compatibility with the current Console.Re dashboard and captures early errors.
+- The legacy npm UMD CDN (`console-remote-client`) is deprecated and MUST NOT be used except for backward compatibility with older builds.
+- This exception is strictly for remote logging only.
+- All other dependencies and code must remain ES module–only and avoid global/window usage.
+- Remove this exception as soon as Console.Re provides a proper ES module export.
+
+---
+
+## 2. Import/Export Consistency
+
+- Every import must be satisfied by a real export in the source file.
+- Update the source or import as needed to ensure consistency.
+- Enforce for all code changes and file deliveries.
+
+---
+
+## 3. File Delivery and Review Workflow
+
+- All code delivery, review, and requests operate on complete files only (never snippets).
+- File-by-file delivery workflow:
+  1. List all files to be delivered up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...).
+  2. Deliver each file, one at a time, in the order listed.
+  3. After each file, state the name and number of the next file to expect (e.g., "Next file: 2. sidebar.js").
+  4. Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.
+  5. Keep a running list of remaining files/numbers in each reply until all are delivered.
+  6. After all files, explicitly confirm completion (e.g., "All files delivered. Refactor complete.").
+- If a module is added, removed, or renamed, update `src/modules.index.md`.
+
+---
+
+## 4. File Size Policy and Splitting
+
+- No single file should exceed ~350 lines.
+- If a file does, split into logical ES module parts (e.g., `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).
+- Each part should be ≤350 lines if possible.
+- When splitting:
+  - Prefer logical separation (core, UI, data, helpers, etc).
+  - Each part must begin with a summary comment.
+  - Update all imports/exports to use new modules.
+  - Update `src/modules.index.md` to list all new files.
+  - Document the split in the PR/commit summary.
+- This policy is mandatory for all new code and for any refactoring of large files.
+
+---
+
+## 5. Logging and Documentation
+
+- Use the shared logger (`log()`) from `log.js` with proper log levels and tags.
+  - `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE` (TRACE is very verbose; rarely used).
+- Never use `console.log` directly except inside the logger implementation.
+- Every module/file must begin with a comment summarizing purpose, exports, and dependencies.
+- All cross-module communication must use ES module imports/exports.
+
+---
+
+## 6. Example (Good/Bad)
+
+```js
+// Good
+import Konva from "konva";
+import { buildSidebarPanel } from "./sidebar.js";
+
+// Bad
+const stage = new window.Konva.Stage(...);   // ❌ Not allowed
+window.Pickr.create(...);                    // ❌ Not allowed
+import { foo } from "./notExportedHere.js";  // ❌ Not allowed if not exported
 ```
 
 ---
 
-- log.js  
-  Centralized, pluggable logging system for Scene Designer.  
-  - Numeric levels (0–4): SILENT, ERROR, WARN, INFO, DEBUG.  
-  - TRACE passed to log() is aliased to DEBUG.  
-  - Runtime-configurable level and destination (console or both).  
-  - Pluggable sinks and safe serialization for complex data.
+## 7. State Management (Zustand-style, 2025 Update)
 
-- console-stream.js  
-  Console interception for log/info/warn/error/debug; forwards to the logger and optionally remote Console.Re if available.  
-  Can preserve original console output while streaming.
-
-- console.re.js  
-  Console.Re remote logging integration (ESM/UMD wrapper edition).  
-  Initializes the Console.Re connector (when present) to stream logs remotely.
-
-- console-re-wrapper.js  
-  Temporary wrapper that exposes the global Console.Re client as an ES module.  
-  Transitional exception to ES module–only rule, limited to remote logging.
-
-- global-errors.js  
-  Global error and unhandled promise rejection handler; forwards all browser-level errors to the logger (ERROR level).
-
-- state.js  
-  Centralized Zustand-style store and state management (ESM-only).  
-  Exports get/set functions, subscribe, and a small store object for advanced usage.
-
-- canvas.js  
-  Facade that re-exports the public Canvas API from canvas-core.js.  
-  Keeps public imports stable: import { buildCanvasPanel } from './canvas.js'.
-
-- canvas-core.js  
-  Fabric.js canvas core panel.  
-  - Creates canvas panel (MiniLayout component).  
-  - Loads/updates background image and sizes panel to match.  
-  - Subscribes to state and syncs canvas objects (add/remove/render).  
-  - Installs Fabric selection lifecycle sync via canvas-events.js.  
-  - Ensures shapes render above the background image.
-
-- canvas-events.js  
-  Fabric selection lifecycle sync.  
-  - Listens to selection:created/updated/cleared.  
-  - Updates app selection via selection.js APIs.  
-  - Guards against re-entrant loops; fixes delete-on-selected shape reliability.
-
-- selection.js  
-  Centralized selection logic (single and multi).  
-  - Owns transformer lifecycle (attach/detach/update).  
-  - Integrates shape state machine (shape-state.js).  
-  - Integrates per-shape config (shape-defs.js).  
-  - Provides helpers to set/clear selection and query selected shapes.
-
-- settings-core.js  
-  Settings Core module (no UI).  
-  - Owns settingsRegistry, persistence (localForage), FORCE merge/coercion.  
-  - Applies non-UI side effects (logging config, console interception, diagnostics).  
-  - Exports: LOG_LEVELS, LOG_LEVEL_LABEL_TO_NUM, LOG_LEVEL_NUM_TO_LABEL, settingsRegistry, loadSettings, saveSettings, setSettingAndSave, setSettingsAndSave.
-
-- settings-ui.js  
-  Settings UI (Tweakpane) builder.  
-  - Renders the Settings panel from settingsRegistry.  
-  - Binds controls to store via setSettingAndSave.  
-  - Avoids calling loadSettings when settings are already in-memory to prevent checkbox desync.
-
-- settings.js  
-  Facade that re-exports from settings-core.js and settings-ui.js to keep the public import path stable.
-
-- errorlog.js  
-  Error Log panel (MiniLayout).  
-  - Currently passive: message points to Console.Re dashboard for live logs.
-
-- layout.js  
-  MiniLayout bootstrapper and panel composition.  
-  - Registers Canvas, Settings, Error Log, Scenario Runner, Toolbar panels.  
-  - Rebuilds layout based on settings: showErrorLogPanel, showScenarioRunner.  
-  - Exposes helpers to show/hide/sync panel visibility.
-
-- main.js  
-  App entry point.  
-  - Loads layout.js, initializes logging, and optionally Console.Re.  
-  - Attaches limited debug helpers to window in dev.
-
-- toolbar.js  
-  Modular toolbar UI (image upload/server image, add/delete shapes).  
-  - Emits intents to actions.js; no business logic inside the toolbar.  
-  - Maintains Delete button enable/disable state based on selection.
-
-- actions.js  
-  Central business logic for scene actions (add, delete, duplicate, lock/unlock).  
-  - Applies selection and stroke width rules.  
-  - Single source of truth for scene action behavior.
-
-- shapes-core.js  
-  Shape Core helpers and non-point shapes (Rectangle, Circle).  
-  - Exports stroke width helpers, diagnostic label visibility toggling, ID/label helpers.  
-  - Used by shapes-point.js.  
-  - Public exports: setStrokeWidthForSelectedShapes, fixStrokeWidthAfterTransform, makeRectShape, makeCircleShape, applyDiagnosticLabelsVisibility.  
-  - Internal exports: getDefaultStrokeWidth, getStrokeColor, getFillColor, getShowDiagnosticLabels, makeDiagnosticLabel, generateShapeId, setShapeStrokeWidth, setGroupDiagnosticLabelVisible.
-
-- shapes-point.js  
-  Point shape factory and reticle logic.  
-  - Non-resizable, non-rotatable Point groups (selectable/movable only).  
-  - Reticle styles: crosshair, crosshairHalo, bullseye, dot, target.  
-  - Dot style includes a transparent crosshair cutout to reveal the exact center pixel.  
-  - Public export: makePointShape.
-
-- shapes.js  
-  Facade that re-exports the public API from shapes-core.js and shapes-point.js.  
-  - Keeps import path stable for the rest of the app.  
-  - Public exports: setStrokeWidthForSelectedShapes, fixStrokeWidthAfterTransform, makePointShape, makeRectShape, makeCircleShape, applyDiagnosticLabelsVisibility.
-
-- transformer.js  
-  Fabric.js control attach/detach/update for single selection.  
-  - Respects shape-defs config; reentrancy-safe.
-
-- shape-state.js  
-  Per-shape state machine (default, selected, dragging, locked, multi-selected).
-
-- shape-defs.js  
-  Centralized per-shape definitions (controls, editability, rotation/ratio flags).  
-  - Point is not resizable and not editable, ensuring no anchors/transformer are attached.
-
-- sidebar.js  
-  Tabulator-based shape list panel.  
-  - Displays shape table and selects shape on row click.
-
-- fabric-wrapper.js  
-  ES module wrapper for Fabric.js, re-exporting Canvas, Rect, Circle, Line, Group, Image, and Path.  
-  - Path is available for future compound path work (not required currently).
-
-- minilayout.js  
-  Native layout engine (rows/columns/stacks/components) with draggable splitters.  
-  - Panel size persistence via localStorage.  
-  - Per-panel scrollbar configuration and styling.
-
-- minilayout-ui.js  
-  Advanced UI helpers for MiniLayout: splitter bars, tab styling, transitions, accessibility.
-
-- minilayout.css  
-  Styles for MiniLayout: panels, splitters, tabs, transitions, responsive layout.
-
-- minilayout.DOCS.md  
-  Documentation and API reference for MiniLayout.
-
-- scenario-runner.js  
-  Scenario runner for scripted actions/log/assert flows; used by automation/testing panel.
-
-- scenario-panel.js  
-  Scenario Runner UI panel (MiniLayout) to select and run scenarios with live logs.
+- All state flows through exported functions and the store object in `state.js`.
+  - Use `getState()` to access the current state object.
+  - Use mutators like `setShapes`, `addShape`, `removeShape`, etc.
+  - Subscribe to state changes via `sceneDesignerStore.subscribe(fn)`.
+  - Do not import a singleton `AppState` object.
 
 ---
 
+## 8. Action/Intent-Based Separation of Concerns
+
+- UI components emit "intents" or "actions" to dedicated handler modules.
+  - Toolbar, keyboard shortcuts, and other panels DO NOT contain business logic for deletion, duplication, locking, etc.
+  - All business logic for scene actions (delete, duplicate, lock, unlock, add shape, etc.) is centralized in `src/actions.js`.
+  - Cross-module communication always uses ES module imports/exports.
+
+---
+
+## 9. Manifest and Documentation Updates
+
+- All new modules (added/removed/renamed) must be reflected in `src/modules.index.md`.
+- Update this file and the module manifest as needed to document architecture changes.
+
+---
+
+## 10. Auto-generated Files / Artifacts
+
+- The file `src/exports.index.json` is auto-generated by tooling. Do not edit it by hand.
+  - It may change when exports are added/removed/moved. Treat diffs as generated output during review.
+  - If it appears out of sync locally, run the usual dev/build task to regenerate.
+  - PRs may include this file; reviewers should not request manual edits to it.
+
 Notes:
-- Public imports should continue to use the shapes.js facade for shape APIs.  
-- The shapes module has been split to keep file size under control and isolate point-specific logic.  
-- Fabric wrapper exposes Path for future work (e.g., compound paths), though current point implementation uses compositing with Rects.
+- `src/modules.index.md` remains curated manually and must be updated for module add/remove/rename events.
+- The shapes module has been split: `src/shapes.js` is a facade re-exporting `src/shapes-core.js` and `src/shapes-point.js`. All imports should continue to target `./shapes.js`.
+
+---
+
+Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
 

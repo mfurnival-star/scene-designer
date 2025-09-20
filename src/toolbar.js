@@ -1,12 +1,11 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (Delete Button Bugfix Edition)
- * - Ensures Delete button always disables/enables in sync with selection state.
- * - Attaches click handler directly to button after every render.
+ * Scene Designer – Modular Toolbar UI Factory (Delete/Duplicate/Lock/Unlock/Select All wired)
+ * - Ensures Delete button and other action buttons sync with selection/state.
+ * - Attaches click handlers directly to buttons after every render.
  * - Always queries fresh DOM reference for button state updates.
- * - All shape/scene actions are emitted as intents to actions.js.
- * - NO business logic, selection, or state mutation.
+ * - Emits actions to actions.js and selection.js only (no business logic here).
  * - Logging via log.js.
  * -----------------------------------------------------------
  */
@@ -15,26 +14,32 @@ import { log } from './log.js';
 import { getState, setImage, sceneDesignerStore } from './state.js';
 import {
   addShapeOfType,
-  deleteSelectedShapes
+  deleteSelectedShapes,
+  duplicateSelectedShapes,
+  lockSelectedShapes,
+  unlockSelectedShapes
 } from './actions.js';
+import { selectAllShapes } from './selection.js';
 
 /**
  * Utility: Enable or disable a toolbar button by id.
  * Always re-query the button to avoid stale references.
  * @param {string} btnId - DOM id for the button
  * @param {boolean} enabled
+ * @param {string} [disabledTitle] - Optional tooltip when disabled
+ * @param {string} [enabledTitle] - Optional tooltip when enabled
  */
-function setButtonEnabledById(btnId, enabled) {
+function setButtonEnabledById(btnId, enabled, disabledTitle, enabledTitle) {
   const btn = document.querySelector(`#${btnId}`);
   if (!btn) return;
   btn.disabled = !enabled;
   btn.setAttribute("aria-disabled", !enabled ? "true" : "false");
   if (!enabled) {
     btn.classList.add("disabled");
-    btn.title = "Select a shape to delete";
+    if (disabledTitle) btn.title = disabledTitle;
   } else {
     btn.classList.remove("disabled");
-    btn.title = "Delete selected shape(s)";
+    if (enabledTitle) btn.title = enabledTitle;
   }
   log("DEBUG", "[toolbar] setButtonEnabledById", {
     btnId,
@@ -150,10 +155,6 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       input[type="file"] {
         display: none;
       }
-      .toolbar-btn.hidden,
-      .toolbar-btn[aria-hidden="true"] {
-        display: none !important;
-      }
       @media (max-width: 900px) {
         #canvas-toolbar-container {
           padding: 3px 4px 3px 4px;
@@ -213,14 +214,13 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
           <button id="toolbar-add-shape-btn" class="toolbar-btn" title="Add shape">
             <span style="font-size:1em;margin-right:3px;">&#x2795;</span> Add
           </button>
-          <button id="toolbar-delete-shape-btn" class="toolbar-btn" title="Delete shape">
+          <button id="toolbar-delete-shape-btn" class="toolbar-btn" title="Delete selected shape(s)">
             <span style="font-size:1em;margin-right:3px;">&#x1F5D1;</span> Delete
           </button>
-          <!-- Hidden buttons, will be unhidden when implemented -->
-          <button id="toolbar-duplicate-shape-btn" class="toolbar-btn hidden" aria-hidden="true">Duplicate</button>
-          <button id="toolbar-select-all-btn" class="toolbar-btn hidden" aria-hidden="true">Select All</button>
-          <button id="toolbar-lock-btn" class="toolbar-btn hidden" aria-hidden="true">Lock</button>
-          <button id="toolbar-unlock-btn" class="toolbar-btn hidden" aria-hidden="true">Unlock</button>
+          <button id="toolbar-duplicate-shape-btn" class="toolbar-btn" title="Duplicate selected shape(s)">Duplicate</button>
+          <button id="toolbar-select-all-btn" class="toolbar-btn" title="Select all shapes">Select All</button>
+          <button id="toolbar-lock-btn" class="toolbar-btn" title="Lock selected shape(s)">Lock</button>
+          <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
         </div>
       </div>
     `;
@@ -232,6 +232,11 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     const serverImageSelect = element.querySelector('#toolbar-server-image-select');
     const shapeTypeSelect = element.querySelector('#toolbar-shape-type-select');
     const addShapeBtn = element.querySelector('#toolbar-add-shape-btn');
+    const deleteBtn = element.querySelector('#toolbar-delete-shape-btn');
+    const duplicateBtn = element.querySelector('#toolbar-duplicate-shape-btn');
+    const selectAllBtn = element.querySelector('#toolbar-select-all-btn');
+    const lockBtn = element.querySelector('#toolbar-lock-btn');
+    const unlockBtn = element.querySelector('#toolbar-unlock-btn');
 
     // --- Toolbar UI Scale live update support ---
     const updateToolbarScale = () => {
@@ -304,8 +309,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
 
     // --- DELETE SHAPE BUTTON ---
     function handleDeleteClick(ev) {
-      const btn = document.querySelector('#toolbar-delete-shape-btn');
-      if (!btn || btn.disabled) {
+      if (!deleteBtn || deleteBtn.disabled) {
         log("WARN", "[toolbar] Delete button clicked while disabled – ignoring");
         ev && ev.preventDefault && ev.preventDefault();
         return;
@@ -313,29 +317,119 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       log("INFO", "[toolbar] Delete button clicked");
       deleteSelectedShapes();
     }
-    // Attach handler directly to button, every time after render
     function attachDeleteButtonHandler() {
-      const btn = document.querySelector('#toolbar-delete-shape-btn');
-      if (btn) {
-        btn.removeEventListener('click', handleDeleteClick); // Remove any previous
-        btn.addEventListener('click', handleDeleteClick);
+      if (deleteBtn) {
+        deleteBtn.removeEventListener('click', handleDeleteClick);
+        deleteBtn.addEventListener('click', handleDeleteClick);
       }
     }
 
-    // --- Enable/disable Delete button based on selection ---
-    function updateDeleteButtonState() {
-      const selectedCount = getState().selectedShapes?.length ?? 0;
-      setButtonEnabledById('toolbar-delete-shape-btn', selectedCount > 0);
-      attachDeleteButtonHandler();
+    // --- DUPLICATE BUTTON ---
+    function handleDuplicateClick(ev) {
+      if (!duplicateBtn || duplicateBtn.disabled) {
+        log("WARN", "[toolbar] Duplicate button clicked while disabled – ignoring");
+        ev && ev.preventDefault && ev.preventDefault();
+        return;
+      }
+      log("INFO", "[toolbar] Duplicate button clicked");
+      duplicateSelectedShapes();
     }
+    function attachDuplicateButtonHandler() {
+      if (duplicateBtn) {
+        duplicateBtn.removeEventListener('click', handleDuplicateClick);
+        duplicateBtn.addEventListener('click', handleDuplicateClick);
+      }
+    }
+
+    // --- SELECT ALL BUTTON ---
+    function handleSelectAllClick(ev) {
+      if (!selectAllBtn || selectAllBtn.disabled) {
+        log("WARN", "[toolbar] Select All clicked while disabled – ignoring");
+        ev && ev.preventDefault && ev.preventDefault();
+        return;
+      }
+      log("INFO", "[toolbar] Select All clicked");
+      selectAllShapes();
+    }
+    function attachSelectAllHandler() {
+      if (selectAllBtn) {
+        selectAllBtn.removeEventListener('click', handleSelectAllClick);
+        selectAllBtn.addEventListener('click', handleSelectAllClick);
+      }
+    }
+
+    // --- LOCK/UNLOCK BUTTONS ---
+    function handleLockClick(ev) {
+      if (!lockBtn || lockBtn.disabled) {
+        log("WARN", "[toolbar] Lock clicked while disabled – ignoring");
+        ev && ev.preventDefault && ev.preventDefault();
+        return;
+      }
+      log("INFO", "[toolbar] Lock clicked");
+      lockSelectedShapes();
+    }
+    function handleUnlockClick(ev) {
+      if (!unlockBtn || unlockBtn.disabled) {
+        log("WARN", "[toolbar] Unlock clicked while disabled – ignoring");
+        ev && ev.preventDefault && ev.preventDefault();
+        return;
+      }
+      log("INFO", "[toolbar] Unlock clicked");
+      unlockSelectedShapes();
+    }
+    function attachLockUnlockHandlers() {
+      if (lockBtn) {
+        lockBtn.removeEventListener('click', handleLockClick);
+        lockBtn.addEventListener('click', handleLockClick);
+      }
+      if (unlockBtn) {
+        unlockBtn.removeEventListener('click', handleUnlockClick);
+        unlockBtn.addEventListener('click', handleUnlockClick);
+      }
+    }
+
+    // --- Enable/disable buttons based on selection and shapes in store ---
+    function updateButtonsState() {
+      const selected = getState().selectedShapes || [];
+      const selectedCount = selected.length;
+      const shapesCount = (getState().shapes || []).length;
+
+      // Delete
+      setButtonEnabledById('toolbar-delete-shape-btn', selectedCount > 0, "Select a shape to delete", "Delete selected shape(s)");
+      attachDeleteButtonHandler();
+
+      // Duplicate
+      setButtonEnabledById('toolbar-duplicate-shape-btn', selectedCount > 0, "Select shape(s) to duplicate", "Duplicate selected shape(s)");
+      attachDuplicateButtonHandler();
+
+      // Select All (enabled if there is at least one shape)
+      setButtonEnabledById('toolbar-select-all-btn', shapesCount > 0, "No shapes to select", "Select all shapes");
+      attachSelectAllHandler();
+
+      // Lock/Unlock
+      const anyUnlockedSelected = selected.some(s => !s.locked);
+      const anyLockedSelected = selected.some(s => s.locked);
+      setButtonEnabledById('toolbar-lock-btn', selectedCount > 0 && anyUnlockedSelected, "Select unlocked shape(s) to lock", "Lock selected shape(s)");
+      setButtonEnabledById('toolbar-unlock-btn', selectedCount > 0 && anyLockedSelected, "Select locked shape(s) to unlock", "Unlock selected shape(s)");
+      attachLockUnlockHandlers();
+
+      log("DEBUG", "[toolbar] updateButtonsState", {
+        selectedCount,
+        shapesCount,
+        anyUnlockedSelected,
+        anyLockedSelected
+      });
+    }
+
     // Initial state
-    updateDeleteButtonState();
-    // Subscribe to ALL state changes (no filter!) for selection changes
+    updateButtonsState();
+
+    // Subscribe to ALL state changes (no filter!) for selection/lock/shapes changes
     sceneDesignerStore.subscribe(() => {
-      updateDeleteButtonState();
+      updateButtonsState();
     });
 
-    log("INFO", "[toolbar] Toolbar panel fully initialized (Delete button bugfix: direct button reference, handler attached, state sync)");
+    log("INFO", "[toolbar] Toolbar panel initialized (Add/Delete/Duplicate/Select All/Lock/Unlock wired)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
@@ -349,4 +443,3 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
-

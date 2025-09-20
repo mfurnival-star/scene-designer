@@ -2,7 +2,7 @@
 
 DIR="./src"
 SPACING="    "           # Indentation for each row
-CONFIRM_OVERWRITE=false  # Set to false to skip confirmation prompt
+CONFIRM_OVERWRITE=false  # Set to true to ask before overwrite
 
 # ANSI color codes
 YELLOW="\033[1;33m"
@@ -12,47 +12,139 @@ RESET="\033[0m"
 COL_WIDTH=30
 modified_files=()
 
+# Helper: membership check in modified_files
+is_modified() {
+  local name="$1"
+  for m in "${modified_files[@]}"; do
+    [[ "$m" == "$name" ]] && return 0
+  done
+  return 1
+}
+
 while true; do
     echo ""
     echo "📁 Available Files in $DIR"
     echo "---------------------------"
 
+    # Build sorted list of file basenames (case-insensitive sort)
     files=("$DIR"/*)
-    sorted=($(for f in "${files[@]}"; do basename "$f"; done | sort))
-    last_letter=""
-    index=1
+    sorted=($(for f in "${files[@]}"; do basename "$f"; done | sort -f))
 
-    # Print two-column layout with alphabetical gaps
-    for ((i = 0; i < ${#sorted[@]}; i += 2)); do
-        left="${sorted[$i]}"
-        right="${sorted[$i+1]}"
+    # Partition into unmodified and modified
+    unmod=()
+    mod=()
+    for f in "${sorted[@]}"; do
+      if is_modified "$f"; then
+        mod+=("$f")
+      else
+        unmod+=("$f")
+      fi
+    done
 
-        first_letter="${left:0:1}"
-        if [[ "$first_letter" != "$last_letter" ]]; then
-            echo ""
-            last_letter="$first_letter"
+    # Prepare two-column layout for unmodified, column-first numbering
+    unmod_count=${#unmod[@]}
+    rows=$(( (unmod_count + 1) / 2 ))  # ceil(unmod_count / 2)
+
+    # Split unmodified into column 1 (first rows) and column 2 (next rows)
+    col1=()
+    col2=()
+    for ((i=0; i<rows; i++)); do
+      idx=$i
+      if (( idx < unmod_count )); then
+        col1+=("${unmod[$idx]}")
+      fi
+    done
+    for ((i=0; i<rows; i++)); do
+      idx=$((rows + i))
+      if (( idx < unmod_count )); then
+        col2+=("${unmod[$idx]}")
+      fi
+    done
+
+    # Build index→file mapping for selection
+    declare -A index_to_file
+    total_items=0
+
+    # Map col1 numbers 1..rows
+    for ((i=0; i<${#col1[@]}; i++)); do
+      num=$((1 + i))
+      index_to_file[$num]="${col1[$i]}"
+      total_items=$num
+    done
+    # Map col2 numbers (rows+1)..(rows+len(col2))
+    for ((i=0; i<${#col2[@]}; i++)); do
+      num=$((rows + 1 + i))
+      index_to_file[$num]="${col2[$i]}"
+      total_items=$num
+    done
+    # Map modified (third column) after unmod
+    for ((i=0; i<${#mod[@]}; i++)); do
+      num=$((unmod_count + 1 + i))
+      index_to_file[$num]="${mod[$i]}"
+      total_items=$num
+    done
+
+    # Determine rows to print: max of unmod rows and mod length
+    rows_total=$rows
+    if (( ${#mod[@]} > rows_total )); then
+      rows_total=${#mod[@]}
+    fi
+
+    # Grouping: track last letter for first and third columns to insert blank lines
+    last_letter_col1=""
+    last_letter_mod=""
+
+    # Print header for columns
+    # Left and middle are unmodified, right is modified (done)
+    #printf "%s%-${COL_WIDTH}s  %-${COL_WIDTH}s  %s\n" "$SPACING" "Unmodified (1st col)" "Unmodified (2nd col)" "Modified (done)"
+
+    # Print rows
+    for ((i=0; i<rows_total; i++)); do
+      line_printed=false
+      row_out="$SPACING"
+
+      # Column 1 (unmodified)
+      if (( i < ${#col1[@]} )); then
+        f1="${col1[$i]}"
+        n1=$((1 + i))
+        # Grouping by first letter for column 1 (blank line before new group)
+        first_letter="${f1:0:1}"
+        if [[ "$first_letter" != "$last_letter_col1" ]] && [[ -n "$last_letter_col1" ]]; then
+          echo ""  # blank line between letter groups
+          row_out="$SPACING"
         fi
+        last_letter_col1="$first_letter"
+        line_printed=true
+        # color for unmodified: yellow
+        printf "${row_out}${YELLOW}%2d${RESET} → %-${COL_WIDTH}s" "$n1" "$f1"
+      else
+        # empty cell for alignment
+        printf "${row_out}%-${COL_WIDTH}s" ""
+      fi
 
-        # Check if left file was modified
-        color_left="$YELLOW"
-        if [[ " ${modified_files[*]} " == *" $left "* ]]; then
-            color_left="$GREEN"
-        fi
+      echo -n "  "
 
-        printf "${SPACING}${color_left}%2d${RESET} → %-${COL_WIDTH}s" "$index" "$left"
-        index=$((index + 1))
+      # Column 2 (unmodified)
+      if (( i < ${#col2[@]} )); then
+        f2="${col2[$i]}"
+        n2=$((rows + 1 + i))
+        printf "${YELLOW}%2d${RESET} → %-${COL_WIDTH}s" "$n2" "$f2"
+      else
+        printf "%-${COL_WIDTH}s" ""
+      fi
 
-        # Check if right file exists and was modified
-        if [ -n "$right" ]; then
-            color_right="$YELLOW"
-            if [[ " ${modified_files[*]} " == *" $right "* ]]; then
-                color_right="$GREEN"
-            fi
-            printf "${color_right}%2d${RESET} → %s\n" "$index" "$right"
-            index=$((index + 1))
-        else
-            echo ""
-        fi
+      echo -n "  "
+
+      # Column 3 (modified)
+      if (( i < ${#mod[@]} )); then
+        f3="${mod[$i]}"
+        n3=$((unmod_count + 1 + i))
+        # Optional grouping for modified column (won't add extra blank line to keep alignment)
+        # But we can visually hint group breaks by spacing prefix if desired.
+        printf "${GREEN}%2d${RESET} → %s" "$n3" "$f3"
+      fi
+
+      echo ""
     done
 
     echo ""
@@ -60,29 +152,41 @@ while true; do
     echo "Enter the number of the file to overwrite (Ctrl+C to quit):"
     read -r choice
 
-    actual_index=$((choice - 1))
-    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$actual_index" -ge 0 ] && [ "$actual_index" -lt "${#sorted[@]}" ]; then
-        selected="${sorted[$actual_index]}"
-        full_path="$DIR/$selected"
-        echo ""
-        echo "⚠️ You selected: $full_path"
-
-        if [ "$CONFIRM_OVERWRITE" = true ]; then
-            echo "Are you sure you want to overwrite this file? (y/n)"
-            read -r confirm
-            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-                echo "↩️ Cancelled. Returning to menu..."
-                continue
-            fi
-        fi
-
-        echo ""
-        echo "✍️ Start typing your content. Press Ctrl+D when you're done."
-        cat > "$full_path"
-        modified_files+=("$selected")
-        echo "✅ File saved. Returning to menu..."
-    else
-        echo "❌ Invalid choice. Please enter a valid number."
+    # Validate numeric and range
+    if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+      echo "❌ Invalid choice. Please enter a valid number."
+      continue
     fi
+    if (( choice < 1 || choice > total_items )); then
+      echo "❌ Invalid choice. Please enter a number between 1 and $total_items."
+      continue
+    fi
+
+    selected="${index_to_file[$choice]}"
+    full_path="$DIR/$selected"
+
+    echo ""
+    echo "⚠️ You selected: $full_path"
+
+    if [ "$CONFIRM_OVERWRITE" = true ]; then
+      echo "Are you sure you want to overwrite this file? (y/n)"
+      read -r confirm
+      if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        echo "↩️ Cancelled. Returning to menu..."
+        continue
+      fi
+    fi
+
+    echo ""
+    echo "✍️ Start typing your content. Press Ctrl+D when you're done."
+    # Ensure directory exists (it does in our use-case)
+    cat > "$full_path"
+
+    # Track as modified (dedupe)
+    if ! is_modified "$selected"; then
+      modified_files+=("$selected")
+    fi
+
+    echo "✅ File saved. Returning to menu..."
 done
 

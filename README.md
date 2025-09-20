@@ -8,7 +8,7 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
 ## ✨ Main Features & Workflow
 
 1. **Image Management**
-   - Upload a local screenshot **or** select from server-provided options.
+   - Upload a local screenshot or select from server-provided options.
    - Display the selected image as a locked canvas background.
 
 2. **Shape Annotation**
@@ -39,16 +39,27 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
 
 ## 🛠️ Modular Actions & Separation of Concerns (2025 Update)
 
-- **Toolbar and UI panels emit "intents" or "actions" only.**
-  - All business logic for scene actions (delete, duplicate, lock, unlock, etc.) is centralized in [`src/actions.js`](src/actions.js).
-  - Toolbars are now fully decoupled: you can swap, extend, or test toolbars without touching business logic.
+- Toolbar and UI panels emit "intents" or "actions" only.
+  - All business logic for scene actions (delete, duplicate, lock, unlock, etc.) is centralized in `src/actions.js`.
+  - Toolbars are decoupled: you can swap, extend, or test toolbars without touching business logic.
   - Actions module ensures consistent rules for deletion, duplication, locking, etc.
 
-- **State management** uses Zustand-style store in [`src/state.js`](src/state.js).
+- State management uses a Zustand-style store in `src/state.js`.
   - UI and business logic modules communicate via exported functions.
   - No direct mutation from UI components.
 
-- See [SCENE_DESIGNER_MANIFESTO.md](SCENE_DESIGNER_MANIFESTO.md) for architectural rules.
+- Shapes module split:
+  - `src/shapes.js` is now a facade that re-exports from:
+    - `src/shapes-core.js` (helpers, Rect, Circle, stroke width, diagnostic labels)
+    - `src/shapes-point.js` (Point/reticle-only logic)
+  - All other modules should continue to import from `./shapes.js`.
+
+- Toolbar wiring (current):
+  - Image upload + server image selector
+  - Add/Delete shape
+  - Duplicate, Select All, Lock, Unlock actions wired to `actions.js`
+
+See [SCENE_DESIGNER_MANIFESTO.md](SCENE_DESIGNER_MANIFESTO.md) for architectural rules.
 
 ---
 
@@ -56,12 +67,12 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
 
 ### MVP
 
-#### 1. Image Loader *(✅ Completed)*
+#### 1. Image Loader (Completed)
    - [x] File upload (device)
    - [x] Dropdown for hardcoded server images
    - [x] Display chosen image as background
 
-#### 2. Shape Annotation *(Point support now implemented!)*
+#### 2. Shape Annotation (Point support implemented)
    - [x] Add "Point" annotation support
    - [x] Restrict dropdown to Point, Rect, Circle
    - [x] Place/move shapes on image
@@ -85,33 +96,27 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
    - [ ] Each shape outputs the correct `require_*` line
    - [ ] Download/export as `.ini` file
 
-#### 6. UI/UX Improvements *(recently addressed and in progress)*
-   - [x] Settings panel is collapsible and now always accessible via a toggle button
+#### 6. UI/UX Improvements (in progress)
+   - [x] Settings panel is collapsible and accessible via a toggle button
    - [x] Save button for label editing
    - [x] Responsive #container resizing to fit image/canvas
-   - [x] Only show selection highlight box for multiselect (not for single—single selection uses anchors/transformer only)
-   - [x] Settings panel toggle always visible and clickable, even when panel is closed
-   - [x] **MiniLayout panel size persistence:** Panel sizes after splitter drag are now saved/restored automatically.
+   - [x] Only show selection highlight box for multiselect (single uses transformer/anchors)
+   - [x] Settings panel toggle always visible/clickable
+   - [x] MiniLayout panel size persistence: splitter-drag sizes saved/restored via localStorage
+   - [x] Toolbar: Duplicate / Select All / Lock / Unlock wired to actions
 
 ---
 
 ### Shape Table Display (Design/UX Plan)
 
-- **Concise Table Columns:**
+- Concise Table Columns:
   - Lock status (icon)
   - Label (text, possibly inline-editable)
   - Color swatches (stroke/fill color chips)
-  - Coordinates (adapted for shape type: e.g. X,Y for point, X,Y,W,H for rect, X,Y,R for circle)
-- **Touch/Click to Select:**  
-  - Tapping or clicking a row selects/highlights the corresponding shape on the canvas.
-- **Detail on Demand:**  
-  - Each row has an info icon or expandable element (“…” or ⓘ) to view full properties and actions (edit all fields, duplicate, delete, lock/unlock, etc.).
-- **Clean, Fast Scanning:**  
-  - Table is brief and readable for scanning, but full details/actions are readily available via the info/expand control.
-- **Future Option:**  
-  - Table could support row expansion (accordion style) or modal for detailed editing.
-- **NEW IDEA:**  
-  - The table can have a “details” icon that pops up a modal overlay (full workspace) for expanded info, per your earlier plan.
+  - Coordinates (adapted per shape)
+- Touch/Click to Select: Selecting a row selects the shape on canvas.
+- Detail on Demand: Info/expand control or modal for full editing.
+- Clean, Fast Scanning, with optional row expansion in future.
 
 ---
 
@@ -121,35 +126,24 @@ Users upload or pick a screenshot, annotate with shapes (points, rectangles, cir
 - [ ] Expose config params (step, count, tolerance) in UI
 - [ ] Multiple scenes per config
 - [ ] Import/edit existing `.ini` files
-- [ ] Additional shape/check types (lines, polygons, templates, etc.)
+- [ ] Additional shape/check types (lines, polygons, templates)
 - [ ] Export as JSON (optional)
-- [ ] Keyboard shortcuts for faster workflow
+- [ ] Keyboard shortcuts
 - [ ] Undo/redo support
 - [ ] Auto-detect rectangles from images to speed up annotation
-- [x] **MiniLayout panel size persistence (2025-09):** Panel sizes after splitter drag are now saved/restored automatically via localStorage.
+- [x] MiniLayout panel size persistence via localStorage
 
 ---
 
 ## 🐞 Known Issues / Tweaks
 
 - [ ] Settings panel content only populates when `buildSettingsPanel()` is called—ensure it's invoked after DOM ready.
-- [ ] Settings panel toggle button is currently only barely visible (UI/positioning needs further refinement if still an issue).
-- [ ] When settings panel is closed, some users report toggle is hard to spot or not clickable.
-- [ ] Label saving UI/logic is present but could benefit from clearer feedback (e.g. confirm flash, or auto-save on Enter).
-- [ ] Some mobile/touch devices may have scaling or input issues.
-- [ ] **Toolbar actions are now dispatched as intents to `actions.js`.**  
-      If you extend the toolbar (e.g., add keyboard shortcuts, new UI), emit actions via the centralized module.
+- [ ] Settings panel toggle button may still need polish.
+- [ ] Label save UX can be improved (confirm flash, Enter to save).
+- [ ] Some mobile/touch devices may have scaling/input quirks.
+- [ ] Toolbar actions are dispatched as intents to `actions.js`.
 
----
-
-*Resolved:*
-- ~~The settings panel color picker is not using Pickr.~~
-- ~~Locked shapes should never move in a multiselect drag; fix if possible.~~
-- ~~Selection highlight box should only show for multiselect (not for single—use transformer anchors only).~~
-- ~~Settings panel is now collapsible and toggle is always visible (though toggle UI can be improved further).~~
-- ~~Label Save button now updates label as expected.~~
-- ~~#container resizes to match image/canvas size, including tall/phone images.~~
-- ~~Multiselect drag clamp logic is slightly off (edge case: when shapes are at the boundary, sometimes group can "jump" or resist).~~
+Resolved items are tracked in `defects.md`.
 
 ---
 
@@ -163,6 +157,7 @@ require_pixel_rect = X1,Y1,X2,Y2,#RRGGBB,step=8
 require_pixel_circle = X,Y,RADIUS,#RRGGBB,count=12
 require_color_region = X1,Y1,X2,Y2,#RRGGBB,tolerance=40
 ```
+
 ---
 
 ## 🏁 Restart/Resume Guide
@@ -178,13 +173,13 @@ To restart or fork:
 
 ## 🏗️ Architecture Notes (2025 Update)
 
-- See `src/actions.js` for all centralized business logic for scene actions.
-- Toolbars and other UI emit actions only—never mutate state or shapes directly.
+- See `src/actions.js` for centralized scene actions.
+- Toolbars and other UI emit actions only—no direct state mutation.
 - State managed in `src/state.js` (Zustand pattern).
 - Panels and UI factories follow MiniLayout API: `{ element, title, componentName }`.
-- **MiniLayout panel size persistence:**  
-  - After splitter drag, panel sizes are saved/restored via localStorage.
-  - No user action required; works automatically.
+- Shapes module split:
+  - `shapes.js` facade → `shapes-core.js`, `shapes-point.js`.
+- MiniLayout panel size persistence via localStorage.
 
 ---
 
@@ -195,23 +190,28 @@ To restart or fork:
 
 ---
 
+## 🧩 Auto-generated files
+
+- `src/exports.index.json` is auto-generated by tooling. Do not edit it by hand.
+  - Manual edits are not required when APIs change; the generator will refresh it.
+  - If it looks out of sync locally, run the usual dev/build task to regenerate.
+
+Note: `src/modules.index.md` is curated manually and should be updated when modules are added/removed/renamed.
+
+---
+
 ## ⚠️ Manifesto Caveat: Remote Logging via Console.Re
 
-**Console.Re remote log streaming requires a temporary exception to our strict ES module and no-globals policy:**
+Console.Re remote log streaming requires a temporary exception to our strict ES module and no-globals policy:
 
-- **Remote log streaming must use the official Console.Re connector script:**
-  ```html
+- Use the official Console.Re connector script:
+  ```
   <script src="//console.re/connector.js" data-channel="scene-designer"></script>
   ```
-  - This exception is strictly for remote log streaming only.
-  - All other dependencies and code must remain ES module–only and avoid global/window usage.
-  - The exception is documented in [SCENE_DESIGNER_MANIFESTO.md](SCENE_DESIGNER_MANIFESTO.md) and build/deploy scripts.
-  - Remove the exception as soon as Console.Re provides a proper ES module export.
+- This exception is strictly for remote log streaming only.
+- Remove once Console.Re provides a proper ES module export.
 
-**Rationale:**  
-Console.Re's connector.js CDN is the only supported way to stream logs to the dashboard and reliably capture early errors.  
-No alternative exists for ESM-only remote log streaming with Console.Re at this time.  
-This enables robust debugging/log streaming while maintaining code integrity elsewhere.
+Rationale: The connector.js CDN is currently the only supported way to stream logs to the Console.Re dashboard and reliably capture early errors.
 
 ---
 

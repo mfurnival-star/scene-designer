@@ -157,3 +157,4 @@ deleteShapeBtn.addEventListener('click', () => {
 
 Refer to **SCENE_DESIGNER_MANIFESTO.md** for the definitive engineering rules and architectural philosophy.
 
+

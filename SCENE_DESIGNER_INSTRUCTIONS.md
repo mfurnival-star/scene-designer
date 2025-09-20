@@ -4,15 +4,15 @@ These instructions are binding for all development, code review, and delivery in
 
 ---
 
-## 1. **ES Module Enforcement**
+## 1. ES Module Enforcement
 
 - All code must use ES module syntax for imports and exports.
 - No use of window.*, global variables, or global libraries.
 - External dependencies (e.g., Konva, Pickr, Golden Layout) must be imported as ES modules.
 
-### 1A. **Transitional Exception: Remote Logging via Console.Re**
+### 1A. Transitional Exception: Remote Logging via Console.Re
 
-- **Remote log streaming must use the official Console.Re connector script:**
+- Remote log streaming must use the official Console.Re connector script:
   ```html
   <script src="//console.re/connector.js" data-channel="scene-designer"></script>
   ```
@@ -24,7 +24,7 @@ These instructions are binding for all development, code review, and delivery in
 
 ---
 
-## 2. **Import/Export Consistency**
+## 2. Import/Export Consistency
 
 - Every import must be satisfied by a real export in the source file.
 - Update the source or import as needed to ensure consistency.
@@ -32,46 +32,46 @@ These instructions are binding for all development, code review, and delivery in
 
 ---
 
-## 3. **File Delivery and Review Workflow**
+## 3. File Delivery and Review Workflow
 
 - All code delivery, review, and requests operate on complete files only (never snippets).
 - File-by-file delivery workflow:
-    1. List all files to be delivered up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...).
-    2. Deliver each file, one at a time, in the order listed.
-    3. After each file, state the name and number of the next file to expect (e.g., "Next file: 2. sidebar.js").
-    4. Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.
-    5. Keep a running list of remaining files/numbers in each reply until all are delivered.
-    6. After all files, explicitly confirm completion (e.g., "All files delivered. Refactor complete.").
+  1. List all files to be delivered up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...).
+  2. Deliver each file, one at a time, in the order listed.
+  3. After each file, state the name and number of the next file to expect (e.g., "Next file: 2. sidebar.js").
+  4. Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.
+  5. Keep a running list of remaining files/numbers in each reply until all are delivered.
+  6. After all files, explicitly confirm completion (e.g., "All files delivered. Refactor complete.").
 - If a module is added, removed, or renamed, update `src/modules.index.md`.
 
 ---
 
-## 4. **File Size Policy and Splitting**
+## 4. File Size Policy and Splitting
 
 - No single file should exceed ~350 lines.
 - If a file does, split into logical ES module parts (e.g., `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).
 - Each part should be ≤350 lines if possible.
 - When splitting:
-    - Prefer logical separation (core, UI, data, helpers, etc).
-    - Each part must begin with a summary comment.
-    - Update all imports/exports to use new modules.
-    - Update `src/modules.index.md` to list all new files.
-    - Document the split in the PR/commit summary.
+  - Prefer logical separation (core, UI, data, helpers, etc).
+  - Each part must begin with a summary comment.
+  - Update all imports/exports to use new modules.
+  - Update `src/modules.index.md` to list all new files.
+  - Document the split in the PR/commit summary.
 - This policy is mandatory for all new code and for any refactoring of large files.
 
 ---
 
-## 5. **Logging and Documentation**
+## 5. Logging and Documentation
 
 - Use the shared logger (`log()`) from `log.js` with proper log levels and tags.
-    - `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE` (TRACE is very verbose; rarely used).
+  - `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE` (TRACE is very verbose; rarely used).
 - Never use `console.log` directly except inside the logger implementation.
 - Every module/file must begin with a comment summarizing purpose, exports, and dependencies.
 - All cross-module communication must use ES module imports/exports.
 
 ---
 
-## 6. **Example (Good/Bad)**
+## 6. Example (Good/Bad)
 
 ```js
 // Good
@@ -83,6 +83,45 @@ const stage = new window.Konva.Stage(...);   // ❌ Not allowed
 window.Pickr.create(...);                    // ❌ Not allowed
 import { foo } from "./notExportedHere.js";  // ❌ Not allowed if not exported
 ```
+
+---
+
+## 7. State Management (Zustand-style, 2025 Update)
+
+- All state flows through exported functions and the store object in `state.js`.
+  - Use `getState()` to access the current state object.
+  - Use mutators like `setShapes`, `addShape`, `removeShape`, etc.
+  - Subscribe to state changes via `sceneDesignerStore.subscribe(fn)`.
+  - Do not import a singleton `AppState` object.
+
+---
+
+## 8. Action/Intent-Based Separation of Concerns
+
+- UI components emit "intents" or "actions" to dedicated handler modules.
+  - Toolbar, keyboard shortcuts, and other panels DO NOT contain business logic for deletion, duplication, locking, etc.
+  - All business logic for scene actions (delete, duplicate, lock, unlock, add shape, etc.) is centralized in `src/actions.js`.
+  - Cross-module communication always uses ES module imports/exports.
+
+---
+
+## 9. Manifest and Documentation Updates
+
+- All new modules (added/removed/renamed) must be reflected in `src/modules.index.md`.
+- Update this file and the module manifest as needed to document architecture changes.
+
+---
+
+## 10. Auto-generated Files / Artifacts
+
+- The file `src/exports.index.json` is auto-generated by tooling. Do not edit it by hand.
+  - It may change when exports are added/removed/moved. Treat diffs as generated output during review.
+  - If it appears out of sync locally, run the usual dev/build task to regenerate.
+  - PRs may include this file; reviewers should not request manual edits to it.
+
+Notes:
+- `src/modules.index.md` remains curated manually and must be updated for module add/remove/rename events.
+- The shapes module has been split: `src/shapes.js` is a facade re-exporting `src/shapes-core.js` and `src/shapes-point.js`. All imports should continue to target `./shapes.js`.
 
 ---
 

@@ -1,124 +1,160 @@
-# Copilot Collaboration Manifesto
+# Scene Designer – Engineering & Review Instructions (Zustand Refactor Edition)
 
-This file defines the working agreement between the user (`mfurnival-star`) and GitHub Copilot for code requests, modularization, logging, and update practices in this repository.
-
----
-
-## 1. **Full File Delivery on Request**
-
-- **When the user requests a code change, review, or output for any of the following:**
-  - `index.html`
-  - `styles.css`
-- **Copilot will always supply the complete, current file**—not just a snippet or diff.  
-  This ensures the user can copy and replace the whole file if desired.
+These instructions are binding for all development, code review, and delivery in the Scene Designer project.
 
 ---
 
-## 2. **Explicit File List Index for Modular Parts**
+## 1. **ES Module Enforcement**
 
-- The main application (`shapes.js`) is split into modular part files (e.g., `shapes.logstream.js`, `shapes.layout.js`, etc.).
-- **The canonical order of these part files is defined by a `filelist` code block in `shapes.parts.index.md`.**
-- **All code requests, reviews, and concatenation must refer to the file order in the index’s `filelist` block.**
-- **Whenever a new part is added, removed, or reordered, the `filelist` in `shapes.parts.index.md` must be updated accordingly.**
-- **File naming is otherwise unconstrained (no numbers or letters needed). Order is determined solely by the index filelist.**
-- The `filelist` block in `shapes.parts.index.md` is always the authoritative list of files to be concatenated for `shapes.js`.
-
-**Example (the real list is always in the index):**
-```filelist
-shapes.logstream.js
-shapes.layout.js
-shapes.handlers.js
-shapes.sidebar.js
-shapes.konva.js
-shapes.multiselect.js
-shapes.settings.js
-```
+- All code must use ES module syntax for imports and exports.
+- No use of `window.*`, global variables, or global libraries.
+- External dependencies (e.g. Fabric.js, Tweakpane, Tabulator) must be imported as ES modules.
+- **No CDN/global scripts.** All dependencies must be installed via npm and imported.
 
 ---
 
-## 3. **Maintaining the Parts Index**
+## 1A. **Transitional Exception: Remote Logging via Console.Re**
 
-- **Whenever Copilot makes changes to any part file**, the `shapes.parts.index.md` file will be updated to reflect:
-  - New, removed, or renamed parts
-  - Revised descriptions, key features, or responsibilities
-  - Integration points and cross-part references, as appropriate
-- **The `filelist` block must always be kept up to date.**
-- **If the filelist is not updated, the modular build and code review process may break.**
+**Caveat (2025-09):**
+
+- **Remote log streaming must use the official Console.Re connector script:**
+  ```html
+  <script src="//console.re/connector.js" data-channel="scene-designer"></script>
+  ```
+  - This ensures compatibility with the current Console.Re dashboard and captures early errors.
+  - The legacy npm UMD CDN (`console-remote-client`) is deprecated and MUST NOT be used except for backward compatibility (if needed for old builds).
+  - This exception is strictly for remote logging only.
+  - All other dependencies and code must remain ES module–only and avoid global/window usage.
+
+- This exception must be:
+    - Documented here and in `README.md`.
+    - Restricted to remote log streaming/diagnostics—never for application logic or UI.
+    - Removed as soon as Console.Re provides a proper ES module export.
+
+**Rationale:**  
+Console.Re's connector.js CDN is the only supported way to stream logs to the dashboard and reliably capture early errors.  
+No alternative exists for ESM-only remote log streaming with Console.Re at this time.  
+This caveat ensures robust debugging/log streaming while maintaining code integrity elsewhere.
 
 ---
 
-## 4. **Standardized Logging Scheme**
+**Action for maintainers:**  
+- If remote logging is required, inject the connector.js CDN script as the first script inside `<head>` in `index.html`.
+- Document this exception in all build/deploy scripts.
+- Remove the exception once upstream Console.Re supports ESM.
 
-To ensure effective debugging, traceability, and maintainability, this project adopts the following logging standards:
+---
 
-### **Log Levels (in increasing verbosity):**
-- **OFF:** No logs.
-- **ERROR:** Only critical errors and exceptions.
-- **WARN:** Warnings and recoverable issues.
-- **INFO:** Major lifecycle events and user actions.
-- **DEBUG:** Detailed function entry/exit, state changes, significant variable values.
-- **TRACE:** Extremely verbose; every step, branch, and interaction, especially in complex flows.
+## 2. **Import/Export Consistency**
 
-### **Logging Practices:**
-- **Function Entry/Exit:**  
-  Always log at `TRACE` when entering and exiting functions, with key arguments/results.
-- **Branching/Conditionals:**  
-  Log decisions in logic branches at `DEBUG` or `TRACE`, especially when outcomes are non-obvious.
-- **Key State Changes:**  
-  Log whenever important state changes, e.g., selection changes, drag starts/ends, delta calculations.
-- **User Interaction:**  
-  Log at `INFO` for UI events (clicks, drag, panel toggles, etc).
-- **Non-obvious Outcomes:**  
-  Log early returns or aborts at `DEBUG` or `TRACE` with reasons.
-- **Context Metadata:**  
-  Include relevant context (such as shape IDs, types, coordinates, modifier keys, etc.) in logs.
-- **Per-Module Tags:**  
-  Prefix logs with a module or feature tag in square brackets, e.g., `[multiselect]`, `[sidebar]`.
+- Every import must be satisfied by a real export in the source file.
+- Update the source or import as needed to ensure consistency.
+- Enforce for all code changes and file deliveries.
+- **State management uses exported functions and the Zustand-style store from `state.js`.**
+    - **Do not import or reference a singleton `AppState` object.**
+    - Use `getState()`, mutators, and the exported `sceneDesignerStore` object.
 
-### **Sample Log Calls:**
+---
+
+## 3. **File Delivery and Review Workflow**
+
+- **All code delivery, review, and requests operate on complete files only (never snippets).**
+- **File-by-file delivery workflow:**
+    1. **List all files to be delivered up front, with explicit numbering (e.g., 1. fileA.js, 2. fileB.js, ...).**
+    2. **Deliver each file, one at a time, in the order listed.**
+    3. **After each file, state the name and number of the next file to expect (e.g., "Next file: 2. sidebar.js").**
+    4. **Wait for explicit confirmation ("next", "ready", etc.) before delivering the next file.**
+    5. **Keep a running list of remaining files and their numbers in each reply until all are delivered.**
+    6. **After all files, explicitly confirm completion (e.g., "All files delivered. Refactor complete.").**
+- **If a module is added, removed, or renamed, update `src/modules.index.md` accordingly.**
+
+---
+
+## 4. **File Size Policy and Splitting**
+
+- No single file should exceed approximately 350 lines.
+- If a file does, it must be split into logical ES module parts (e.g. `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).
+- Each part should be ≤350 lines if possible.
+- When splitting:
+    - Prefer splitting by logical concern (core, UI, data, helpers, etc).
+    - Each part must begin with a summary comment.
+    - Update all imports/exports to use new modules.
+    - Update `src/modules.index.md` to list all new files.
+    - Document the split in the PR/commit summary.
+- This policy is mandatory for all new code and for any refactoring of large files.
+- Do not split arbitrarily—each file must remain logically cohesive and independently testable.
+
+---
+
+## 5. **Logging and Documentation**
+
+- Use the shared logger (`log()`) from `log.js` with proper log levels and tags.
+    - `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE` (TRACE is very verbose and rarely used).
+- Never use `console.log` directly except inside the logger implementation.
+- Every module/file must begin with a comment summarizing purpose, exports, and dependencies.
+- All cross-module communication must use ES module imports/exports.
+
+---
+
+## 6. **State Management (Zustand-style, 2025 Update)**
+
+- **All state flows through exported functions and the store object in `state.js`.**
+    - Use `getState()` to access the current state object.
+    - Use mutators like `setShapes`, `addShape`, `removeShape`, etc.
+    - Subscribe to state changes via `sceneDesignerStore.subscribe(fn)`.
+    - Do **not** import a singleton `AppState` object.
+    - Example:
+        ```js
+        import { getState, setShapes } from "./state.js";
+        // Usage: getState().shapes
+        ```
+
+---
+
+## 7. **Action/Intent-Based Separation of Concerns (2025 Update)**
+
+- **All UI components emit "intents" or "actions" to dedicated handler modules.**
+    - Toolbar, keyboard shortcuts, and other panels DO NOT contain business logic for deletion, duplication, locking, etc.
+    - All business logic for scene actions (delete, duplicate, lock, unlock, add shape, etc.) is centralized in `src/actions.js`.
+    - UI emits an intent (e.g., `deleteSelectedShapes()`), and the actions module performs the logic.
+    - This ensures:
+        - Maximum separation of concerns
+        - Swappable toolbars and input methods
+        - Consistent business rules
+        - Testable and maintainable code
+    - See `src/toolbar.js` for an example: all shape/scene actions are routed via `actions.js`.
+
+- **Cross-module communication always uses ES module imports/exports.**
+    - Never directly mutate state or shape arrays from UI modules.
+
+---
+
+## 8. **Example (Good/Bad)**
+
 ```js
-log("TRACE", "[multiselect] drag move", {dx, dy, shapes: selectedShapes.map(s=>s._id)});
-log("DEBUG", "[sidebar] selection changed", {selected: newSelection});
-log("INFO", "[toolbar] Add button clicked", {shapeType});
-log("ERROR", "[konva] Failed to load image", err);
+// Good: UI emits intent, logic is centralized
+import { deleteSelectedShapes } from "./actions.js";
+deleteSelectedShapes();
+
+import { getState, setShapes } from "./state.js";
+import { buildSidebarPanel } from "./sidebar.js";
+
+// Bad: UI contains business logic
+// (NOT ALLOWED)
+deleteShapeBtn.addEventListener('click', () => {
+  // ...directly mutating state, filtering shapes, etc.
+});
 ```
 
-### **Log Level Control:**
-- Log levels are globally settable via the settings panel and can be overridden at runtime.
-- All logs at or above the selected level are routed to the configured destinations (`console`, `server`, or `both`).
+---
 
-### **Retroactive Refactor Requirement:**
-- All existing code will be updated to use this scheme.
-- Logging statements will be reviewed and updated for clarity, consistency, and coverage as per above.
+## 9. **Manifest and Documentation Updates**
 
-### **Summary Table:**
-
-| Level   | Typical Use                                            |
-|---------|--------------------------------------------------------|
-| ERROR   | Crashes, failed ops                                    |
-| WARN    | Recoverable issues, deprecated APIs                    |
-| INFO    | User actions, major state changes                      |
-| DEBUG   | Function entry/exit, key variable/state, decision path |
-| TRACE   | Every step, branch, event—max verbosity                |
+- All new modules (added/removed/renamed) must be reflected in `src/modules.index.md`.
+- Update this file and module manifest as needed to document architecture changes.
 
 ---
 
-## 5. **General Principles**
+Refer to **SCENE_DESIGNER_MANIFESTO.md** for the definitive engineering rules and architectural philosophy.
 
-- Copilot will always provide complete files for modular parts upon request or when making changes.
-- Copilot will never provide partial snippets for modular files unless explicitly requested.
-- The index will serve as the canonical reference for modular structure and responsibilities.
-- When multiple files are being changed, Copilot will send one per message, waiting for the user to ask for the next by saying "ready" or similar.
 
----
-
-## 6. **Modular Part Identification & Versioning**
-
-- **Every modular part file delivered or updated by Copilot will include a unique marker comment at the top,**  
-  e.g. `// COPILOT_PART_logstream: 2025-09-11T18:13:00Z`
-- This timestamp or marker is unique to each delivery so the user can confirm which version is being used after concatenation.
-
----
-
-**This manifesto is intended as a living agreement.  
-If user requirements or project structure change, update this file accordingly.**
