@@ -4,6 +4,8 @@ console-stream.js
 global-errors.js
 state.js
 canvas.js
+canvas-core.js
+canvas-events.js
 selection.js
 settings.js
 errorlog.js
@@ -25,102 +27,96 @@ scenario-panel.js
 
 ---
 
-- **log.js**  
+- log.js  
   Centralized, pluggable logging system for Scene Designer.  
   All logs use `log()`; supports runtime config, pluggable sinks, and safe serialization.
 
-- **console-stream.js**  
+- console-stream.js  
   Console method interception for streaming all console logs (log/error/warn/info/debug/trace) via logger.
 
-- **global-errors.js**  
+- global-errors.js  
   Global error and unhandled promise rejection handler; forwards all browser-level errors to logger.
 
-- **state.js**  
+- state.js  
   Centralized Zustand-style store and state management for all app logic.
 
-- **canvas.js**  
-  Canvas and shape creation APIs (Fabric.js-based).
+- canvas.js  
+  Thin facade that re-exports the public Canvas API from `canvas-core.js`.  
+  Keeps the public import path stable: `import { buildCanvasPanel } from './canvas.js'`.
 
-- **selection.js**  
-  Shape selection logic and mutators (Fabric.js adaptation).
+- canvas-core.js  
+  Fabric.js Canvas Core.  
+  - Creates and manages the canvas panel (MiniLayout component).  
+  - Loads/updates background image and resizes panel to match.  
+  - Subscribes to state changes and syncs canvas objects (add/remove/render).  
+  - Installs Fabric selection lifecycle sync via `canvas-events.js`.  
+  - Ensures shapes render above the background image.
 
-- **settings.js**  
+- canvas-events.js  
+  Fabric selection lifecycle event sync.  
+  - Listens to `selection:created`, `selection:updated`, `selection:cleared`.  
+  - Updates app selection via `selection.setSelectedShapes()` / `selection.deselectAll()`.  
+  - Fix for defect1: ensures Delete operates on the visually selected shape (no namespaced Fabric events).
+
+- selection.js  
+  Centralized selection logic and transformer lifecycle.  
+  - Single source of truth for selected shape(s).  
+  - Attaches/detaches/upgrades transformer appropriately.  
+  - Integrates with shape-state, shape-defs, and transformer modules.
+
+- settings.js  
   Settings registry, persistence (via localForage), and UI panel (Tweakpane+Pickr).
 
-- **errorlog.js**  
-  Error log panel, log sink for all error/info/debug messages.
+- errorlog.js  
+  Error log panel (currently passive while Console.Re streaming is active).
 
-- **main.js**  
-  App entry point (MiniLayout bootstrapping).
+- main.js  
+  App entry point (MiniLayout bootstrapping, logging setup, optional Console.Re init).
 
-- **toolbar.js**  
-  Modular toolbar UI element factory (image upload, shape add/select, emits action intents to actions.js, ESM only).
+- toolbar.js  
+  Modular toolbar UI (image selection/upload, add/delete shapes).  
+  Emits intents to `actions.js`; contains no business logic.
 
-- **actions.js**  
-  Centralized business logic for scene actions (delete, duplicate, lock, unlock, add shape, etc).
-  - Toolbar and other UI modules emit intents to this module.
-  - Ensures separation of concerns and swappable toolbars.
+- actions.js  
+  Centralized business logic for scene actions (delete, duplicate, lock, unlock, add shape, etc).  
+  UI modules emit intents to this module.
 
-- **shapes.js**  
-  Shape factory module:  
-  - Exports `makePointShape(x, y)`, `makeRectShape(x, y, w, h)`, `makeCircleShape(x, y, r)` (future).  
-  - Centralizes all Fabric.js shape construction, selection logic, and property/event attachment.  
-  - Used by toolbar, canvas, sidebar, and all shape-creation features.
+- shapes.js  
+  Shape factories and per-shape config application for Fabric.js objects.  
+  Diagnostic labels, stroke width handling, and transform event hooks.
 
-- **transformer.js**  
-  Shape transformer/resize logic for Fabric.js shapes:
-  - Centralized attach/detach/configure of object controls for all shape types.
-  - Rectangle: resize/rotate as allowed, aspect ratio enforced for circle.
-  - Point: no controls/transform (not resizable).
-  - Invoked by canvas.js and consumes AppState, selection.
-  - All logging via log.js.
+- transformer.js  
+  Fabric.js control attach/detach/update for selected shapes. Called only by `selection.js`.
 
-- **shape-state.js**  
-  Per-shape state machine module:
-  - Exports: `initShapeState`, `setShapeState`, `selectShape`, `deselectShape`, `startDraggingShape`, `stopDraggingShape`, `lockShape`, `unlockShape`, `setMultiSelected`, `isShapeInState`.
-  - Used by shapes.js, canvas.js, selection.js, transformer.js for all robust state transitions.
+- shape-state.js  
+  Per-shape state machine (selected, default, dragging, locked, etc).
 
-- **shape-defs.js**  
-  Centralized per-shape definition/config for Scene Designer.
-  - All shape types and their edit/transform properties in one place.
-  - Used by transformer.js, shapes.js, canvas.js, etc.
-  - Easy to extend for new shape types or features.
+- shape-defs.js  
+  Centralized per-shape definitions (controls, editability, rotation/ratio flags).
 
-- **sidebar.js**  
-  Tabulator-based shape table/list panel.  
-  Displays all shapes, supports row selection, robust sync with AppState.
+- sidebar.js  
+  Tabulator-based shape list panel. Row click selects the corresponding shape.
 
-- **minilayout.js**  
-  Native layout manager: robust row/column/stack API, dynamic add/remove/reinsert, close/destroy, resize, splitter support, tab/stack, settings sync, full event API.
-  - **Per-panel scrollbars/overflow now supported via `scrollbars` property in panel config. See minilayout.DOCS.md for options.**
-  - **Panel size persistence: splitter drag changes are now saved/restored via localStorage.**
+- minilayout.js  
+  Native layout engine (rows/columns/stacks/components) with splitters and panel size persistence.
 
-- **minilayout-ui.js**  
-  Advanced UI helpers for MiniLayout: splitter bars, tab styling, animated transitions, accessibility.
+- minilayout-ui.js  
+  Advanced UI helpers for MiniLayout: splitter bars, tab styling, transitions, accessibility.
 
-- **minilayout.demo.js**  
-  Demo entrypoint for MiniLayout: panel factory registration, dynamic add/remove demo, logging of all events.
-
-- **minilayout.css**  
+- minilayout.css  
   Styles for MiniLayout: panels, splitters, tabs, transitions, responsive layout.
 
-- **minilayout.DOCS.md**  
-  Documentation and API reference for MiniLayout (native layout engine).
+- minilayout.DOCS.md  
+  Documentation and API reference for MiniLayout.
 
-- **scenario-runner.js**  
-  Scenario runner module:
-  - Runs scripted scenarios for automated testing (calls any exported function, log/dump/assert steps).
-  - Registry for named scenarios.
-  - Logging via log.js.
+- scenario-runner.js  
+  Scenario runner for scripted actions/log/assert flows; used by automation/testing panel.
 
-- **scenario-panel.js**  
-  Scenario Runner UI panel (MiniLayout):
-  - Select, run, and view logs/results for registered scenarios.
-  - Uses scenario-runner.js API.
-  - Logging via log.js.
+- scenario-panel.js  
+  Scenario Runner UI panel (MiniLayout) to select and run scenarios with live logs.
 
 ---
 
-**Instructions:**  
-Keep this file updated per SCENE_DESIGNER_MANIFESTO.md.
-
+Notes:
+- Public exports remain stable through `canvas.js` (facade). `exports.index.json` still lists `buildCanvasPanel` under `canvas.js`.
+- The canvas split removes any reliance on namespaced Fabric events; selection sync is now event-driven via `canvas-events.js` to resolve defect1.
