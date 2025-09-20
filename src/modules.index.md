@@ -20,6 +20,8 @@ layout.js
 main.js
 toolbar.js
 actions.js
+shapes-core.js
+shapes-point.js
 shapes.js
 transformer.js
 shape-state.js
@@ -83,7 +85,8 @@ scenario-panel.js
 - selection.js  
   Centralized selection logic (single and multi).  
   - Owns transformer lifecycle (attach/detach/update).  
-  - Integrates shape-state and shape-defs.  
+  - Integrates shape state machine (shape-state.js).  
+  - Integrates per-shape config (shape-defs.js).  
   - Provides helpers to set/clear selection and query selected shapes.
 
 - settings-core.js  
@@ -126,11 +129,24 @@ scenario-panel.js
   - Applies selection and stroke width rules.  
   - Single source of truth for scene action behavior.
 
+- shapes-core.js  
+  Shape Core helpers and non-point shapes (Rectangle, Circle).  
+  - Exports stroke width helpers, diagnostic label visibility toggling, ID/label helpers.  
+  - Used by shapes-point.js.  
+  - Public exports: setStrokeWidthForSelectedShapes, fixStrokeWidthAfterTransform, makeRectShape, makeCircleShape, applyDiagnosticLabelsVisibility.  
+  - Internal exports: getDefaultStrokeWidth, getStrokeColor, getFillColor, getShowDiagnosticLabels, makeDiagnosticLabel, generateShapeId, setShapeStrokeWidth, setGroupDiagnosticLabelVisible.
+
+- shapes-point.js  
+  Point shape factory and reticle logic.  
+  - Non-resizable, non-rotatable Point groups (selectable/movable only).  
+  - Reticle styles: crosshair, crosshairHalo, bullseye, dot, target.  
+  - Dot style includes a transparent crosshair cutout to reveal the exact center pixel.  
+  - Public export: makePointShape.
+
 - shapes.js  
-  Fabric.js shape factories and helpers.  
-  - Point reticle styles/sizes, rect and circle factories.  
-  - Diagnostic labels management.  
-  - Stroke width stays constant on transform (strokeUniform + reapply).
+  Facade that re-exports the public API from shapes-core.js and shapes-point.js.  
+  - Keeps import path stable for the rest of the app.  
+  - Public exports: setStrokeWidthForSelectedShapes, fixStrokeWidthAfterTransform, makePointShape, makeRectShape, makeCircleShape, applyDiagnosticLabelsVisibility.
 
 - transformer.js  
   Fabric.js control attach/detach/update for single selection.  
@@ -140,14 +156,16 @@ scenario-panel.js
   Per-shape state machine (default, selected, dragging, locked, multi-selected).
 
 - shape-defs.js  
-  Centralized per-shape definitions (controls, editability, rotation/ratio flags).
+  Centralized per-shape definitions (controls, editability, rotation/ratio flags).  
+  - Point is not resizable and not editable, ensuring no anchors/transformer are attached.
 
 - sidebar.js  
   Tabulator-based shape list panel.  
   - Displays shape table and selects shape on row click.
 
 - fabric-wrapper.js  
-  ES module wrapper for Fabric.js, re-exporting Canvas, Rect, Circle, Line, Group, Image.
+  ES module wrapper for Fabric.js, re-exporting Canvas, Rect, Circle, Line, Group, Image, and Path.  
+  - Path is available for future compound path work (not required currently).
 
 - minilayout.js  
   Native layout engine (rows/columns/stacks/components) with draggable splitters.  
@@ -172,7 +190,7 @@ scenario-panel.js
 ---
 
 Notes:
-- Public imports should use the canvas.js facade for the canvas panel.  
-- The settings module is now split (core + UI) with settings.js as a facade to keep import paths stable.  
-- Selection is synced via Fabric events in canvas-events.js to ensure delete/selection consistency.  
-- Remote logging is provided via Console.Re (wrapper + init), per the documented transitional exception.
+- Public imports should continue to use the shapes.js facade for shape APIs.  
+- The shapes module has been split to keep file size under control and isolate point-specific logic.  
+- Fabric wrapper exposes Path for future work (e.g., compound paths), though current point implementation uses compositing with Rects.
+
