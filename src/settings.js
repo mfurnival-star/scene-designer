@@ -34,6 +34,7 @@ import { Pane } from 'tweakpane';
 import localforage from 'localforage';
 import { setErrorLogPanelVisible } from './layout.js';
 import { applyDiagnosticLabelsVisibility } from './shapes.js';
+import { setStrokeWidthForSelectedShapes } from './shapes.js';
 
 // --- Log Level Options (label and value are identical) ---
 export const LOG_LEVELS = [
@@ -56,14 +57,36 @@ export const LOG_LEVEL_NUM_TO_LABEL = [
 
 // --- Settings Registry ---
 export const settingsRegistry = [
+  // UI/UX
   { key: "multiDragBox", label: "Show Multi-Drag Box", type: "boolean", default: true },
+
+  // Shape defaults
   { key: "defaultRectWidth", label: "Default Rectangle Width", type: "number", default: 50, min: 10, max: 300, step: 1 },
   { key: "defaultRectHeight", label: "Default Rectangle Height", type: "number", default: 30, min: 10, max: 200, step: 1 },
   { key: "defaultCircleRadius", label: "Default Circle Radius", type: "number", default: 15, min: 4, max: 100, step: 1 },
   { key: "defaultStrokeColor", label: "Default Stroke Color", type: "color", default: "#000000ff" },
   { key: "defaultFillColor", label: "Default Fill Color", type: "color", default: "#00000000" },
+  { key: "defaultStrokeWidth", label: "Default Stroke Width (px)", type: "number", default: 1, min: 0.5, max: 10, step: 0.5 },
+
+  // Point reticle customization
+  {
+    key: "reticleStyle",
+    label: "Point Reticle Style",
+    type: "select",
+    options: [
+      { value: "crosshair", label: "Crosshair" },
+      { value: "crosshairHalo", label: "Crosshair + Halo" },
+      { value: "bullseye", label: "Bullseye (rings)" },
+      { value: "dot", label: "Dot" },
+      { value: "target", label: "Target (ring + cross)" }
+    ],
+    default: "crosshairHalo"
+  },
+  { key: "reticleSize", label: "Point Reticle Size (px)", type: "number", default: 14, min: 4, max: 60, step: 1 },
+
   // Diagnostics
   { key: "showDiagnosticLabels", label: "Show Diagnostic Labels (IDs)", type: "boolean", default: false },
+
   // Canvas/image
   { key: "canvasMaxWidth", label: "Canvas Max Width (px)", type: "number", default: 430, min: 100, max: 4000, step: 10 },
   { key: "canvasMaxHeight", label: "Canvas Max Height (px)", type:  "number", default: 9999, min: 100, max: 4000, step: 10 },
@@ -80,7 +103,8 @@ export const settingsRegistry = [
     default: "fit"
   },
   { key: "canvasResponsive", label: "Responsive: Resize on Window Change", type: "boolean", default: true },
-  // UI
+
+  // Toolbar/UI
   {
     key: "toolbarUIScale",
     label: "Toolbar UI Scale",
@@ -108,6 +132,11 @@ export const settingsRegistry = [
     max: 100,
     step: 1
   },
+
+  // Panels
+  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true },
+  { key: "showScenarioRunner", label: "Show Scenario Runner (Debug)", type: "boolean", default: false },
+
   // Logging
   {
     key: "DEBUG_LOG_LEVEL",
@@ -126,8 +155,7 @@ export const settingsRegistry = [
     ],
     default: "console"
   },
-  { key: "INTERCEPT_CONSOLE", label: "Intercept All Console Logs (for Mobile/Dev)", type: "boolean", default: false },
-  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true }
+  { key: "INTERCEPT_CONSOLE", label: "Intercept All Console Logs (for Mobile/Dev)", type: "boolean", default: false }
 ];
 
 // --- Persistence using localForage (async) ---
@@ -260,12 +288,25 @@ export async function setSettingAndSave(key, value) {
 
   // Apply side effects for specific settings
   if (key === "showErrorLogPanel") setErrorLogPanelVisible(!!valToSet);
+
   if (key === "showDiagnosticLabels") {
     try {
       applyDiagnosticLabelsVisibility(!!valToSet);
       log("INFO", "[settings] Diagnostic labels visibility updated", { visible: !!valToSet });
     } catch (e) {
       log("ERROR", "[settings] Failed to update diagnostic labels visibility", e);
+    }
+  }
+
+  if (key === "defaultStrokeWidth") {
+    try {
+      const w = Number(valToSet);
+      if (!Number.isNaN(w) && w > 0) {
+        setStrokeWidthForSelectedShapes(w);
+        log("INFO", "[settings] Applied default stroke width to selected shapes", { width: w });
+      }
+    } catch (e) {
+      log("ERROR", "[settings] Failed to apply default stroke width to selection", e);
     }
   }
 
@@ -300,12 +341,25 @@ export async function setSettingsAndSave(settingsObj) {
 
   // Apply side effects
   if ("showErrorLogPanel" in settingsObj) setErrorLogPanelVisible(!!settingsObj.showErrorLogPanel);
+
   if ("showDiagnosticLabels" in settingsObj) {
     try {
       applyDiagnosticLabelsVisibility(!!settingsObj.showDiagnosticLabels);
       log("INFO", "[settings] Diagnostic labels visibility updated (bulk)", { visible: !!settingsObj.showDiagnosticLabels });
     } catch (e) {
       log("ERROR", "[settings] Failed to update diagnostic labels visibility (bulk)", e);
+    }
+  }
+
+  if ("defaultStrokeWidth" in settingsObj) {
+    try {
+      const w = Number(settingsObj.defaultStrokeWidth);
+      if (!Number.isNaN(w) && w > 0) {
+        setStrokeWidthForSelectedShapes(w);
+        log("INFO", "[settings] Applied default stroke width to selected shapes (bulk)", { width: w });
+      }
+    } catch (e) {
+      log("ERROR", "[settings] Failed to apply default stroke width to selection (bulk)", e);
     }
   }
 
