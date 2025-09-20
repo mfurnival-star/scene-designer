@@ -17,6 +17,7 @@
  * - Point reticle styles and size are configurable via settings:
  *    reticleStyle: "crosshair" | "crosshairHalo" | "bullseye" | "dot" | "target"
  *    reticleSize: number (px)
+ *   NOTE: This module now tolerates UI labels (e.g., "Target (ring + cross)") by normalizing to canonical tokens.
  * - Default stroke width is configurable via settings.defaultStrokeWidth.
  * -----------------------------------------------------------
  */
@@ -28,6 +29,68 @@ import { getState } from './state.js';
 
 // Track the last applied stroke width for convenience; source of truth is settings.defaultStrokeWidth
 let currentStrokeWidth = 1;
+
+// --- Normalizers for tolerant settings handling (labels → tokens, strings → numbers) ---
+
+/**
+ * Normalize a raw reticle style (token or label) to a canonical token.
+ * Accepts alternate UI keys and common label strings.
+ */
+function normalizeReticleStyle(raw) {
+  if (raw === undefined || raw === null) return 'crosshairHalo';
+  const token = String(raw).trim();
+  if (!token) return 'crosshairHalo';
+
+  // Already canonical?
+  const canonical = ['crosshair', 'crosshairHalo', 'bullseye', 'dot', 'target'];
+  if (canonical.includes(token)) return token;
+
+  // Case-insensitive map of labels/variants → canonical token
+  const key = token.toLowerCase();
+  const map = {
+    'crosshair': 'crosshair',
+    'crosshair + halo': 'crosshairHalo',
+    'crosshair halo': 'crosshairHalo',
+    'halo': 'crosshairHalo',
+    'crosshairhalo': 'crosshairHalo',
+    'bullseye': 'bullseye',
+    "bull's-eye": 'bullseye',
+    'bulls eye': 'bullseye',
+    'dot': 'dot',
+    'target': 'target',
+    'target (ring + cross)': 'target',
+    'ring + cross': 'target'
+  };
+  if (map[key]) return map[key];
+
+  // Try to coerce mixed-case canonical (e.g., "CrosshairHalo")
+  const lowerFirst = token.charAt(0).toLowerCase() + token.slice(1);
+  if (canonical.includes(lowerFirst)) return lowerFirst;
+
+  log("DEBUG", "[shapes] normalizeReticleStyle: unknown style, falling back to crosshairHalo", { raw });
+  return 'crosshairHalo';
+}
+
+/**
+ * Normalize reticle size: accepts numbers, numeric strings, and "Npx".
+ * Enforces a sensible minimum to keep visuals usable.
+ */
+function normalizeReticleSize(raw, fallback = 14) {
+  if (raw === undefined || raw === null) return fallback;
+  let n = raw;
+  if (typeof raw === 'string') {
+    // Strip "px" and whitespace, parse int
+    const m = raw.trim().match(/^(\d+)(?:\s*px)?$/i);
+    if (m) n = parseInt(m[1], 10);
+  }
+  n = Number(n);
+  if (!Number.isFinite(n)) {
+    log("DEBUG", "[shapes] normalizeReticleSize: non-numeric size, using fallback", { raw, fallback });
+    return fallback;
+  }
+  if (n < 2) n = 2;
+  return n;
+}
 
 // Helpers to read settings safely
 function getDefaultStrokeWidth() {
@@ -44,12 +107,35 @@ function getFillColor() {
 function getShowDiagnosticLabels() {
   return !!getState().settings?.showDiagnosticLabels;
 }
+/**
+ * Read reticle style from settings, tolerate alternate keys and labels.
+ * - Canonical key: reticleStyle
+ * - Accepted alternates: pointReticleStyle
+ * - Accepts labels like "Target (ring + cross)" and normalizes to tokens.
+ */
 function getReticleStyle() {
-  return getState().settings?.reticleStyle ?? 'crosshairHalo';
+  const s = getState().settings || {};
+  const raw = (s.reticleStyle ?? s.pointReticleStyle ?? 'crosshairHalo');
+  const norm = normalizeReticleStyle(raw);
+  if (norm !== raw) {
+    log("DEBUG", "[shapes] getReticleStyle normalized label/value", { raw, norm });
+  }
+  return norm;
 }
+/**
+ * Read reticle size from settings, tolerate alternate keys and "Npx" strings.
+ * - Canonical key: reticleSize
+ * - Accepted alternates: pointReticleSize
+ */
 function getReticleSize() {
-  const n = Number(getState().settings?.reticleSize ?? 14);
-  return Number.isFinite(n) && n > 1 ? n : 14;
+  const s = getState().settings || {};
+  const raw = (s.reticleSize ?? s.pointReticleSize ?? 14);
+  const size = normalizeReticleSize(raw, 14);
+  if (String(raw).trim() !== String(size)) {
+    // Only log when coercion changed representation (e.g., "20px" → 20)
+    log("DEBUG", "[shapes] getReticleSize normalized value", { raw, size });
+  }
+  return size;
 }
 
 /**
@@ -478,3 +564,4 @@ function generateShapeId(type = "shape") {
   log("DEBUG", "[shapes] generateShapeId", { type, id });
   return id;
 }
+
