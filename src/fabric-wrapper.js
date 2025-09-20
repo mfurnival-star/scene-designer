@@ -2,7 +2,7 @@
  * fabric-wrapper.js
  * -----------------------------------------------------------
  * ES Module Wrapper for Fabric.js to normalize exports for Scene Designer.
- * - Imports 'fabric' (UMD package) and re-exports Canvas, Rect, Circle, etc.
+ * - Imports 'fabric' (UMD package) and re-exports Canvas, Rect, Circle, Line, Group, Image, Path.
  * - Allows named ESM imports everywhere else in your app.
  * - No window/global access.
  * -----------------------------------------------------------
@@ -17,5 +17,7 @@ export const Circle = fabric.Circle;
 export const Line = fabric.Line;
 export const Group = fabric.Group;
 export const Image = fabric.Image;
+export const Path = fabric.Path; // Added to support compound paths (e.g., dot with clear crosshair)
 // Optionally export any other needed symbols
 export default fabric;
+
