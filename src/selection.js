@@ -502,3 +502,4 @@ if (typeof window !== "undefined") {
   window.getSelectedShapes = getSelectedShapes;
   window.attachSelectionHandlers = attachSelectionHandlers;
 }
+
