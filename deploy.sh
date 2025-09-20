@@ -7,7 +7,9 @@
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
-set -x
+
+trap 'echo "Error on line $LINENO: $BASH_COMMAND"' ERR
+
 
 PROJECT_DIR="$HOME/scene-designer"
 BUILD_DIR="$PROJECT_DIR/dist"
