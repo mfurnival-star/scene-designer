@@ -125,5 +125,58 @@ Notes:
 
 ---
 
-Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
+## 11. Module Inventory and Recent Changes (2025-09-20)
 
+The following modules were added/split to comply with the file size policy and improve separation of concerns. Public import paths remain unchanged where facades are provided.
+
+- Selection (split)
+  - src/selection-core.js
+    - Centralized single/multi selection logic and transformer lifecycle.
+    - Owns state updates and shape-state integration.
+  - src/selection-outlines.js
+    - Renders dashed multi-select outlines (blue for normal, red for locked).
+    - Non-interactive; excluded from export and duplication.
+  - src/selection.js
+    - Facade re-export of the public selection API from selection-core.js.
+    - Public imports should continue to use: import { ... } from './selection.js'.
+
+- MiniLayout (split)
+  - src/minilayout-core.js
+    - Core layout engine (rows, columns, stacks, components).
+    - Delegates splitter sizing/persistence to dedicated module.
+  - src/minilayout-splitter-persist.js
+    - Splitter elements and panel size persistence (localStorage).
+    - Reusable for row/column containers; percent-based sizing.
+  - src/minilayout.js
+    - Facade re-export: export { MiniLayout } from './minilayout-core.js'.
+    - Public imports should continue to use: import { MiniLayout } from './minilayout.js'.
+
+- Pre-existing splits (unchanged)
+  - src/shapes.js
+    - Facade re-export of shapes-core.js and shapes-point.js.
+  - src/settings.js
+    - Facade re-export of settings-core.js and settings-ui.js.
+
+Public API stability
+- No external import paths changed. Continue using:
+  - Selection: ./selection.js
+  - MiniLayout: ./minilayout.js
+  - Shapes: ./shapes.js
+  - Settings: ./settings.js
+
+---
+
+## 12. Commit/PR Notes for the Split
+
+- Include in PR summary:
+  - "Split selection into selection-core.js and selection-outlines.js; selection.js remains as facade."
+  - "Split MiniLayout into minilayout-core.js and minilayout-splitter-persist.js; minilayout.js remains as facade."
+  - "No public API/import path changes; exports.index.json remains valid."
+- Verify:
+  - All imports updated where internal modules are used.
+  - Lints/builds pass and UI behavior unchanged.
+  - Files adhere to the ~350 line guideline.
+
+---
+
+Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
