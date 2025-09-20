@@ -116,8 +116,8 @@ function inject_force_settings_block() {
   keys=$(grep -oP 'key:\s*"\K[^"]+' "$SETTINGS_JS" | sort | uniq)
   types=$(grep -oP 'type:\s*"\K[^"]+' "$SETTINGS_JS" | paste -d, -s)
   declare -A key_type
-  echo "HERE"
   while read -r line; do
+	  print $line
     key=$(echo "$line" | grep -oP 'key:\s*"\K[^"]+')
     type=$(echo "$line" | grep -oP 'type:\s*"\K[^"]+')
     if [[ -n "$key" && -n "$type" ]]; then
