@@ -7,6 +7,7 @@
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
+set -x
 
 PROJECT_DIR="$HOME/scene-designer"
 BUILD_DIR="$PROJECT_DIR/dist"
