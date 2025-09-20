@@ -147,7 +147,8 @@ function rebuildLayout(includeErrorLogPanel) {
               componentName: 'ScenarioPanel',
               title: 'Scenario Runner',
               height: 30,
-              scrollbars: 'auto'
+              scrollbars: 'auto',
+	      closable: true
             }
           ]
         },
@@ -171,7 +172,8 @@ function rebuildLayout(includeErrorLogPanel) {
           type: 'component',
           componentName: 'ErrorLogPanel',
           title: 'Error Log',
-          height: 18
+          height: 18,
+	  closable: true
         }
       ]
     };
