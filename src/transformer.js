@@ -1,122 +1,149 @@
 /**
  * transformer.js
  * -----------------------------------------------------------
- * Scene Designer – Fabric.js Transformer Handler (Fabric Migration, ESM ONLY)
+ * Scene Designer – Fabric.js Transformer Handler (ESM ONLY, Reentrancy-Safe)
  * - Pure transformer logic: attach, detach, update for all shape types.
  * - Only called by selection.js (never by canvas.js or sidebar.js).
  * - All config from shape-defs.js.
  * - Resize/rotate controls per shape type and locked state.
  * - Logging via log.js.
- * - No direct event handling or canvas logic.
+ * - Reentrancy-safe: avoids redundant discard/setActive cycles and log spam.
  * -----------------------------------------------------------
- *
- * NOTE: Fabric.js npm package (v5.x) is UMD-only (no named ESM exports).
- * Use ES module wrapper and named imports from './fabric-wrapper.js'.
  */
-
-import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
 
 import { getState } from './state.js';
 import { log } from './log.js';
 import { getShapeDef } from './shape-defs.js';
 
 /**
+ * Internal: safe accessor for current Fabric active object.
+ */
+function getActiveObject() {
+  const canvas = getState().fabricCanvas;
+  if (!canvas || typeof canvas.getActiveObject !== "function") return null;
+  return canvas.getActiveObject();
+}
+
+/**
  * Attach Fabric.js controls to a shape (single selection only).
- * Always removes previous controls and adds new ones.
- * Called only by selection.js.
- * @param {Object|Group} shape
+ * - Idempotent: if already active, just update control flags.
+ * - Minimal churn: only discards previous active if it differs.
+ * @param {Object} shape
  */
 export function attachTransformerForShape(shape) {
-  log("TRACE", "[transformer] attachTransformerForShape entry", { shape });
-  if (!shape || shape.locked) {
-    log("DEBUG", "[transformer] Not attaching controls (null or locked)", { shape });
-    detachTransformer();
+  log("DEBUG", "[transformer] attachTransformerForShape entry", {
+    id: shape?._id,
+    type: shape?._type,
+    locked: shape?.locked
+  });
+
+  const canvas = getState().fabricCanvas;
+  if (!canvas || !shape) {
+    log("DEBUG", "[transformer] attachTransformerForShape: no canvas or shape");
     return null;
   }
-
-  // Remove previous active object if present
-  if (getState().fabricCanvas) {
-    getState().fabricCanvas.discardActiveObject();
-    getState().fabricCanvas.renderAll();
+  if (shape.locked) {
+    log("DEBUG", "[transformer] Not attaching controls (locked shape)");
+    detachTransformer();
+    return null;
   }
 
   // Get per-shape config from shape-defs.js
   const def = getShapeDef(shape);
   if (!def) {
-    log("ERROR", "[transformer] No shape definition found", { type: shape._type });
+    log("WARN", "[transformer] No shape definition found", { type: shape._type });
     detachTransformer();
     return null;
   }
 
-  // Set the shape as active object
-  if (getState().fabricCanvas) {
-    getState().fabricCanvas.setActiveObject(shape);
-    // Enable/disable controls per shape definition
-    shape.set({
-      hasControls: def.resizable && !shape.locked,
-      hasBorders: true,
-      lockScalingX: shape.locked,
-      lockScalingY: shape.locked,
-      lockRotation: !def.rotateEnabled || shape.locked,
-      selectable: true
-    });
+  const active = getActiveObject();
 
-    // For circles: enforce aspect ratio if keepRatio is true
-    if (shape._type === "circle" && def.keepRatio) {
-      shape.set({
-        lockUniScaling: true
-      });
-    } else {
-      shape.set({
-        lockUniScaling: false
-      });
-    }
-    getState().fabricCanvas.renderAll();
-
-    log("DEBUG", "[transformer] Controls attached (Fabric.js)", {
-      shapeType: shape._type,
-      resizable: def.resizable,
-      rotateEnabled: def.rotateEnabled,
-      keepRatio: def.keepRatio
-    });
+  // If a different object is active, discard it first; otherwise skip
+  if (active && active !== shape) {
+    canvas.discardActiveObject();
   }
+
+  // If not already active, set this shape as the active object
+  if (active !== shape) {
+    canvas.setActiveObject(shape);
+  }
+
+  // Update control flags every time (in case lock/def changed)
+  shape.set({
+    hasControls: def.resizable && !shape.locked,
+    hasBorders: true,
+    lockScalingX: shape.locked,
+    lockScalingY: shape.locked,
+    lockRotation: !def.rotateEnabled || shape.locked,
+    lockUniScaling: shape._type === "circle" && !!def.keepRatio,
+    selectable: true
+  });
+
+  // Render with minimal cost
+  if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+  else canvas.renderAll();
+
+  log("DEBUG", "[transformer] Controls attached/updated", {
+    type: shape._type,
+    resizable: def.resizable,
+    rotateEnabled: def.rotateEnabled,
+    keepRatio: def.keepRatio
+  });
+
+  return shape;
 }
 
 /**
  * Detach controls from current shape.
- * Only called by selection.js.
+ * - Idempotent: only discards if an active object exists.
  */
 export function detachTransformer() {
-  log("TRACE", "[transformer] detachTransformer entry");
-  if (getState().fabricCanvas) {
-    getState().fabricCanvas.discardActiveObject();
-    getState().fabricCanvas.renderAll();
-    log("INFO", "[transformer] Controls detached");
-  } else {
-    log("DEBUG", "[transformer] No canvas to detach controls");
+  const canvas = getState().fabricCanvas;
+  log("DEBUG", "[transformer] detachTransformer entry");
+
+  if (!canvas) {
+    log("DEBUG", "[transformer] detachTransformer: no canvas");
+    return;
   }
-  log("TRACE", "[transformer] detachTransformer exit");
+
+  const active = getActiveObject();
+  if (!active) {
+    log("DEBUG", "[transformer] detachTransformer: no active object to discard");
+    return;
+  }
+
+  canvas.discardActiveObject();
+  if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+  else canvas.renderAll();
+
+  // Reduce log verbosity here to avoid spam during programmatic clears
+  log("DEBUG", "[transformer] Controls detached");
+  log("DEBUG", "[transformer] detachTransformer exit");
 }
 
 /**
  * Update controls when selection or lock state changes.
- * Called only by selection.js.
- * Always removes old controls and adds new ones if needed.
+ * - Only attaches controls for single, unlocked, editable shapes.
+ * - Otherwise, detaches controls.
  */
 export function updateTransformer() {
-  log("TRACE", "[transformer] updateTransformer entry");
+  log("DEBUG", "[transformer] updateTransformer entry");
   const canvas = getState().fabricCanvas;
-  // Only attach controls for single selection, not locked, not point
   const sel = getState().selectedShapes;
-  if (!canvas || !Array.isArray(sel) || sel.length !== 1 || !sel[0] || sel[0].locked) {
+
+  if (!canvas || !Array.isArray(sel) || sel.length !== 1 || !sel[0]) {
     detachTransformer();
-    log("DEBUG", "[transformer] Controls detached (no valid single selection)");
-    log("TRACE", "[transformer] updateTransformer exit (detached)");
+    log("DEBUG", "[transformer] updateTransformer exit (no valid single selection)");
     return;
   }
-  const shape = sel[0];
-  // Always force controls re-attach for robustness
-  attachTransformerForShape(shape);
-  log("TRACE", "[transformer] updateTransformer exit (attached)");
-}
 
+  const shape = sel[0];
+  if (shape.locked) {
+    detachTransformer();
+    log("DEBUG", "[transformer] updateTransformer exit (locked shape)");
+    return;
+  }
+
+  attachTransformerForShape(shape);
+  log("DEBUG", "[transformer] updateTransformer exit (attached/updated)");
+}
