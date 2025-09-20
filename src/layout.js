@@ -162,7 +162,7 @@ function rebuildLayout(includeErrorLogPanel, includeScenarioPanel) {
     layout.destroy();
   }
 
-  // Base column: Toolbar + Canvas
+  // Base column: Toolbar (fixed 14%) + Canvas (flex fill)
   const mainColumn = {
     type: 'column',
     width: 70,
@@ -178,7 +178,7 @@ function rebuildLayout(includeErrorLogPanel, includeScenarioPanel) {
         type: 'component',
         componentName: 'CanvasPanel',
         title: 'Canvas',
-        height: includeScenarioPanel ? 56 : 86, // give back space if scenario hidden
+        // IMPORTANT: no height here → Canvas flexes to fill all remaining space
         scrollbars: 'both',
         scrollbarStyle: {
           width: '28px',
@@ -193,6 +193,7 @@ function rebuildLayout(includeErrorLogPanel, includeScenarioPanel) {
   };
 
   if (includeScenarioPanel) {
+    // Scenario takes a fixed 30%; Canvas above will automatically shrink to fit
     mainColumn.content.push({
       type: 'component',
       componentName: 'ScenarioPanel',
@@ -283,3 +284,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Initial layout build honoring both settings
   rebuildLayout(showErrorLog, showScenario);
 });
+
