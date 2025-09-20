@@ -17,8 +17,11 @@
  * - Point reticle styles and size are configurable via settings:
  *    reticleStyle: "crosshair" | "crosshairHalo" | "bullseye" | "dot" | "target"
  *    reticleSize: number (px)
- *   NOTE: This module now tolerates UI labels (e.g., "Target (ring + cross)") by normalizing to canonical tokens.
+ *   NOTE: This module tolerates UI labels (e.g., "Target (ring + cross)") by normalizing to canonical tokens.
  * - Default stroke width is configurable via settings.defaultStrokeWidth.
+ * - Latest:
+ *   - Points are now non-resizable/non-rotatable (no anchors; scaling/rotation locked).
+ *   - Dot style includes a transparent crosshair cutout so the exact center pixel is visible.
  * -----------------------------------------------------------
  */
 
@@ -306,10 +309,14 @@ export function applyDiagnosticLabelsVisibility(visible) {
 
 /**
  * Build point reticle primitives by style.
+ * For 'dot', we render a filled circle and then punch a transparent crosshair hole
+ * using rectangles with globalCompositeOperation='destination-out' so the exact
+ * center pixel below is visible.
  */
 function buildReticlePrimitives(style, x, y, sizePx, strokeColor, fillColor, strokeW) {
   const objs = [];
   const SW = strokeW;
+
   const addLine = (x1, y1, x2, y2) => {
     const ln = new Line([x1, y1, x2, y2], { stroke: strokeColor, strokeWidth: SW });
     ln.selectable = false; ln.evented = false; ln.strokeUniform = true;
@@ -329,6 +336,20 @@ function buildReticlePrimitives(style, x, y, sizePx, strokeColor, fillColor, str
     c.selectable = false; c.evented = false; c.strokeUniform = true;
     objs.push(c);
     return c;
+  };
+  // Punch a transparent rectangle "hole" inside the group (reveals background)
+  const addHoleRect = (left, top, width, height) => {
+    const r = new Rect({
+      left, top, width, height,
+      fill: '#000', // color ignored for destination-out
+      strokeWidth: 0,
+      selectable: false,
+      evented: false
+    });
+    // Erase where this rect draws (within group rendering)
+    r.globalCompositeOperation = 'destination-out';
+    objs.push(r);
+    return r;
   };
 
   // Crosshair spans sizePx (full length)
@@ -353,7 +374,17 @@ function buildReticlePrimitives(style, x, y, sizePx, strokeColor, fillColor, str
       break;
     }
     case 'dot': {
-      addCircle(x, y, Math.max(2, sizePx * 0.35), { strokeWidth: SW, fill: strokeColor, stroke: strokeColor, opacity: 1 });
+      // Base filled dot
+      const r = Math.max(2, sizePx * 0.35);
+      addCircle(x, y, r, { strokeWidth: SW, fill: strokeColor, stroke: strokeColor, opacity: 1 });
+
+      // Transparent crosshair cutout (confined well within dot radius)
+      const holeThickness = Math.max(1, Math.round(SW));         // thin hairline
+      const holeLen = Math.max(4, Math.round(r * 1.6));          // shorter than full diameter
+      // Horizontal hole
+      addHoleRect(x - holeLen / 2, y - holeThickness / 2, holeLen, holeThickness);
+      // Vertical hole
+      addHoleRect(x - holeThickness / 2, y - holeLen / 2, holeThickness, holeLen);
       break;
     }
     case 'target': {
@@ -374,7 +405,8 @@ function buildReticlePrimitives(style, x, y, sizePx, strokeColor, fillColor, str
 
 /**
  * Create a Point shape (reticle).
- * Note: Points are selectable/movable but NOT resizable/rotatable (no anchors).
+ * - Selectable/movable
+ * - Not resizable/rotatable (no anchors; scaling/rotation locked)
  */
 export function makePointShape(x, y) {
   const strokeW = getDefaultStrokeWidth();
@@ -423,9 +455,11 @@ export function makePointShape(x, y) {
   // Disable anchors/resize/rotate for points (still selectable/movable)
   group.set({
     hasControls: false,
+    hasBorders: true,
     lockScalingX: true,
     lockScalingY: true,
-    lockRotation: true
+    lockRotation: true,
+    hoverCursor: 'move'
   });
   log("DEBUG", "[shapes] makePointShape: disabled controls and scaling for point", {
     id: group._id, hasControls: group.hasControls
