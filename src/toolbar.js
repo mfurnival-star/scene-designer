@@ -223,7 +223,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
           <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
         </div>
       </div>
-    ";
+    `;
 
     // Query toolbar elements
     const container = element.querySelector('#canvas-toolbar-container');
@@ -464,3 +464,4 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
+
