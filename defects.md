@@ -7,11 +7,72 @@
 
 ## Defects / Issues (Open)
 
-- None currently.
+### defect14: Multi-select drag behavior and clamping — OPEN
+- Summary:
+  - When multiple shapes are selected, dragging should move them as a group.
+  - A single outer bounding “hull” should appear for multi-select and be the drag handle.
+  - Movement should be clamped to the canvas image bounds so no selected shape can be moved outside.
+  - If any selected shape is locked, group drag should be disabled (no movement).
+- Repro:
+  1. Create 2–3 shapes.
+  2. Multi-select them (drag marquee or Shift+click).
+  3. Try dragging the selection.
+- Current:
+  - Multi-select outlines show, but drag does not move all shapes together; no outer hull or clamping yet.
+- Expected:
+  - Dragging moves the entire selection as a group.
+  - An outer bounding box is visible and acts as the drag handle.
+  - Dragging is clamped so none of the shapes leave the canvas.
+  - If any selected shape is locked, the group does not move.
+- Acceptance:
+  - Group drag moves all shapes together.
+  - Outer hull appears and is used for drag/clamp.
+  - Clamp logic verified on all edges.
+  - Locked shape within selection prevents any group movement.
+
+### defect15: Lock/unlock selection UX and safeguards — OPEN
+- Summary:
+  - After locking a multi-select, re-selecting to unlock may be difficult or impossible.
+  - Ensure users can always unlock (via toolbar Unlock when none selected, and via selecting locked items).
+  - Verify individual lock/unlock works consistently.
+- Repro:
+  1. Multi-select several shapes and lock them.
+  2. Attempt to select them again and unlock.
+- Current:
+  - Unlock button is enabled when locked shapes exist (even with none selected), but selection/UX flows need validation with locked items.
+- Expected:
+  - Toolbar “Unlock” works when nothing selected but locked shapes exist (unlocks all locked).
+  - Locked shapes can still be selected from the sidebar or via marquee to enable “Unlock selected.”
+  - Single-shape lock/unlock flows work reliably.
+- Acceptance:
+  - Can unlock via “Unlock all locked” when none selected.
+  - Can select a locked shape via sidebar and unlock it.
+  - Single-shape lock/unlock confirmed.
 
 ---
 
 ## Resolved / Closed
+
+### defect16: Duplicate should preserve all properties — RESOLVED
+- Resolution date: 2025-09-20
+- Fixes delivered:
+  - Exact clone via Fabric’s clone() with offsets; preserves size, rotation, stroke/fill, reticle style, etc.
+  - Removes any selection-outline artifacts on clone; re-applies strokeUniform to primitives.
+  - Modules: src/actions.js (duplicateSelectedShapes)
+
+### defect17: Unlock button disabled after locking — RESOLVED
+- Resolution date: 2025-09-20
+- Fixes delivered:
+  - Unlock button now enabled if any locked shapes exist, even with no selection; tooltip clarifies action.
+  - unlockSelectedShapes() unlocks selected shapes, or all locked if none selected; preserves selection.
+  - Modules: src/toolbar.js (state logic), src/actions.js (unlockSelectedShapes)
+
+### defect18: Multi-select selection visibility (dashed outlines) — RESOLVED
+- Resolution date: 2025-09-20
+- Fixes delivered:
+  - Blue dashed outline for selected shapes in multi-select; red dashed outline if a selected shape is locked.
+  - Outlines hidden for single selection (transformer used) and when nothing is selected.
+  - Modules: src/selection.js
 
 ### defect3: Point shape reticle style/size feels uneven at small sizes — RESOLVED
 - Resolution date: 2025-09-20
