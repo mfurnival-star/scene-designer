@@ -49,6 +49,35 @@
   - Can select a locked shape via sidebar and unlock it.
   - Single-shape lock/unlock confirmed.
 
+### defect19: iOS Safari double‑tap zoom triggers during canvas interactions — OPEN
+- Summary:
+  - On iPhone, quickly tapping (likely double‑tapping) on the canvas causes the page to zoom in. This interferes with shape selection and general interaction.
+  - We should prevent browser double‑tap zoom within the app’s canvas/interaction area.
+- Repro:
+  1. Open Scene Designer on iPhone (Safari).
+  2. Tap quickly twice on the canvas area (double‑tap) during selection or general use.
+  3. Observe the page zoom in.
+- Current:
+  - iOS Safari interprets quick double‑taps as a zoom gesture on the page.
+- Expected:
+  - Double‑tapping within the canvas/interaction area should not trigger browser zoom. Canvas interactions should remain stable.
+- Proposed fix (options; choose the most accessible/least invasive combo):
+  - CSS/HTML:
+    - Ensure viewport meta includes width=device-width, initial-scale=1 (already typical). Consider maximum-scale=1, user-scalable=no to fully disable zoom (note: accessibility trade‑off).
+    - Apply touch-action to canvas/container:
+      - touch-action: manipulation; (preferred) reduces double‑tap to zoom without disabling all gestures on modern iOS Safari.
+      - If needed, touch-action: none; on the canvas to fully suppress default gestures in the drawing area (check pointer gesture needs).
+  - JS event handling (fallback/compatibility):
+    - Add a double‑tap suppressor on the canvas/container that cancels default on rapid successive touchend events (use passive: false):
+      - document.getElementById('fabric-main-canvas').addEventListener('touchend', handler, { passive: false })
+      - Detect two taps within ~300ms and call event.preventDefault().
+    - Optionally preventDefault on gesturestart/gesturechange on the canvas area for older Safari behaviors.
+- Acceptance:
+  - Rapid double‑tap anywhere on the canvas no longer triggers browser zoom on iPhone.
+  - Normal app interactions (tap to select, drag, multi‑select) remain unaffected.
+  - Non‑canvas areas retain normal page behavior.
+  - Cross‑device regression check: Android Chrome and desktop browsers unaffected.
+
 ---
 
 ## Resolved / Closed
