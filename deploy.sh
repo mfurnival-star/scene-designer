@@ -116,6 +116,7 @@ function inject_force_settings_block() {
   keys=$(grep -oP 'key:\s*"\K[^"]+' "$SETTINGS_JS" | sort | uniq)
   types=$(grep -oP 'type:\s*"\K[^"]+' "$SETTINGS_JS" | paste -d, -s)
   declare -A key_type
+  echo "HERE"
   while read -r line; do
     key=$(echo "$line" | grep -oP 'key:\s*"\K[^"]+')
     type=$(echo "$line" | grep -oP 'type:\s*"\K[^"]+')
@@ -123,7 +124,6 @@ function inject_force_settings_block() {
       key_type["$key"]="$type"
     fi
   done < <(grep -E 'key:|type:' "$SETTINGS_JS" | paste - -)
-  echo "HERE"
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
   for key in $keys; do
