@@ -284,7 +284,7 @@ export async function setSettingAndSave(key, value) {
     setLogLevelByNum(normalizeLogLevelNum(valToSet));
   }
 
-  // Persist to store
+  // Persist to store (synchronous, immediate for subscribers like layout.js)
   setSetting(key, valToSet);
   log("DEBUG", "[settings] setSettingAndSave: after setSetting", getState().settings);
   log("DEBUG", `[settings] setSettingAndSave: setting '${key}' changed`, { value: valToSet, fullSettings: getState().settings });
@@ -438,6 +438,7 @@ export function buildSettingsPanel({ element, title, componentName }) {
       log("ERROR", "[settings] Pane (Tweakpane) is not a constructor/function! Check import.");
       return;
     }
+
     const buildPanel = () => {
       const settingsPOJO = {};
       for (const reg of settingsRegistry) {
@@ -499,12 +500,20 @@ export function buildSettingsPanel({ element, title, componentName }) {
       });
       log("INFO", "[settings] Settings panel rendered (Tweakpane, no inner header)");
     };
-    loadSettings().then(() => {
+
+    // IMPORTANT: Avoid reloading persisted settings during layout rebuilds
+    // If settings are already in memory, build immediately; otherwise load then build.
+    const hasSettingsInStore = !!(getState().settings && Object.keys(getState().settings).length > 0);
+    if (hasSettingsInStore) {
       buildPanel();
-    }).catch((e) => {
-      log("ERROR", "[settings] Error in loadSettings().then for buildSettingsPanel", e);
-      element.innerHTML = `<div style="color:red;padding:2em;">Settings failed to load: ${e.message}</div>`;
-    });
+    } else {
+      loadSettings().then(() => {
+        buildPanel();
+      }).catch((e) => {
+        log("ERROR", "[settings] Error in loadSettings().then for buildSettingsPanel", e);
+        element.innerHTML = `<div style="color:red;padding:2em;">Settings failed to load: ${e.message}</div>`;
+      });
+    }
   } catch (e) {
     log("ERROR", "[settings] buildSettingsPanel ERROR", e);
     alert("SettingsPanel ERROR: " + e.message + (e && e.stack ? "\n\n" + e.stack : ""));
