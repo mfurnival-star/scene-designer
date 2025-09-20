@@ -7,28 +7,29 @@
 
 ## Defects / Issues (Open)
 
-### defect3: Point shape reticle style/size feels uneven at small sizes
-- Summary: Current reticle (crosshair with halo) looks uneven when very small. We want multiple reticle style options and a size control in Settings.
-- Plan:
-  - Add Settings:
-    - reticleStyle (select): crosshair, crosshairHalo, bullseye, dot, target
-    - reticleSize (number): default 14px
-  - Point creation respects these settings.
-  - Optional future: live-update existing points when these settings change.
-
-### defect12: Keep stroke width constant on scale/transform (configurable)
-- Summary: When shapes are resized or transformed, their stroke width should remain constant (e.g., 1px) rather than scaling with the shape.
-- Expected:
-  - A setting defaultStrokeWidth (number; default 1) controls stroke width for all primitives (rect, circle, point reticle lines/rings).
-  - Stroke remains at that width during transforms/moves.
-- Plan:
-  - Set strokeUniform=true for primitives (Fabric property to keep stroke width constant during scaling).
-  - Ensure creation and transform handlers re-apply stroke width from settings.defaultStrokeWidth.
-  - Provide a helper to update selected shapes when this setting changes.
+- None currently.
 
 ---
 
 ## Resolved / Closed
+
+### defect3: Point shape reticle style/size feels uneven at small sizes — RESOLVED
+- Resolution date: 2025-09-20
+- Fixes delivered:
+  - Added reticle styles: crosshair, crosshairHalo, bullseye, dot, target.
+  - Implemented size control (reticleSize); accepts numbers or strings like "20px".
+  - Dot style now has a transparent crosshair cutout at the exact center so the underlying pixel is visible.
+  - Points remain selectable/movable but are non-resizable and non-rotatable by design.
+- Acceptance confirmed: Visuals verified at small and large sizes; transparent center verified over high-contrast backgrounds.
+
+### defect12: Keep stroke width constant on scale/transform (configurable) — RESOLVED
+- Resolution date: 2025-09-20
+- Fixes delivered:
+  - All primitives use Fabric’s strokeUniform=true to keep stroke width constant during transforms.
+  - Re-applies configured width after transforms via fixStrokeWidthAfterTransform().
+  - Settings: defaultStrokeWidth applied to selection when changed.
+  - Verified on rectangles, circles, and reticle elements (lines/rings) during scale/rotate.
+- Acceptance confirmed: Stroke width remains visually constant during and after transforms.
 
 ### defect13: Panel visibility toggles not synchronized (Error Log + Scenario Runner) — RESOLVED
 - Resolution date: 2025-09-20
@@ -69,3 +70,4 @@
 ---
 
 Last updated: 2025-09-20
+
