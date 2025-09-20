@@ -33,6 +33,7 @@ import {
 import { Pane } from 'tweakpane';
 import localforage from 'localforage';
 import { setErrorLogPanelVisible } from './layout.js';
+import { applyDiagnosticLabelsVisibility } from './shapes.js';
 
 // --- Log Level Options (label and value are identical) ---
 export const LOG_LEVELS = [
@@ -61,6 +62,9 @@ export const settingsRegistry = [
   { key: "defaultCircleRadius", label: "Default Circle Radius", type: "number", default: 15, min: 4, max: 100, step: 1 },
   { key: "defaultStrokeColor", label: "Default Stroke Color", type: "color", default: "#000000ff" },
   { key: "defaultFillColor", label: "Default Fill Color", type: "color", default: "#00000000" },
+  // Diagnostics
+  { key: "showDiagnosticLabels", label: "Show Diagnostic Labels (IDs)", type: "boolean", default: false },
+  // Canvas/image
   { key: "canvasMaxWidth", label: "Canvas Max Width (px)", type: "number", default: 430, min: 100, max: 4000, step: 10 },
   { key: "canvasMaxHeight", label: "Canvas Max Height (px)", type:  "number", default: 9999, min: 100, max: 4000, step: 10 },
   {
@@ -76,6 +80,7 @@ export const settingsRegistry = [
     default: "fit"
   },
   { key: "canvasResponsive", label: "Responsive: Resize on Window Change", type: "boolean", default: true },
+  // UI
   {
     key: "toolbarUIScale",
     label: "Toolbar UI Scale",
@@ -103,6 +108,7 @@ export const settingsRegistry = [
     max: 100,
     step: 1
   },
+  // Logging
   {
     key: "DEBUG_LOG_LEVEL",
     label: "Debug: Log Level",
@@ -187,6 +193,12 @@ export async function loadSettings() {
     setSettings(merged);
     updateLogConfigFromSettings(merged);
     updateConsoleInterceptionFromSettings(merged);
+    // Apply diagnostic label visibility to all existing shapes
+    try {
+      applyDiagnosticLabelsVisibility(!!merged.showDiagnosticLabels);
+    } catch (e) {
+      log("WARN", "[settings] Applying diagnostic labels visibility failed (non-fatal)", e);
+    }
     log("DEBUG", "[settings] Settings loaded and applied", merged);
     log("DEBUG", "[settings] Full settings after load", { settings: getState().settings });
     return merged;
@@ -245,10 +257,22 @@ export async function setSettingAndSave(key, value) {
   setSetting(key, valToSet);
   log("DEBUG", "[settings] setSettingAndSave: after setSetting", getState().settings);
   log("DEBUG", `[settings] setSettingAndSave: setting '${key}' changed`, { value: valToSet, fullSettings: getState().settings });
+
+  // Apply side effects for specific settings
+  if (key === "showErrorLogPanel") setErrorLogPanelVisible(!!valToSet);
+  if (key === "showDiagnosticLabels") {
+    try {
+      applyDiagnosticLabelsVisibility(!!valToSet);
+      log("INFO", "[settings] Diagnostic labels visibility updated", { visible: !!valToSet });
+    } catch (e) {
+      log("ERROR", "[settings] Failed to update diagnostic labels visibility", e);
+    }
+  }
+
   await saveSettings();
-  if (key === "showErrorLogPanel") setErrorLogPanelVisible(valToSet);
   log("DEBUG", "[settings] setSettingAndSave exit");
 }
+
 export async function setSettingsAndSave(settingsObj) {
   log("DEBUG", "[settings] setSettingsAndSave entry", settingsObj);
   const forceMode = typeof window !== "undefined" &&
@@ -273,8 +297,19 @@ export async function setSettingsAndSave(settingsObj) {
   setSettings(settingsObj);
   log("DEBUG", "[settings] setSettingsAndSave: after setSettings", getState().settings);
   log("DEBUG", "[settings] setSettingsAndSave: all settings changed", { fullSettings: getState().settings });
+
+  // Apply side effects
+  if ("showErrorLogPanel" in settingsObj) setErrorLogPanelVisible(!!settingsObj.showErrorLogPanel);
+  if ("showDiagnosticLabels" in settingsObj) {
+    try {
+      applyDiagnosticLabelsVisibility(!!settingsObj.showDiagnosticLabels);
+      log("INFO", "[settings] Diagnostic labels visibility updated (bulk)", { visible: !!settingsObj.showDiagnosticLabels });
+    } catch (e) {
+      log("ERROR", "[settings] Failed to update diagnostic labels visibility (bulk)", e);
+    }
+  }
+
   await saveSettings();
-  if ("showErrorLogPanel" in settingsObj) setErrorLogPanelVisible(settingsObj.showErrorLogPanel);
   log("DEBUG", "[settings] setSettingsAndSave exit");
 }
 
@@ -417,4 +452,3 @@ export function buildSettingsPanel({ element, title, componentName }) {
     throw e;
   }
 }
-

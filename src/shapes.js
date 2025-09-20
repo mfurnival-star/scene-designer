@@ -3,27 +3,23 @@
  * -----------------------------------------------------------
  * Scene Designer – Shape Factory Module (Fabric.js Migration, Zustand Refactor, ESM ONLY, Full DEBUG Logging Sweep, Diagnostic Labels Edition)
  * - Centralizes all Fabric.js shape construction, event attachment, and per-shape config.
- * - Exports: makePointShape, makeRectShape, makeCircleShape, fixStrokeWidthAfterTransform.
+ * - Exports: makePointShape, makeRectShape, makeCircleShape, fixStrokeWidthAfterTransform, setStrokeWidthForSelectedShapes, applyDiagnosticLabelsVisibility
  * - Every shape/group gets a unique _id at creation for sidebar/selection robustness.
  * - NO selection event handlers are attached to shapes (handled centrally in canvas.js).
  * - Handles per-shape config, label, lock, and transformer events.
  * - No global variables, no window.* usage.
  * - Logging via log.js (EXHAUSTIVE DEBUG logging: creation, config, events).
  * - Stroke width: always stays at 1px regardless of scaling or transform.
- * - **NEW: Each shape has a visible diagnostic label displaying its _label and _id.**
+ * - Diagnostic label: visibility is controlled by settings.showDiagnosticLabels.
  * - **FIX: Only the Group is selectable/evented; all children are not.**
  * -----------------------------------------------------------
  */
 
-import { Canvas, Rect, Circle, Line, Group, Image } from './fabric-wrapper.js';
+import { Rect, Circle, Line, Group } from './fabric-wrapper.js';
 import { log } from './log.js';
 import { setShapeState } from './shape-state.js';
 import {
-  getState,
-  setShapes,
-  setSelectedShapes,
-  addShape,
-  removeShape
+  getState
 } from './state.js';
 
 // Default stroke width for all shapes
@@ -64,10 +60,16 @@ export function fixStrokeWidthAfterTransform() {
  */
 function setShapeStrokeWidth(shape, width = 1) {
   log("DEBUG", "[shapes] setShapeStrokeWidth ENTRY", { shapeId: shape?._id, type: shape?._type, width });
+  if (!shape) return;
   if (shape._type === 'rect' || shape._type === 'circle') {
-    shape.set({ strokeWidth: width });
+    // Find the actual primitive child inside the group
+    if (shape._objects && Array.isArray(shape._objects)) {
+      shape._objects.forEach(obj => {
+        if (obj.type === 'rect' || obj.type === 'circle') obj.set({ strokeWidth: width });
+      });
+    }
   } else if (shape._type === 'point') {
-    // For points: update crosshair and halo lines if present
+    // For points: update crosshair and halo lines/circle if present
     if (shape._objects && Array.isArray(shape._objects)) {
       shape._objects.forEach(obj => {
         if (obj.type === 'line' || obj.type === 'circle') obj.set({ strokeWidth: width });
@@ -110,6 +112,38 @@ function makeDiagnosticLabel(label, id, x, y) {
 }
 
 /**
+ * Internal: Toggle visibility for a group's diagnostic label child, if any.
+ */
+function setGroupDiagnosticLabelVisible(group, visible) {
+  if (!group || !Array.isArray(group._objects)) return;
+  for (const obj of group._objects) {
+    if (obj && obj._isDiagnosticLabel) {
+      obj.visible = !!visible;
+    }
+  }
+}
+
+/**
+ * Public API: Toggle diagnostic labels visibility across all shapes and re-render.
+ * Useful for reacting to settings changes.
+ * @param {boolean} visible
+ */
+export function applyDiagnosticLabelsVisibility(visible) {
+  log("DEBUG", "[shapes] applyDiagnosticLabelsVisibility ENTRY", { visible });
+  try {
+    const shapes = getState().shapes || [];
+    shapes.forEach(group => setGroupDiagnosticLabelVisible(group, visible));
+    if (getState().fabricCanvas) {
+      getState().fabricCanvas.renderAll();
+    }
+    log("INFO", "[shapes] Diagnostic labels visibility applied", { visible, shapeCount: shapes.length });
+  } catch (e) {
+    log("ERROR", "[shapes] applyDiagnosticLabelsVisibility error", e);
+  }
+  log("DEBUG", "[shapes] applyDiagnosticLabelsVisibility EXIT");
+}
+
+/**
  * Make a point shape (crosshair/halo/transparent hit area, for annotation).
  * Only the Group is selectable/evented; children are not.
  */
@@ -123,9 +157,10 @@ export function makePointShape(x, y) {
   const crossLen = settings.pointCrossLen ?? 14;
   const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
   const fillColor = settings.defaultFillColor ?? '#00000000';
+  const showLabels = !!settings.showDiagnosticLabels;
 
   log("DEBUG", "[shapes] makePointShape: settings", {
-    hitRadius, haloRadius, crossLen, strokeColor, fillColor
+    hitRadius, haloRadius, crossLen, strokeColor, fillColor, showLabels
   });
 
   const hitCircle = new Circle({
@@ -166,6 +201,7 @@ export function makePointShape(x, y) {
 
   const pointId = generateShapeId('point');
   const label = makeDiagnosticLabel("Point", pointId, x, y);
+  label.visible = showLabels;
 
   const pointGroup = new Group([hitCircle, halo, crossH, crossV, label], {
     left: x,
@@ -213,9 +249,10 @@ export function makeRectShape(x, y, w, h) {
   const settings = getState().settings || {};
   const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
   const fillColor = settings.defaultFillColor ?? '#00000000';
+  const showLabels = !!settings.showDiagnosticLabels;
 
   log("DEBUG", "[shapes] makeRectShape: settings", {
-    strokeColor, fillColor
+    strokeColor, fillColor, showLabels
   });
 
   const rectId = generateShapeId('rect');
@@ -228,15 +265,12 @@ export function makeRectShape(x, y, w, h) {
     strokeWidth: currentStrokeWidth,
     fill: fillColor
   });
-  rect._type = 'rect';
-  rect._label = 'Rect';
-  rect.locked = false;
-  rect._id = rectId;
   rect.selectable = false;
   rect.evented = false;
 
   // Place diagnostic label above center of rect
   const label = makeDiagnosticLabel("Rect", rectId, x + w / 2, y);
+  label.visible = showLabels;
 
   // Group rect + label as one shape
   const rectGroup = new Group([rect, label], {
@@ -283,9 +317,10 @@ export function makeCircleShape(x, y, r) {
   const settings = getState().settings || {};
   const strokeColor = settings.defaultStrokeColor ?? '#2176ff';
   const fillColor = settings.defaultFillColor ?? '#00000000';
+  const showLabels = !!settings.showDiagnosticLabels;
 
   log("DEBUG", "[shapes] makeCircleShape: settings", {
-    strokeColor, fillColor
+    strokeColor, fillColor, showLabels
   });
 
   const circleId = generateShapeId('circle');
@@ -297,15 +332,12 @@ export function makeCircleShape(x, y, r) {
     strokeWidth: currentStrokeWidth,
     fill: fillColor
   });
-  circle._type = 'circle';
-  circle._label = 'Circle';
-  circle.locked = false;
-  circle._id = circleId;
   circle.selectable = false;
   circle.evented = false;
 
   // Place diagnostic label above center of circle
   const label = makeDiagnosticLabel("Circle", circleId, x, y - r);
+  label.visible = showLabels;
 
   // Group circle + label as one shape
   const circleGroup = new Group([circle, label], {
@@ -349,4 +381,3 @@ function generateShapeId(type = "shape") {
   log("DEBUG", "[shapes] generateShapeId", { type, id });
   return id;
 }
-
