@@ -7,8 +7,10 @@
  * - All config values from Zustand store.
  * - Settings panel uses Tweakpane.
  * - Logging via log.js.
- * - **Logging destination is now only 'console' or 'both' (no custom server, no error pane sink).**
- * - Logging levels: Silent, Error, Warning, Info, Debug (TRACE removed, label/value always match).
+ * - Logging destination: 'console' or 'both' (no custom server sink).
+ * - Logging levels exposed in UI: Silent, Error, Warning, Info, Debug.
+ * - Panel visibility toggles (Error Log + Scenario Runner) are now applied by layout.js via store subscription.
+ *   We DO NOT directly call layout togglers here to avoid double rebuilds.
  * -------------------------------------------------------------------
  */
 
@@ -32,7 +34,6 @@ import {
 } from './console-stream.js';
 import { Pane } from 'tweakpane';
 import localforage from 'localforage';
-import { setErrorLogPanelVisible } from './layout.js';
 import { applyDiagnosticLabelsVisibility } from './shapes.js';
 import { setStrokeWidthForSelectedShapes } from './shapes.js';
 
@@ -282,13 +283,13 @@ export async function setSettingAndSave(key, value) {
     if (typeof valToSet !== "string" || !(valToSet in LOG_LEVEL_LABEL_TO_NUM)) valToSet = "Info";
     setLogLevelByNum(normalizeLogLevelNum(valToSet));
   }
+
+  // Persist to store
   setSetting(key, valToSet);
   log("DEBUG", "[settings] setSettingAndSave: after setSetting", getState().settings);
   log("DEBUG", `[settings] setSettingAndSave: setting '${key}' changed`, { value: valToSet, fullSettings: getState().settings });
 
-  // Apply side effects for specific settings
-  if (key === "showErrorLogPanel") setErrorLogPanelVisible(!!valToSet);
-
+  // Side effects handled here for non-layout concerns
   if (key === "showDiagnosticLabels") {
     try {
       applyDiagnosticLabelsVisibility(!!valToSet);
@@ -309,6 +310,8 @@ export async function setSettingAndSave(key, value) {
       log("ERROR", "[settings] Failed to apply default stroke width to selection", e);
     }
   }
+
+  // Note: Panel visibility toggles (showErrorLogPanel, showScenarioRunner) are applied by layout.js via store subscription.
 
   await saveSettings();
   log("DEBUG", "[settings] setSettingAndSave exit");
@@ -335,13 +338,13 @@ export async function setSettingsAndSave(settingsObj) {
     settingsObj.DEBUG_LOG_LEVEL = label;
     setLogLevelByNum(normalizeLogLevelNum(label));
   }
+
+  // Persist to store
   setSettings(settingsObj);
   log("DEBUG", "[settings] setSettingsAndSave: after setSettings", getState().settings);
   log("DEBUG", "[settings] setSettingsAndSave: all settings changed", { fullSettings: getState().settings });
 
-  // Apply side effects
-  if ("showErrorLogPanel" in settingsObj) setErrorLogPanelVisible(!!settingsObj.showErrorLogPanel);
-
+  // Side effects handled here for non-layout concerns
   if ("showDiagnosticLabels" in settingsObj) {
     try {
       applyDiagnosticLabelsVisibility(!!settingsObj.showDiagnosticLabels);
@@ -362,6 +365,8 @@ export async function setSettingsAndSave(settingsObj) {
       log("ERROR", "[settings] Failed to apply default stroke width to selection (bulk)", e);
     }
   }
+
+  // Note: Panel visibility toggles (showErrorLogPanel, showScenarioRunner) are applied by layout.js via store subscription.
 
   await saveSettings();
   log("DEBUG", "[settings] setSettingsAndSave exit");
