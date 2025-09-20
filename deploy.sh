@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
-
+set -x
 trap 'echo "Error on line $LINENO: $BASH_COMMAND"' ERR
 
 
