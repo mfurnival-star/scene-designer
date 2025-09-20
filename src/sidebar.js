@@ -224,3 +224,4 @@ export function buildSidebarPanel({ element, title, componentName }) {
     componentName
   });
 }
+

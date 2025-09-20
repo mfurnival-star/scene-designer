@@ -106,3 +106,4 @@ export function disableConsoleInterception() {
 export function isConsoleInterceptionEnabled() {
   return interceptionEnabled;
 }
+
