@@ -165,9 +165,18 @@ export class MiniLayout {
       el.className = "minilayout-panel";
       el.style.display = "flex";
       el.style.flexDirection = node.type === "row" ? "row" : "column";
-      // --- Panel size persistence: apply saved sizes ---
-      let parentKey = panelPathKey(newPathArr);
-      let sizes = (this._panelSizes && this._panelSizes[parentKey]) || [];
+
+      // --- Panel size persistence: apply saved sizes IF AND ONLY IF count matches ---
+      const parentKey = panelPathKey(newPathArr);
+      const saved = this._panelSizes ? this._panelSizes[parentKey] : null;
+      const childCount = Array.isArray(node.content) ? node.content.length : 0;
+      const sizes = Array.isArray(saved) && saved.length === childCount ? saved : null;
+      if (Array.isArray(saved) && saved.length !== childCount) {
+        log("DEBUG", "[minilayout] Ignoring persisted sizes due to child count mismatch", {
+          parentKey, savedLength: saved.length, childCount
+        });
+      }
+
       let childEls = [];
       if (node.content && Array.isArray(node.content)) {
         node.content.forEach((child, idx) => {
@@ -177,8 +186,9 @@ export class MiniLayout {
             childEls.push(splitter);
           }
           const childItem = this._buildItem(child, el, item, newPathArr);
-          // --- Panel size persistence: apply child size ---
-          const sizeVal = sizes[idx];
+
+          // Apply persisted size only when valid (matching child count)
+          const sizeVal = sizes ? sizes[idx] : undefined;
           if (sizeVal !== undefined) {
             if (node.type === "row") {
               childItem.element.style.width = `${sizeVal}%`;
