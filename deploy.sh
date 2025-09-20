@@ -5,6 +5,11 @@
 #   [VAR=VALUE ...] ./deploy.sh [prod|dev]
 #   e.g. DEBUG_LOG_LEVEL="Debug" LOG_OUTPUT_DEST=console INTERCEPT_CONSOLE=1 ./deploy.sh dev
 #        (Alias supported: LOG_LEVEL maps to DEBUG_LOG_LEVEL)
+#
+# Notes:
+# - Updated to support settings split (settings-core.js + settings-ui.js). We now parse settings-core.js first,
+#   then fall back to settings.js for older builds.
+# - Console.Re connector.js is injected as the first script in <head>, per transitional exception.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -17,7 +22,11 @@ DEPLOY_DIR="/var/www/scene-designer"
 
 ROOT_INDEX_HTML="$PROJECT_DIR/index.html"
 DIST_INDEX_HTML="$BUILD_DIR/index.html"
-SETTINGS_JS="$PROJECT_DIR/src/settings.js"
+
+# Settings module paths (core-first, fallback to facade)
+SETTINGS_CORE_JS="$PROJECT_DIR/src/settings-core.js"
+SETTINGS_FACADE_JS="$PROJECT_DIR/src/settings.js"
+
 DATESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
 MODE="${1:-prod}"
@@ -41,7 +50,7 @@ Environment variables:
   LOG_OUTPUT_DEST    console|both
   INTERCEPT_CONSOLE  1|0
   showDiagnosticLabels  true|false (etc.)
-  <any other settings key found in src/settings.js settingsRegistry>
+  <any other settings key found in src/settings-core.js settingsRegistry>
 
 Examples:
   ./deploy.sh dev
@@ -97,12 +106,15 @@ function inject_consolere() {
   echo "[$DATESTAMP] === (Re)inserting Console.Re (if enabled) ==="
   sed -i '/<!-- BEGIN CONSOLERE -->/,/<!-- END CONSOLERE -->/d' "$INDEX_HTML"
   if [[ "$INJECT_CONSOLERE" == "1" ]]; then
+    # Insert as the very first script in <head>
     awk '
-      /<head>/ {
+      BEGIN { injected=0 }
+      /<head>/ && injected==0 {
         print "<head>";
         print "  <!-- BEGIN CONSOLERE -->";
         print "  <script src=\"//console.re/connector.js\" data-channel=\"scene-designer\" id=\"consolerescript\"></script>";
         print "  <!-- END CONSOLERE -->";
+        injected=1;
         next;
       }
       { print }
@@ -113,33 +125,41 @@ function inject_consolere() {
   fi
 }
 
-# Robust, portable parsing of settingsRegistry in src/settings.js without grep -P
+# Robust, portable parsing of settingsRegistry in src/settings-core.js (preferred) or src/settings.js (fallback).
 # Extracts key/type pairs from entries like:
 #   { key: "showDiagnosticLabels", label: "...", type: "boolean", default: false },
-function _emit_settings_key_types() {
+function _emit_settings_key_types_from_file() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
   awk '
     BEGIN { inReg=0; curKey=""; curType=""; }
     /export[[:space:]]+const[[:space:]]+settingsRegistry[[:space:]]*=/ { inReg=1; next; }
     inReg {
-      # Extract key
       if (match($0, /key:[[:space:]]*"([^"]+)"/, m)) { curKey=m[1]; }
-      # Extract type
       if (match($0, /type:[[:space:]]*"([^"]+)"/, m2)) { curType=m2[1]; }
-      # End of object — if both present, print and reset
       if ($0 ~ /},?[[:space:]]*$/) {
         if (curKey != "" && curType != "") {
           print curKey "\t" curType;
         }
         curKey=""; curType="";
       }
-      # End of registry array
       if ($0 ~ /^\][[:space:]]*;/) { inReg=0; }
     }
-  ' "$SETTINGS_JS"
+  ' "$file"
+}
+
+function _emit_settings_key_types() {
+  # Prefer core; then fallback to facade for older builds
+  {
+    _emit_settings_key_types_from_file "$SETTINGS_CORE_JS"
+    _emit_settings_key_types_from_file "$SETTINGS_FACADE_JS"
+  } | awk '!seen[$0]++'  # de-dup
 }
 
 function inject_force_settings_block() {
-  echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settings.js keys ==="
+  echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settingsRegistry keys ==="
   sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
 
   # LOG_LEVEL alias support
@@ -153,40 +173,37 @@ function inject_force_settings_block() {
     [[ -n "${k:-}" && -n "${t:-}" ]] && key_type["$k"]="$t"
   done < <(_emit_settings_key_types)
 
-  # If we failed to parse anything, don’t abort; just proceed with known env vars as strings/booleans
-  # Build the FORCE block
+  # Construct the FORCE block
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
 
-  # Iterate over discovered keys; fallback to any env keys that look relevant if none discovered
   if [[ ${#key_type[@]} -gt 0 ]]; then
     for key in "${!key_type[@]}"; do
       local setting_type="${key_type[$key]}"
       local value="${!key:-}"
-      if [[ -n "$value" ]]; then
-        if [[ "$setting_type" == "boolean" ]]; then
-          case "$value" in
-            1|true|TRUE|True) js_val="true" ;;
-            0|false|FALSE|False) js_val="false" ;;
-            *) js_val="false" ;;
-          esac
-          block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = ${js_val};\n"
-          echo "  [FORCE] $key (boolean) = $js_val"
-        else
-          # Everything else as string; settings.js coerces log level labels later
-          block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = \"${value}\";\n"
-          echo "  [FORCE] $key = $value"
-        fi
-        injected=1
+      [[ -z "$value" ]] && continue
+      if [[ "$setting_type" == "boolean" ]]; then
+        case "$value" in
+          1|true|TRUE|True) js_val="true" ;;
+          0|false|FALSE|False) js_val="false" ;;
+          *) js_val="false" ;;
+        esac
+        block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = ${js_val};\n"
+        echo "  [FORCE] $key (boolean) = $js_val"
+      else
+        # Everything else as string; settings-core coerces log level labels later
+        block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = \"${value}\";\n"
+        echo "  [FORCE] $key = $value"
       fi
+      injected=1
     done
   else
     # Fallback: best-effort for common keys if registry parse failed
-    for key in DEBUG_LOG_LEVEL LOG_OUTPUT_DEST INTERCEPT_CONSOLE showErrorLogPanel showDiagnosticLabels canvasResponsive; do
+    for key in DEBUG_LOG_LEVEL LOG_OUTPUT_DEST INTERCEPT_CONSOLE showErrorLogPanel showScenarioRunner showDiagnosticLabels canvasResponsive; do
       local value="${!key:-}"
       [[ -z "$value" ]] && continue
       case "$key" in
-        INTERCEPT_CONSOLE|showErrorLogPanel|showDiagnosticLabels|canvasResponsive)
+        INTERCEPT_CONSOLE|showErrorLogPanel|showScenarioRunner|showDiagnosticLabels|canvasResponsive)
           case "$value" in
             1|true|TRUE|True) js_val="true" ;;
             0|false|FALSE|False) js_val="false" ;;
@@ -262,5 +279,4 @@ else
 fi
 
 exit 0
-
 

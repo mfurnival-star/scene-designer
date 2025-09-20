@@ -7,21 +7,6 @@
 
 ## Defects / Issues (Open)
 
-### defect13: Panel visibility toggles not synchronized (Error Log + Scenario Runner)
-- Summary: Toggling the Settings checkboxes for Error Log panel and Scenario Runner panel does not consistently show/hide the corresponding panel. The checkbox state should always reflect the current visibility.
-- Expected:
-  - When “Show Error Log Panel” is checked, the Error Log panel is added to the layout; when unchecked, it’s removed. The checkbox reflects the actual visibility at all times.
-  - When “Show Scenario Runner (Debug)” is checked, the Scenario Runner panel is added; when unchecked, it’s removed. The checkbox reflects the actual visibility at all times.
-- Observed: Panels do not always add/remove on toggle, or the checkbox can become out of sync with the actual panel visibility.
-- Notes:
-  - Error Log: layout.js already exposes setErrorLogPanelVisible() and subscribes to setting changes; verify rebuild logic and initial state wiring.
-  - Scenario Runner: layout currently always includes the panel. Needs wiring similar to Error Log so the panel is conditionally included based on settings.showScenarioRunner and re-built on toggle.
-  - Ensure Settings UI initializes to the true current visibility on load (reflecting FORCE overrides, persisted settings, and any layout default).
-- Acceptance criteria:
-  - Toggling either setting immediately rebuilds layout with the panel present/absent accordingly.
-  - On app load, both checkboxes accurately mirror the current visibility.
-  - No stale panel remnants remain after removal (no orphaned DOM, no duplicate registrations).
-
 ### defect3: Point shape reticle style/size feels uneven at small sizes
 - Summary: Current reticle (crosshair with halo) looks uneven when very small. We want multiple reticle style options and a size control in Settings.
 - Plan:
@@ -30,15 +15,6 @@
     - reticleSize (number): default 14px
   - Point creation respects these settings.
   - Optional future: live-update existing points when these settings change.
-
-### defect11: Scenario Runner visibility toggle (settings)
-Add a settings toggle to show/hide the Scenario Runner panel. This panel is not needed most of the time but can be useful for diagnostics in the future.
-
-- Problem: Scenario Runner panel is always present in the layout; users who don’t need it would prefer it hidden by default.
-- Expected: A boolean setting (e.g., showScenarioRunner) in Settings. Toggling it adds/removes the Scenario Runner panel from the layout immediately.
-- Scope: Settings UI, layout bootstrapper wiring, and persistence via existing settings infrastructure.
-- Priority: Low
-- Status: Todo
 
 ### defect12: Keep stroke width constant on scale/transform (configurable)
 - Summary: When shapes are resized or transformed, their stroke width should remain constant (e.g., 1px) rather than scaling with the shape.
@@ -54,8 +30,22 @@ Add a settings toggle to show/hide the Scenario Runner panel. This panel is not 
 
 ## Resolved / Closed
 
+### defect13: Panel visibility toggles not synchronized (Error Log + Scenario Runner) — RESOLVED
+- Resolution date: 2025-09-20
+- Fixes delivered:
+  - Layout subscribes to settings changes and rebuilds to add/remove the Error Log and Scenario Runner panels immediately on toggle.
+  - Settings UI no longer reloads persisted settings during panel rebuilds when in-memory settings are already initialized, preventing checkbox state from being overwritten.
+- Acceptance confirmed: Checkbox state updates immediately and persists across reloads.
+
+### defect11: Scenario Runner visibility toggle (settings) — RESOLVED
+- Resolution date: 2025-09-20
+- Fixes delivered:
+  - Added boolean setting showScenarioRunner (default: false).
+  - Layout conditionally includes Scenario Runner and rebuilds on toggle via store subscription.
+  - Persisted via existing settings infrastructure; reflected on load.
+
 ### defect1: Shape delete issue (core bug) — RESOLVED
-- Fixes delivered: Selection is now synced from Fabric events, reentrancy guarded, and transformer attach/detach idempotent.
+- Fixes delivered: Selection is synced from Fabric events, reentrancy guarded, transformer attach/detach idempotent.
 - Status: Closed.
 
 ### defect5: MiniLayout panel sizes not saved/restored — RESOLVED
@@ -68,13 +58,14 @@ Add a settings toggle to show/hide the Scenario Runner panel. This panel is not 
 
 ---
 
-## Instructions
-
-- To add, update, or resolve any defect, request changes in Copilot Space.
-- To publish an issue to GitHub, ask Copilot to draft a GitHub issue for the defect and attach relevant code or logs.
-- For next actions, ask for “details on defectX”, “add a new defect”, or “mark defectX resolved”.
+## Notes
+- Settings module refactor (2025-09-20):
+  - Split settings into core and UI:
+    - settings-core.js: registry, persistence, non-UI side effects (logging, console interception, diagnostics).
+    - settings-ui.js: Tweakpane panel rendering and bindings.
+    - settings.js: Facade re-exporting core + UI to keep imports stable.
+  - modules.index.md and deploy.sh updated accordingly.
 
 ---
 
-*Last updated: 2025-09-20*
-
+Last updated: 2025-09-20

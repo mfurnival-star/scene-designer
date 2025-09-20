@@ -12,6 +12,8 @@ canvas.js
 canvas-core.js
 canvas-events.js
 selection.js
+settings-core.js
+settings-ui.js
 settings.js
 errorlog.js
 layout.js
@@ -84,11 +86,20 @@ scenario-panel.js
   - Integrates shape-state and shape-defs.  
   - Provides helpers to set/clear selection and query selected shapes.
 
+- settings-core.js  
+  Settings Core module (no UI).  
+  - Owns settingsRegistry, persistence (localForage), FORCE merge/coercion.  
+  - Applies non-UI side effects (logging config, console interception, diagnostics).  
+  - Exports: LOG_LEVELS, LOG_LEVEL_LABEL_TO_NUM, LOG_LEVEL_NUM_TO_LABEL, settingsRegistry, loadSettings, saveSettings, setSettingAndSave, setSettingsAndSave.
+
+- settings-ui.js  
+  Settings UI (Tweakpane) builder.  
+  - Renders the Settings panel from settingsRegistry.  
+  - Binds controls to store via setSettingAndSave.  
+  - Avoids calling loadSettings when settings are already in-memory to prevent checkbox desync.
+
 - settings.js  
-  Settings registry, persistence (localForage), and Tweakpane-based UI panel.  
-  - Logging level/destination controls.  
-  - Shape defaults, diagnostics, reticle style/size.  
-  - Panel toggles (Error Log, Scenario Runner) stored in settings; layout applies them via store subscription.
+  Facade that re-exports from settings-core.js and settings-ui.js to keep the public import path stable.
 
 - errorlog.js  
   Error Log panel (MiniLayout).  
@@ -162,6 +173,6 @@ scenario-panel.js
 
 Notes:
 - Public imports should use the canvas.js facade for the canvas panel.  
+- The settings module is now split (core + UI) with settings.js as a facade to keep import paths stable.  
 - Selection is synced via Fabric events in canvas-events.js to ensure delete/selection consistency.  
 - Remote logging is provided via Console.Re (wrapper + init), per the documented transitional exception.
-
