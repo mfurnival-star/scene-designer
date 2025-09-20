@@ -7,6 +7,21 @@
 
 ## Defects / Issues (Open)
 
+### defect13: Panel visibility toggles not synchronized (Error Log + Scenario Runner)
+- Summary: Toggling the Settings checkboxes for Error Log panel and Scenario Runner panel does not consistently show/hide the corresponding panel. The checkbox state should always reflect the current visibility.
+- Expected:
+  - When “Show Error Log Panel” is checked, the Error Log panel is added to the layout; when unchecked, it’s removed. The checkbox reflects the actual visibility at all times.
+  - When “Show Scenario Runner (Debug)” is checked, the Scenario Runner panel is added; when unchecked, it’s removed. The checkbox reflects the actual visibility at all times.
+- Observed: Panels do not always add/remove on toggle, or the checkbox can become out of sync with the actual panel visibility.
+- Notes:
+  - Error Log: layout.js already exposes setErrorLogPanelVisible() and subscribes to setting changes; verify rebuild logic and initial state wiring.
+  - Scenario Runner: layout currently always includes the panel. Needs wiring similar to Error Log so the panel is conditionally included based on settings.showScenarioRunner and re-built on toggle.
+  - Ensure Settings UI initializes to the true current visibility on load (reflecting FORCE overrides, persisted settings, and any layout default).
+- Acceptance criteria:
+  - Toggling either setting immediately rebuilds layout with the panel present/absent accordingly.
+  - On app load, both checkboxes accurately mirror the current visibility.
+  - No stale panel remnants remain after removal (no orphaned DOM, no duplicate registrations).
+
 ### defect3: Point shape reticle style/size feels uneven at small sizes
 - Summary: Current reticle (crosshair with halo) looks uneven when very small. We want multiple reticle style options and a size control in Settings.
 - Plan:
