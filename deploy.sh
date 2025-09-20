@@ -3,13 +3,13 @@
 # ---------------------------------------------------------------------------
 # Usage:
 #   [VAR=VALUE ...] ./deploy.sh [prod|dev]
-#   e.g. LOG_LEVEL="Debug" LOG_OUTPUT_DEST=console INTERCEPT_CONSOLE=1 ./deploy.sh dev
+#   e.g. DEBUG_LOG_LEVEL="Debug" LOG_OUTPUT_DEST=console INTERCEPT_CONSOLE=1 ./deploy.sh dev
+#        (Alias supported: LOG_LEVEL maps to DEBUG_LOG_LEVEL)
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
 #set -x
 trap 'echo "Error on line $LINENO: $BASH_COMMAND"' ERR
-
 
 PROJECT_DIR="$HOME/scene-designer"
 BUILD_DIR="$PROJECT_DIR/dist"
@@ -34,15 +34,19 @@ Usage: [VAR=VALUE ...] ./deploy.sh [prod|dev]
   dev      Just git add/commit/push, inject Eruda and FORCE settings, then start dev server (npm run dev)
 
 Environment variables:
-  INJECT_ERUDA     1 to add Eruda debug console, 0 otherwise   [default: 0]
-  INJECT_CONSOLERE 1 to add Console.Re log streaming, 0 otherwise
-  <any FORCE setting key>
-    e.g. LOG_LEVEL, LOG_OUTPUT_DEST, INTERCEPT_CONSOLE
+  INJECT_ERUDA       1 to add Eruda debug console, 0 otherwise         [default: 0]
+  INJECT_CONSOLERE   1 to add Console.Re log streaming, 0 otherwise    [default: 0]
+  DEBUG_LOG_LEVEL    One of: Silent|Error|Warning|Info|Debug
+  LOG_LEVEL          (alias for DEBUG_LOG_LEVEL)
+  LOG_OUTPUT_DEST    console|both
+  INTERCEPT_CONSOLE  1|0
+  showDiagnosticLabels  true|false (etc.)
+  <any other settings key found in src/settings.js settingsRegistry>
 
 Examples:
   ./deploy.sh dev
   INJECT_ERUDA=1 ./deploy.sh dev
-  INJECT_ERUDA=1 ./deploy.sh prod
+  DEBUG_LOG_LEVEL=Debug LOG_OUTPUT_DEST=both ./deploy.sh prod
 
 EOF
   exit 0
@@ -109,47 +113,102 @@ function inject_consolere() {
   fi
 }
 
+# Robust, portable parsing of settingsRegistry in src/settings.js without grep -P
+# Extracts key/type pairs from entries like:
+#   { key: "showDiagnosticLabels", label: "...", type: "boolean", default: false },
+function _emit_settings_key_types() {
+  awk '
+    BEGIN { inReg=0; curKey=""; curType=""; }
+    /export[[:space:]]+const[[:space:]]+settingsRegistry[[:space:]]*=/ { inReg=1; next; }
+    inReg {
+      # Extract key
+      if (match($0, /key:[[:space:]]*"([^"]+)"/, m)) { curKey=m[1]; }
+      # Extract type
+      if (match($0, /type:[[:space:]]*"([^"]+)"/, m2)) { curType=m2[1]; }
+      # End of object — if both present, print and reset
+      if ($0 ~ /},?[[:space:]]*$/) {
+        if (curKey != "" && curType != "") {
+          print curKey "\t" curType;
+        }
+        curKey=""; curType="";
+      }
+      # End of registry array
+      if ($0 ~ /^\][[:space:]]*;/) { inReg=0; }
+    }
+  ' "$SETTINGS_JS"
+}
+
 function inject_force_settings_block() {
   echo "[$DATESTAMP] === Injecting FORCE settings from env vars matching settings.js keys ==="
   sed -i '/<!-- BEGIN FORCE SETTINGS -->/,/<!-- END FORCE SETTINGS -->/d' "$INDEX_HTML"
-  local keys types
-  keys=$(grep -oP 'key:\s*"\K[^"]+' "$SETTINGS_JS" | sort | uniq)
-  types=$(grep -oP 'type:\s*"\K[^"]+' "$SETTINGS_JS" | paste -d, -s)
+
+  # LOG_LEVEL alias support
+  if [[ -n "${LOG_LEVEL:-}" && -z "${DEBUG_LOG_LEVEL:-}" ]]; then
+    export DEBUG_LOG_LEVEL="$LOG_LEVEL"
+  fi
+
+  # Build associative map of key -> type using AWK (portable, no PCRE)
   declare -A key_type
-  while read -r line; do
-    key=$(echo "$line" | grep -oP 'key:\s*"\K[^"]+')
-    type=$(echo "$line" | grep -oP 'type:\s*"\K[^"]+')
-    if [[ -n "$key" && -n "$type" ]]; then
-      key_type["$key"]="$type"
-    fi
-  done < <(grep -E 'key:|type:' "$SETTINGS_JS" | paste - -)
+  while IFS=$'\t' read -r k t; do
+    [[ -n "${k:-}" && -n "${t:-}" ]] && key_type["$k"]="$t"
+  done < <(_emit_settings_key_types)
+
+  # If we failed to parse anything, don’t abort; just proceed with known env vars as strings/booleans
+  # Build the FORCE block
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
-  for key in $keys; do
-    value="${!key:-}"
-    if [[ -n "$value" ]]; then
-      setting_type="${key_type[$key]:-text}"
-      if [[ "$setting_type" == "boolean" ]]; then
-        case "$value" in
-          1|true|TRUE) js_val="true";;
-          0|false|FALSE) js_val="false";;
-          *) js_val="false";;
-        esac
-        block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = ${js_val};\n"
-        echo "  [FORCE] $key (boolean) = $js_val"
-      else
-        block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = \"${value}\";\n"
-        echo "  [FORCE] $key = $value"
+
+  # Iterate over discovered keys; fallback to any env keys that look relevant if none discovered
+  if [[ ${#key_type[@]} -gt 0 ]]; then
+    for key in "${!key_type[@]}"; do
+      local setting_type="${key_type[$key]}"
+      local value="${!key:-}"
+      if [[ -n "$value" ]]; then
+        if [[ "$setting_type" == "boolean" ]]; then
+          case "$value" in
+            1|true|TRUE|True) js_val="true" ;;
+            0|false|FALSE|False) js_val="false" ;;
+            *) js_val="false" ;;
+          esac
+          block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = ${js_val};\n"
+          echo "  [FORCE] $key (boolean) = $js_val"
+        else
+          # Everything else as string; settings.js coerces log level labels later
+          block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = \"${value}\";\n"
+          echo "  [FORCE] $key = $value"
+        fi
+        injected=1
       fi
+    done
+  else
+    # Fallback: best-effort for common keys if registry parse failed
+    for key in DEBUG_LOG_LEVEL LOG_OUTPUT_DEST INTERCEPT_CONSOLE showErrorLogPanel showDiagnosticLabels canvasResponsive; do
+      local value="${!key:-}"
+      [[ -z "$value" ]] && continue
+      case "$key" in
+        INTERCEPT_CONSOLE|showErrorLogPanel|showDiagnosticLabels|canvasResponsive)
+          case "$value" in
+            1|true|TRUE|True) js_val="true" ;;
+            0|false|FALSE|False) js_val="false" ;;
+            *) js_val="false" ;;
+          esac
+          block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = ${js_val};\n"
+          echo "  [FORCE] $key (boolean) = $js_val"
+          ;;
+        *)
+          block+="    window.SCENE_DESIGNER_FORCE_SETTINGS[\"$key\"] = \"${value}\";\n"
+          echo "  [FORCE] $key = $value"
+          ;;
+      esac
       injected=1
-    fi
-  done
+    done
+  fi
+
   block+="  </script>\n  <!-- END FORCE SETTINGS -->"
+
   if [[ $injected -eq 1 ]]; then
     awk -v block="$block" '
-      /<\/head>/ {
-        print block;
-      }
+      /<\/head>/ { print block }
       { print }
     ' "$INDEX_HTML" > "$INDEX_HTML.tmp" && mv "$INDEX_HTML.tmp" "$INDEX_HTML"
     echo "[$DATESTAMP] === FORCE settings injected into $INDEX_HTML ==="
@@ -203,3 +262,5 @@ else
 fi
 
 exit 0
+
+
