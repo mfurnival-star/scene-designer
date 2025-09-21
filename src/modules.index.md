@@ -179,4 +179,49 @@ Public API stability
 
 ---
 
-Refer to `SCENE_DESIGNER_MANIFESTO.md` for detailed philosophy and rules.
+## 13. Toolbar Split (2025-09-21)
+
+To address a syntax error in the monolithic toolbar and comply with the file-size policy, the toolbar was split into cohesive ES modules. Public imports remain stable via the facade.
+
+- Facade (public import path unchanged)
+  - src/toolbar.js
+    - Facade that re-exports buildCanvasToolbarPanel from toolbar-panel.js.
+    - External imports should continue using: import { buildCanvasToolbarPanel } from './toolbar.js'.
+
+- New modules (split)
+  - src/toolbar-panel.js
+    - Panel assembly: injects styles, renders DOM, wires handlers, and installs state-driven enable/disable logic.
+    - Exports: buildCanvasToolbarPanel({ element, title, componentName }).
+  - src/toolbar-styles.js
+    - Injects toolbar CSS once.
+    - Ensures buttons auto-size to text; scaling via font-size so widths reflow with scale.
+    - Exports: ensureToolbarStylesInjected().
+  - src/toolbar-dom.js
+    - Renders toolbar HTML into the provided element and returns strong refs to interactive nodes.
+    - No business logic or event wiring.
+    - Exports: renderToolbar(element).
+  - src/toolbar-handlers.js
+    - Attaches all click/change handlers.
+    - Dispatches intents to actions.js and selection.js (no business logic).
+    - Exports: attachToolbarHandlers(refs) -> detachFn.
+  - src/toolbar-state.js
+    - Derives button enabled/disabled state from the store; syncs toolbar scale with settings.toolbarUIScale.
+    - Exports: installButtonsStateSync(refs) -> detachFn, installToolbarScaleSync(containerEl) -> detachFn.
+
+Notes:
+- No public API change: layout.js continues to import buildCanvasToolbarPanel from './toolbar.js'.
+- exports.index.json remains correct, since toolbar.js still exports buildCanvasToolbarPanel; the generator can remain unchanged.
+- The split resolves the Vite import-analysis syntax error originating from the previous monolithic file and keeps each module well under ~350 lines.
+
+PR summary guidance for this split:
+- "Split toolbar into toolbar-panel.js, toolbar-styles.js, toolbar-dom.js, toolbar-handlers.js, toolbar-state.js; toolbar.js remains a facade."
+- "Fixed invalid JS syntax in the old toolbar (template literal closing) by replacing it with split modules."
+- "No business logic moved; actions remain centralized in src/actions.js."
+
+Acceptance checklist:
+- Toolbar renders with auto-sized buttons and updated font stack.
+- Toolbar scale changes update widths correctly (no transform scaling).
+- Add/Delete/Duplicate/Reset Rotation/Select All/Lock/Unlock all wired and enabled/disabled states derive from store correctly.
+- Build/dev runs without Vite syntax errors.
+
+---
