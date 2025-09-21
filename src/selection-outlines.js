@@ -35,6 +35,9 @@
 import { getState, sceneDesignerStore } from './state.js';
 import { log } from './log.js';
 
+/**
+ * Obtain the overlay (top) 2D context for Fabric.
+ */
 function getTopContext(canvas) {
   if (!canvas) return null;
   const ctx =
@@ -44,6 +47,9 @@ function getTopContext(canvas) {
   return ctx || null;
 }
 
+/**
+ * Device pixel ratio used by Fabric for upper canvas scaling.
+ */
 function getDpr(canvas) {
   try {
     if (typeof canvas.getRetinaScaling === 'function') return canvas.getRetinaScaling();
@@ -51,6 +57,9 @@ function getDpr(canvas) {
   return (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
 }
 
+/**
+ * Remove any legacy Fabric objects that were used for outlines previously.
+ */
 function removeLegacyOutlineObjects(canvas) {
   try {
     const objs = canvas.getObjects() || [];
@@ -83,18 +92,11 @@ function expandRect(rect, padding) {
   };
 }
 
-function rectFromACoords(a) {
-  if (!a) return null;
-  const xs = [a.tl?.x, a.tr?.x, a.bl?.x, a.br?.x].filter(n => typeof n === 'number');
-  const ys = [a.tl?.y, a.tr?.y, a.bl?.y, a.br?.y].filter(n => typeof n === 'number');
-  if (xs.length < 4 || ys.length < 4) return null;
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  const maxX = Math.max(...xs);
-  const maxY = Math.max(...ys);
-  return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
-}
-
+/**
+ * Draw per-shape boxes and a single outer hull on top context.
+ * DPR-aware, uses getBoundingRect(true, true) to stay in canvas-absolute space
+ * even when the selection is an ActiveSelection (temporary group).
+ */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
   if (!ctx) return;
@@ -102,12 +104,14 @@ function paintSelectionOutlines(canvas) {
   const state = getState();
   const selectedStore = state.selectedShapes || [];
 
+  // Prefer members from Fabric ActiveSelection if present (keeps in sync while dragging group)
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   const members = (active && active.type === 'activeSelection' && Array.isArray(active._objects))
     ? active._objects
     : selectedStore;
 
   if (!Array.isArray(members) || members.length <= 1) {
+    // Single or none: transformer handles single; nothing to overlay.
     return;
   }
 
@@ -115,23 +119,24 @@ function paintSelectionOutlines(canvas) {
   const color = anyLocked ? '#e53935' : '#2176ff';
   const showHull = state.settings?.multiDragBox !== false;
 
+  // Prepare DPR transform to draw using CSS pixel coordinates
   const dpr = getDpr(canvas);
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // NO group offset – use member aCoords directly
+  // Collect rects in canvas-absolute coordinates via getBoundingRect(true, true)
   const rects = [];
   members.forEach(s => {
     if (!s) return;
     try {
       if (typeof s.setCoords === 'function') s.setCoords();
-      const r = rectFromACoords(s.aCoords);
-      if (r) {
+      const r = s.getBoundingRect(true, true); // include stroke and transforms; canvas absolute
+      if (r && Number.isFinite(r.left) && Number.isFinite(r.top)) {
         rects.push(r);
         strokeDashedRect(ctx, r.left, r.top, r.width, r.height, { color, lineWidth: 1, dash: [5, 4] });
       }
     } catch (e) {
-      log("WARN", "[selection-outlines] aCoords rect failed for shape", { id: s?._id, type: s?._type, e });
+      log("WARN", "[selection-outlines] getBoundingRect failed for shape", { id: s?._id, type: s?._type, e });
     }
   });
 
@@ -151,14 +156,21 @@ function paintSelectionOutlines(canvas) {
   ctx.restore();
 }
 
+/**
+ * Install overlay painter and selection change triggers.
+ * Preserves Fabric's own marquee by clearing in before:render, drawing in after:render.
+ * Returns detach function.
+ */
 export function installSelectionOutlines(canvas) {
   if (!canvas) {
     log("ERROR", "[selection-outlines] installSelectionOutlines: canvas is null/undefined");
     return () => {};
   }
 
+  // One-time cleanup for any legacy outline Fabric objects
   removeLegacyOutlineObjects(canvas);
 
+  // Clear overlay fully (DPR-aware) before Fabric draws selection UI
   const clearTop = () => {
     try {
       const ctx = getTopContext(canvas);
@@ -167,6 +179,7 @@ export function installSelectionOutlines(canvas) {
       const w = canvas.getWidth() * dpr;
       const h = canvas.getHeight() * dpr;
       ctx.save();
+      // Reset to identity to clear in device pixels
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, w, h);
       ctx.restore();
@@ -175,6 +188,7 @@ export function installSelectionOutlines(canvas) {
     }
   };
 
+  // Draw our overlays after Fabric renders objects and marquee/controls
   const painter = () => {
     try {
       paintSelectionOutlines(canvas);
@@ -183,9 +197,11 @@ export function installSelectionOutlines(canvas) {
     }
   };
 
+  // Bind hooks (avoid broad canvas.off() to not stomp others)
   canvas.on('before:render', clearTop);
   canvas.on('after:render', painter);
 
+  // Nudge renders when selection changes or objects move
   const onSelectionEvent = () => {
     try {
       if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
@@ -198,6 +214,7 @@ export function installSelectionOutlines(canvas) {
   canvas.on('object:moving', onSelectionEvent);
   canvas.on('object:modified', onSelectionEvent);
 
+  // Also subscribe to store to pick up settings changes or store-driven selection
   const unsub = sceneDesignerStore.subscribe((state, details) => {
     if (!details) return;
     if (
@@ -220,6 +237,7 @@ export function installSelectionOutlines(canvas) {
       canvas.off('object:moving', onSelectionEvent);
       canvas.off('object:modified', onSelectionEvent);
       unsub && unsub();
+      // Final clear of top context
       const ctx = getTopContext(canvas);
       if (ctx) {
         const dpr = getDpr(canvas);
