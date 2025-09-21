@@ -225,3 +225,65 @@ Acceptance checklist:
 - Build/dev runs without Vite syntax errors.
 
 ---
+
+## 14. P1 Triage Fixes: Multi-select drag clamping, lock UX, iOS double‑tap suppression (2025-09-21)
+
+New module
+- src/canvas-constraints.js
+  - Purpose: Centralize Fabric object movement guards and clamping.
+  - Export: installCanvasConstraints(canvas) -> detachFn.
+  - Behavior:
+    - On object:moving:
+      - If target is an ActiveSelection and any member is locked → block the move (revert to previous left/top).
+      - Clamp the moving target’s bounding rect to the background image bounds for both single objects and ActiveSelection hulls.
+    - Tracks target._prevLeft/_prevTop to support revert on blocked multi-drag.
+  - Dependencies: state.js (getState), log.js (log). Installed by canvas-core.
+
+Updated modules
+- src/actions.js
+  - Lock/unlock UX reworked to keep shapes selectable while preventing transforms/movement:
+    - lockSelectedShapes():
+      - shape.locked = true
+      - Keep selectable/evented true to enable selection via sidebar/marquee
+      - Apply Fabric locks: lockMovementX/Y, lockScalingX/Y, lockRotation = true
+      - Set hoverCursor = 'not-allowed'
+    - unlockSelectedShapes():
+      - Clears the Fabric locks above and restores hoverCursor = 'move'
+      - Works on selected shapes, or all locked shapes if none selected (selection preserved)
+  - Duplicate/delete logic unchanged functionally; minor defensive updates for cloning and strokeUniform.
+
+- src/canvas-core.js
+  - Installs movement constraints: installCanvasConstraints(canvas).
+  - Suppresses iOS Safari double‑tap zoom inside the canvas container:
+    - CSS: touch-action: manipulation on container and canvas elements.
+    - JS: touchend double‑tap timing guard with preventDefault (passive: false).
+    - JS: preventDefault on gesturestart/gesturechange for legacy Safari behavior.
+  - Retains selection syncing via canvas-events.js and “shapes above background” ordering.
+
+Acceptance outcomes
+- Multi-select group drag:
+  - Dragging an ActiveSelection moves all member shapes together as a group.
+  - If any selected shape is locked, group movement is blocked (no drift).
+  - Movement is clamped so no part of the selection can leave the image bounds.
+- Lock/unlock UX:
+  - Locked shapes remain selectable (sidebar/marquee), but cannot move/transform/rotate.
+  - Unlock works for currently selected shapes; if none selected and locked shapes exist, “Unlock” unlocks all locked shapes.
+- iOS Safari:
+  - Rapid double‑taps within the canvas do not zoom the page.
+  - Normal interactions (tap select, drag, marquee) remain unaffected.
+  - Non-canvas areas preserve normal page behavior.
+
+PR summary guidance for this P1 triage:
+- "Add canvas-constraints.js to clamp movement to image bounds and block multi-drag when any selected is locked."
+- "Refine lock/unlock UX: keep shapes selectable; apply Fabric movement/transform locks; update cursors."
+- "Suppress iOS Safari double‑tap zoom in canvas area via touch-action + event guards."
+- "No public API/import path changes. exports.index.json will update to include installCanvasConstraints."
+
+Verification checklist
+- Multi-select drag moves the group; any locked member blocks the drag; edges clamp correctly.
+- Locked shapes show not-allowed cursor on hover and ignore drag/transform attempts.
+- Unlock behavior works with and without an active selection.
+- On iPhone Safari, double‑tapping inside the canvas does not zoom; interactions still work.
+
+---
+

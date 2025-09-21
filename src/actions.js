@@ -161,6 +161,13 @@ export function duplicateSelectedShapes() {
             cloned.locked = false;
             cloned.selectable = true;
             cloned.evented = true;
+            // Ensure all movement/transform locks are cleared on the clone
+            cloned.lockMovementX = false;
+            cloned.lockMovementY = false;
+            cloned.lockScalingX = false;
+            cloned.lockScalingY = false;
+            cloned.lockRotation = false;
+            cloned.hoverCursor = 'move';
 
             // New id, keep label/type
             cloned._type = orig._type;
@@ -208,6 +215,17 @@ export function duplicateSelectedShapes() {
         clone = makePointShape(orig.left + offset, orig.top + offset);
       }
       if (clone) {
+        // Ensure unlocked/selectable defaults
+        clone.locked = false;
+        clone.selectable = true;
+        clone.evented = true;
+        clone.lockMovementX = false;
+        clone.lockMovementY = false;
+        clone.lockScalingX = false;
+        clone.lockScalingY = false;
+        clone.lockRotation = false;
+        clone.hoverCursor = 'move';
+
         addShape(clone);
         log("WARN", "[actions] duplicateSelectedShapes: used fallback factory clone", { cloneId: clone._id, type: clone._type });
       }
@@ -236,7 +254,9 @@ export function duplicateSelectedShapes() {
 /**
  * Lock all currently selected shapes.
  * - Keeps selection so the Unlock button can act on them.
- * - Detaches controls via selection/transformer logic automatically.
+ * - Shapes remain selectable (for sidebar/marquee) but are non-movable/non-transformable.
+ * - Applies Fabric locks: lockMovementX/Y, lockScalingX/Y, lockRotation = true.
+ * - Sets hover cursor to 'not-allowed'.
  */
 export function lockSelectedShapes() {
   log("DEBUG", "[actions] lockSelectedShapes ENTRY", {
@@ -245,14 +265,37 @@ export function lockSelectedShapes() {
     }))
   });
   const selected = getState().selectedShapes || [];
+  const canvas = getState().fabricCanvas;
+
   selected.forEach(shape => {
+    // Business flag
     shape.locked = true;
-    shape.selectable = false;
-    shape.evented = false;
+    // Keep selectable for UX (so users can reselect to unlock)
+    shape.selectable = true;
+    shape.evented = true;
+    // Fabric movement/transform locks
+    shape.lockMovementX = true;
+    shape.lockMovementY = true;
+    shape.lockScalingX = true;
+    shape.lockScalingY = true;
+    shape.lockRotation = true;
+    // UX hint
+    shape.hoverCursor = 'not-allowed';
+
+    if (typeof shape.setCoords === "function") {
+      try { shape.setCoords(); } catch {}
+    }
     log("DEBUG", "[actions] lockSelectedShapes: shape locked", { shapeId: shape._id, type: shape._type, label: shape._label });
   });
+
   // Keep selection; refresh selection module to update outlines/transformer
   selectionSetSelectedShapes(selected.slice());
+
+  if (canvas) {
+    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+    else canvas.renderAll();
+  }
+
   log("INFO", "[actions] lockSelectedShapes: Locked shapes (selection preserved)", {
     lockedShapes: selected.map(s => s._id)
   });
@@ -266,6 +309,8 @@ export function lockSelectedShapes() {
 
 /**
  * Unlock selected shapes; if none selected, unlock all locked shapes in store.
+ * - Clears Fabric movement/transform locks.
+ * - Restores hover cursor to 'move'.
  */
 export function unlockSelectedShapes() {
   log("DEBUG", "[actions] unlockSelectedShapes ENTRY", {
@@ -274,14 +319,30 @@ export function unlockSelectedShapes() {
     }))
   });
   const selected = getState().selectedShapes || [];
+  const canvas = getState().fabricCanvas;
+
   let targets = selected.length > 0
     ? selected.filter(Boolean)
     : (getState().shapes || []).filter(s => s.locked);
 
   targets.forEach(shape => {
+    // Business flag
     shape.locked = false;
+    // Keep selectable and interactive
     shape.selectable = true;
     shape.evented = true;
+    // Clear Fabric movement/transform locks
+    shape.lockMovementX = false;
+    shape.lockMovementY = false;
+    shape.lockScalingX = false;
+    shape.lockScalingY = false;
+    shape.lockRotation = false;
+    // UX cursor
+    shape.hoverCursor = 'move';
+
+    if (typeof shape.setCoords === "function") {
+      try { shape.setCoords(); } catch {}
+    }
     log("DEBUG", "[actions] unlockSelectedShapes: shape unlocked", { shapeId: shape._id, type: shape._type, label: shape._label });
   });
 
@@ -291,6 +352,10 @@ export function unlockSelectedShapes() {
     // Refresh selection to update transformer/outlines; preserve current selection
     const preserve = getState().selectedShapes.slice();
     selectionSetSelectedShapes(preserve);
+    if (canvas) {
+      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+      else canvas.renderAll();
+    }
     log("INFO", "[actions] unlockSelectedShapes: Unlocked shapes", {
       unlockedShapes: targets.map(s => s._id),
       selectionPreserved: preserve.map(s => s._id)
@@ -374,4 +439,3 @@ export function resetRotationForSelectedShapes() {
     selectedAfter: getState().selectedShapes.map(s => ({ id: s?._id, angle: s?.angle }))
   });
 }
-

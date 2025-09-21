@@ -7,6 +7,8 @@
  * - Handle background image loading/sizing and keep shapes in front of the image.
  * - Subscribe to app state and synchronize canvas objects (add/remove/render).
  * - Install Fabric selection lifecycle syncing (selection:created/updated/cleared).
+ * - Install movement constraints/clamping and multi-select lock guards.
+ * - Suppress iOS Safari double‑tap zoom within the canvas interaction area.
  *
  * Exports:
  * - buildCanvasPanel({ element, title, componentName })
@@ -16,11 +18,13 @@
  * - state.js (getState, setFabricCanvas, setBgFabricImage, sceneDesignerStore)
  * - log.js (log)
  * - canvas-events.js (installFabricSelectionSync)
+ * - canvas-constraints.js (installCanvasConstraints)
  *
  * Notes:
- * - Selection is now synchronized via Fabric's selection events, not a custom mouse handler.
+ * - Selection is synchronized via Fabric's selection events.
  * - Background image sits at index 0; shapes are moved to the front on every sync.
- * - No direct selection mutation here; selection.js owns that logic.
+ * - Movement clamped to image bounds; multi-drag blocked if any selected is locked.
+ * - iOS suppression: touch-action: manipulation + double-tap cancel and gesture* preventDefault.
  */
 
 import { Canvas, Image } from './fabric-wrapper.js';
@@ -32,6 +36,7 @@ import {
 } from './state.js';
 import { log } from './log.js';
 import { installFabricSelectionSync } from './canvas-events.js';
+import { installCanvasConstraints } from './canvas-constraints.js';
 
 /**
  * Utility: dump all shapes in store for diagnostics.
@@ -87,7 +92,6 @@ function moveShapesToFront() {
     return;
   }
   const objs = store.fabricCanvas.getObjects();
-  log("DEBUG", "[canvas] moveShapesToFront: canvas objects", objs);
   if (!objs.length) {
     log("DEBUG", "[canvas] moveShapesToFront EXIT (no objects)");
     return;
@@ -165,6 +169,51 @@ function updateBackgroundImage(containerDiv, element) {
 }
 
 /**
+ * iOS Safari double‑tap zoom suppression within the canvas container.
+ * - touch-action: manipulation
+ * - Cancel double-tap via touchend timing
+ * - Prevent legacy gesture* defaults inside container
+ */
+function installIosTouchSuppression(containerEl) {
+  if (!containerEl || !containerEl.style) return () => {};
+  try {
+    containerEl.style.touchAction = 'manipulation';
+  } catch {
+    // no-op
+  }
+
+  let lastTouchEnd = 0;
+
+  const onTouchEnd = (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 300) {
+      // Likely a double-tap → prevent page zoom
+      try { e.preventDefault(); } catch {}
+    }
+    lastTouchEnd = now;
+  };
+  const onGesture = (e) => {
+    try { e.preventDefault(); } catch {}
+  };
+
+  // Use passive: false so preventDefault is honored
+  containerEl.addEventListener('touchend', onTouchEnd, { passive: false });
+  containerEl.addEventListener('gesturestart', onGesture, { passive: false });
+  containerEl.addEventListener('gesturechange', onGesture, { passive: false });
+
+  log("INFO", "[canvas] iOS touch suppression installed");
+
+  return function detachIosTouchSuppression() {
+    try {
+      containerEl.removeEventListener('touchend', onTouchEnd, { passive: false });
+      containerEl.removeEventListener('gesturestart', onGesture, { passive: false });
+      containerEl.removeEventListener('gesturechange', onGesture, { passive: false });
+    } catch {}
+    log("INFO", "[canvas] iOS touch suppression detached");
+  };
+}
+
+/**
  * MiniLayout panel factory: Build the Canvas panel.
  */
 export function buildCanvasPanel({ element, title, componentName }) {
@@ -174,6 +223,9 @@ export function buildCanvasPanel({ element, title, componentName }) {
     componentName,
     stateBefore: {...getState()}
   });
+  let detachConstraints = null;
+  let detachIos = null;
+
   try {
     log("INFO", "[canvas] buildCanvasPanel called", {
       elementType: element?.tagName,
@@ -195,6 +247,8 @@ export function buildCanvasPanel({ element, title, componentName }) {
     containerDiv.id = "fabric-canvas-div";
     containerDiv.style.position = "relative";
     containerDiv.style.background = "#f7f9fc";
+    // touch-action for iOS (and generally good practice)
+    try { containerDiv.style.touchAction = 'manipulation'; } catch {}
     // NOTE: Do NOT set width/height here; let image size dictate after load
     containerDiv.style.overflow = "visible"; // allow child to overflow, panel body will scroll
     element.innerHTML = "";
@@ -211,6 +265,8 @@ export function buildCanvasPanel({ element, title, componentName }) {
     canvasEl.style.position = "absolute";
     canvasEl.style.left = "0";
     canvasEl.style.top = "0";
+    // Defensive: set touch-action on the canvas element too
+    try { canvasEl.style.touchAction = 'manipulation'; } catch {}
     containerDiv.appendChild(canvasEl);
 
     const canvas = new Canvas(canvasEl, {
@@ -226,17 +282,17 @@ export function buildCanvasPanel({ element, title, componentName }) {
     installFabricSelectionSync(canvas);
     log("DEBUG", "[canvas] buildCanvasPanel: Fabric selection sync installed");
 
+    // Install movement constraints (clamping + multi-lock guard) — defect14/15
+    detachConstraints = installCanvasConstraints(canvas);
+
+    // Install iOS Safari double‑tap suppression within the canvas container — defect19
+    detachIos = installIosTouchSuppression(containerDiv);
+
     // --- Sync shapes on canvas panel creation ---
     log("DEBUG", "[canvas] buildCanvasPanel: Syncing shapes on init", { shapes: getState().shapes });
     const shapes = getState().shapes;
     if (Array.isArray(shapes) && shapes.length > 0) {
-      log("DEBUG", "[canvas] Syncing existing shapes to canvas on panel build", { shapes });
       shapes.forEach((shape, idx) => {
-        log("DEBUG", `[canvas] buildCanvasPanel: Shape ${idx} sync`, {
-          type: shape?._type,
-          label: shape?._label,
-          id: shape?._id
-        });
         if (getState().fabricCanvas && !getState().fabricCanvas.getObjects().includes(shape)) {
           getState().fabricCanvas.add(shape);
           moveShapesToFront();
@@ -281,7 +337,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
       // Add shapes
       const canvasShapes = state.fabricCanvas?.getObjects() || [];
       const stateShapes = state.shapes || [];
-      log("DEBUG", "[canvas] store.subscribe: shape sync", { canvasShapes, stateShapes });
       stateShapes.forEach(shape => {
         if (state.fabricCanvas && !canvasShapes.includes(shape)) {
           state.fabricCanvas.add(shape);
@@ -312,7 +367,17 @@ export function buildCanvasPanel({ element, title, componentName }) {
       prevImageURL = getState().imageURL;
     }
 
-    log("INFO", "[canvas] Canvas panel initialized (Fabric.js only, selection events sync, DEBUG logging)");
+    // Cleanup on panel destroy (if MiniLayout provides an event API)
+    if (typeof element.on === "function") {
+      element.on("destroy", () => {
+        try { detachConstraints && detachConstraints(); } catch {}
+        try { detachIos && detachIos(); } catch {}
+        try { canvas.dispose && canvas.dispose(); } catch {}
+        log("INFO", "[canvas] Canvas panel destroyed (constraints + iOS suppression detached)");
+      });
+    }
+
+    log("INFO", "[canvas] Canvas panel initialized (Fabric.js, selection sync, constraints, iOS suppression)");
 
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);
