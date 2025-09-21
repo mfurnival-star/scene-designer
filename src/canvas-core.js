@@ -8,6 +8,7 @@
  * - Subscribe to app state and synchronize canvas objects (add/remove/render).
  * - Install Fabric selection lifecycle syncing (selection:created/updated/cleared).
  * - Install movement constraints/clamping and multi-select lock guards.
+ * - Draw multi-select dashed outlines as an overlay (no Fabric objects).
  * - Suppress iOS Safari double‑tap zoom within the canvas interaction area.
  *
  * Exports:
@@ -19,12 +20,14 @@
  * - log.js (log)
  * - canvas-events.js (installFabricSelectionSync)
  * - canvas-constraints.js (installCanvasConstraints)
+ * - selection-outlines.js (installSelectionOutlines)
  *
  * Notes:
  * - Selection is synchronized via Fabric's selection events.
  * - Background image sits at index 0; shapes are moved to the front on every sync.
  * - Movement clamped to image bounds; multi-drag blocked if any selected is locked.
  * - iOS suppression: touch-action: manipulation + double-tap cancel and gesture* preventDefault.
+ * - Multi-select outlines are painted on the top context to avoid "ghost boxes".
  */
 
 import { Canvas, Image } from './fabric-wrapper.js';
@@ -37,6 +40,7 @@ import {
 import { log } from './log.js';
 import { installFabricSelectionSync } from './canvas-events.js';
 import { installCanvasConstraints } from './canvas-constraints.js';
+import { installSelectionOutlines } from './selection-outlines.js';
 
 /**
  * Utility: dump all shapes in store for diagnostics.
@@ -225,6 +229,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
   });
   let detachConstraints = null;
   let detachIos = null;
+  let detachOutlines = null;
 
   try {
     log("INFO", "[canvas] buildCanvasPanel called", {
@@ -281,6 +286,10 @@ export function buildCanvasPanel({ element, title, componentName }) {
     // Install Fabric selection lifecycle syncing (fix for defect1)
     installFabricSelectionSync(canvas);
     log("DEBUG", "[canvas] buildCanvasPanel: Fabric selection sync installed");
+
+    // Install overlay painter for multi-select dashed outlines (no Fabric objects)
+    detachOutlines = installSelectionOutlines(canvas);
+    log("DEBUG", "[canvas] buildCanvasPanel: Selection outlines overlay installed");
 
     // Install movement constraints (clamping + multi-lock guard) — defect14/15
     detachConstraints = installCanvasConstraints(canvas);
@@ -370,14 +379,15 @@ export function buildCanvasPanel({ element, title, componentName }) {
     // Cleanup on panel destroy (if MiniLayout provides an event API)
     if (typeof element.on === "function") {
       element.on("destroy", () => {
+        try { detachOutlines && detachOutlines(); } catch {}
         try { detachConstraints && detachConstraints(); } catch {}
         try { detachIos && detachIos(); } catch {}
         try { canvas.dispose && canvas.dispose(); } catch {}
-        log("INFO", "[canvas] Canvas panel destroyed (constraints + iOS suppression detached)");
+        log("INFO", "[canvas] Canvas panel destroyed (outlines, constraints, iOS suppression detached)");
       });
     }
 
-    log("INFO", "[canvas] Canvas panel initialized (Fabric.js, selection sync, constraints, iOS suppression)");
+    log("INFO", "[canvas] Canvas panel initialized (Fabric.js, selection sync, outlines, constraints, iOS suppression)");
 
   } catch (e) {
     log("ERROR", "[canvas] buildCanvasPanel ERROR", e);

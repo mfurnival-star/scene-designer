@@ -287,3 +287,32 @@ Verification checklist
 
 ---
 
+## 15. Multi-select outlines overlay refactor (2025-09-21)
+
+Goal
+- Eliminate “ghost dashed boxes” and “select twice” behavior during multi-select drags by rendering outlines as an overlay instead of Fabric objects.
+
+Changes
+- src/selection-outlines.js
+  - Reworked to paint per-shape and hull dashed boxes on Fabric’s top context (overlay) in an after:render hook.
+  - Colors: blue (#2176ff) normally; red (#e53935) if any selected shape is locked.
+  - No Fabric objects are created; nothing to clone/export; no ghosting during drags.
+  - Exports: installSelectionOutlines(canvas) -> detachFn.
+- src/canvas-core.js
+  - Now imports and installs installSelectionOutlines(canvas) after selection sync so outlines render immediately on selection and move events.
+
+Follow-up required
+- selection-core.js should stop importing refreshMultiSelectOutlines/clearAllSelectionOutlines (legacy API) because outlines are now drawn by the overlay painter and auto-refresh on selection and movement events.
+  - Update selection-core.js to remove those imports and related calls, relying solely on transformer for single-selection and overlay for multi-selection.
+
+Acceptance outcomes
+- One marquee or Select All immediately shows dashed outlines and a single hull.
+- Drag any selected member: the entire group moves on the first attempt; outlines stay in sync (no ghosts).
+- Locked shape in selection still blocks group drag (enforced by canvas-constraints.js).
+
+PR summary guidance
+- "Refactor selection-outlines to overlay painter (after:render) to prevent ghost outlines and require-only-once selection."
+- "Wire overlay into canvas-core; remove legacy outline Fabric objects."
+- "Update selection-core to remove explicit refresh/clear outline calls."
+
+---
