@@ -2,10 +2,16 @@
  * actions.js
  * -----------------------------------------------------------
  * Scene Designer – Centralized Business Logic for Scene Actions (ESM ONLY, Manifesto-compliant, DEBUG Logging Sweep)
- * - Centralizes all scene actions: add shape, delete, duplicate, lock, unlock, select, etc.
+ * - Centralizes all scene actions: add shape, delete, duplicate, lock, unlock, select, reset rotation, etc.
  * - All business rules (selection, stroke width, transformer handling) are here.
  * - UI (toolbars, keyboard, etc.) emit only intents and never mutate state or selection directly.
- * - Exports: addShapeOfType, deleteSelectedShapes, duplicateSelectedShapes, lockSelectedShapes, unlockSelectedShapes
+ * - Exports:
+ *    addShapeOfType,
+ *    deleteSelectedShapes,
+ *    duplicateSelectedShapes,
+ *    lockSelectedShapes,
+ *    unlockSelectedShapes,
+ *    resetRotationForSelectedShapes
  * - All logging via log.js.
  * -----------------------------------------------------------
  */
@@ -299,4 +305,48 @@ export function unlockSelectedShapes() {
   });
 }
 
+/**
+ * Reset rotation (angle) to 0° for all currently selected, unlocked Rect/Circle shapes.
+ * - NOP for Point shapes.
+ * - Calls canvas.requestRenderAll() once at the end.
+ */
+export function resetRotationForSelectedShapes() {
+  const stateBefore = getState();
+  const selected = stateBefore.selectedShapes || [];
+  log("DEBUG", "[actions] resetRotationForSelectedShapes ENTRY", {
+    selected: selected.map(s => ({ id: s?._id, type: s?._type, locked: s?.locked, angle: s?.angle }))
+  });
 
+  const targets = selected.filter(s =>
+    s && !s.locked && (s._type === 'rect' || s._type === 'circle')
+  );
+
+  if (targets.length === 0) {
+    log("INFO", "[actions] resetRotationForSelectedShapes: No eligible shapes (need unlocked rect/circle)");
+    return;
+  }
+
+  targets.forEach(shape => {
+    try {
+      // Fabric.js rotation uses 'angle' in degrees on the object/group
+      shape.set({ angle: 0 });
+      if (typeof shape.setCoords === "function") shape.setCoords();
+      log("DEBUG", "[actions] resetRotationForSelectedShapes: angle set to 0", {
+        id: shape._id, type: shape._type
+      });
+    } catch (e) {
+      log("ERROR", "[actions] resetRotationForSelectedShapes: failed to reset angle", { shapeId: shape._id, error: e });
+    }
+  });
+
+  const canvas = getState().fabricCanvas;
+  if (canvas) {
+    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+    else canvas.renderAll();
+  }
+
+  log("INFO", "[actions] resetRotationForSelectedShapes: Rotation reset to 0° for", { ids: targets.map(t => t._id) });
+  log("DEBUG", "[actions] resetRotationForSelectedShapes EXIT", {
+    selectedAfter: getState().selectedShapes.map(s => ({ id: s?._id, angle: s?.angle }))
+  });
+}

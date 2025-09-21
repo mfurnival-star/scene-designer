@@ -1,7 +1,7 @@
 /**
  * toolbar.js
  * -----------------------------------------------------------
- * Scene Designer – Modular Toolbar UI Factory (Delete/Duplicate/Lock/Unlock/Select All wired)
+ * Scene Designer – Modular Toolbar UI Factory (Delete/Duplicate/Lock/Unlock/Select All/Reset Rotation wired)
  * - Ensures Delete button and other action buttons sync with selection/state.
  * - Attaches click handlers directly to buttons after every render.
  * - Always queries fresh DOM reference for button state updates.
@@ -17,7 +17,8 @@ import {
   deleteSelectedShapes,
   duplicateSelectedShapes,
   lockSelectedShapes,
-  unlockSelectedShapes
+  unlockSelectedShapes,
+  resetRotationForSelectedShapes
 } from './actions.js';
 import { selectAllShapes } from './selection.js';
 
@@ -218,6 +219,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
             <span style="font-size:1em;margin-right:3px;">&#x1F5D1;</span> Delete
           </button>
           <button id="toolbar-duplicate-shape-btn" class="toolbar-btn" title="Duplicate selected shape(s)">Duplicate</button>
+          <button id="toolbar-reset-rotation-btn" class="toolbar-btn" title="Reset rotation to 0°">Reset Rotation</button>
           <button id="toolbar-select-all-btn" class="toolbar-btn" title="Select all shapes">Select All</button>
           <button id="toolbar-lock-btn" class="toolbar-btn" title="Lock selected shape(s)">Lock</button>
           <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
@@ -234,6 +236,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     const addShapeBtn = element.querySelector('#toolbar-add-shape-btn');
     const deleteBtn = element.querySelector('#toolbar-delete-shape-btn');
     const duplicateBtn = element.querySelector('#toolbar-duplicate-shape-btn');
+    const resetRotationBtn = element.querySelector('#toolbar-reset-rotation-btn');
     const selectAllBtn = element.querySelector('#toolbar-select-all-btn');
     const lockBtn = element.querySelector('#toolbar-lock-btn');
     const unlockBtn = element.querySelector('#toolbar-unlock-btn');
@@ -341,6 +344,23 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       }
     }
 
+    // --- RESET ROTATION BUTTON ---
+    function handleResetRotationClick(ev) {
+      if (!resetRotationBtn || resetRotationBtn.disabled) {
+        log("WARN", "[toolbar] Reset Rotation clicked while disabled – ignoring");
+        ev && ev.preventDefault && ev.preventDefault();
+        return;
+      }
+      log("INFO", "[toolbar] Reset Rotation clicked");
+      resetRotationForSelectedShapes();
+    }
+    function attachResetRotationHandler() {
+      if (resetRotationBtn) {
+        resetRotationBtn.removeEventListener('click', handleResetRotationClick);
+        resetRotationBtn.addEventListener('click', handleResetRotationClick);
+      }
+    }
+
     // --- SELECT ALL BUTTON ---
     function handleSelectAllClick(ev) {
       if (!selectAllBtn || selectAllBtn.disabled) {
@@ -400,6 +420,10 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       const anyLockedSelected = selected.some(s => s.locked);
       const anyLockedInStore = shapes.some(s => s.locked);
 
+      // Rotatable eligibility (rect/circle and unlocked)
+      const rotatableSelected = selected.filter(s => !s.locked && (s._type === 'rect' || s._type === 'circle'));
+      const anyRotatableSelected = rotatableSelected.length > 0;
+
       // Delete
       setButtonEnabledById('toolbar-delete-shape-btn', selectedCount > 0, "Select a shape to delete", "Delete selected shape(s)");
       attachDeleteButtonHandler();
@@ -407,6 +431,15 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       // Duplicate
       setButtonEnabledById('toolbar-duplicate-shape-btn', selectedCount > 0, "Select shape(s) to duplicate", "Duplicate selected shape(s)");
       attachDuplicateButtonHandler();
+
+      // Reset Rotation
+      setButtonEnabledById(
+        'toolbar-reset-rotation-btn',
+        anyRotatableSelected,
+        "Select an unlocked rectangle or circle",
+        "Reset rotation to 0°"
+      );
+      attachResetRotationHandler();
 
       // Select All (enabled if there is at least one shape)
       setButtonEnabledById('toolbar-select-all-btn', shapesCount > 0, "No shapes to select", "Select all shapes");
@@ -437,8 +470,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
         anyUnlockedSelected,
         anyLockedSelected,
         anyLockedInStore,
-        unlockEnabled,
-        unlockEnabledTitle
+        anyRotatableSelected
       });
     }
 
@@ -450,7 +482,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
       updateButtonsState();
     });
 
-    log("INFO", "[toolbar] Toolbar panel initialized (Add/Delete/Duplicate/Select All/Lock/Unlock wired)");
+    log("INFO", "[toolbar] Toolbar panel initialized (Add/Delete/Duplicate/Reset Rotation/Select All/Lock/Unlock wired)");
 
   } catch (e) {
     log("ERROR", "[toolbar] buildCanvasToolbarPanel ERROR", e);
@@ -464,4 +496,3 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
-
