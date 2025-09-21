@@ -35,9 +35,6 @@
 import { getState, sceneDesignerStore } from './state.js';
 import { log } from './log.js';
 
-/**
- * Obtain the overlay (top) 2D context for Fabric.
- */
 function getTopContext(canvas) {
   if (!canvas) return null;
   const ctx =
@@ -47,9 +44,6 @@ function getTopContext(canvas) {
   return ctx || null;
 }
 
-/**
- * Device pixel ratio used by Fabric for upper canvas scaling.
- */
 function getDpr(canvas) {
   try {
     if (typeof canvas.getRetinaScaling === 'function') return canvas.getRetinaScaling();
@@ -57,9 +51,6 @@ function getDpr(canvas) {
   return (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
 }
 
-/**
- * Remove any legacy Fabric objects that were used for outlines previously.
- */
 function removeLegacyOutlineObjects(canvas) {
   try {
     const objs = canvas.getObjects() || [];
@@ -92,9 +83,6 @@ function expandRect(rect, padding) {
   };
 }
 
-/**
- * Axis-aligned rect from Fabric aCoords (handles rotation and grouping).
- */
 function rectFromACoords(a) {
   if (!a) return null;
   const xs = [a.tl?.x, a.tr?.x, a.bl?.x, a.br?.x].filter(n => typeof n === 'number');
@@ -107,11 +95,6 @@ function rectFromACoords(a) {
   return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
 }
 
-/**
- * Draw per-shape boxes and a single outer hull on top context.
- * DPR-aware and Group/ActiveSelection-aware.
- * For grouped (ActiveSelection), DO NOT offset by group’s position.
- */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
   if (!ctx) return;
@@ -119,33 +102,28 @@ function paintSelectionOutlines(canvas) {
   const state = getState();
   const selectedStore = state.selectedShapes || [];
 
-  // If Fabric has an ActiveSelection, use its members to keep math aligned while grouped.
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   const members = (active && active.type === 'activeSelection' && Array.isArray(active._objects))
     ? active._objects
     : selectedStore;
 
   if (!Array.isArray(members) || members.length <= 1) {
-    // Single or none: nothing to draw; transformer handles single.
     return;
   }
 
-  // Determine anyLocked based on current members
   const anyLocked = members.some(s => s && s.locked);
   const color = anyLocked ? '#e53935' : '#2176ff';
   const showHull = state.settings?.multiDragBox !== false;
 
-  // Prepare DPR transform so our coordinates (CSS pixels) map to device pixels
   const dpr = getDpr(canvas);
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Collect rects from aCoords (robust even when grouped/rotated)
+  // NO group offset – use member aCoords directly
   const rects = [];
   members.forEach(s => {
     if (!s) return;
     try {
-      // Ensure coords up to date (defensive)
       if (typeof s.setCoords === 'function') s.setCoords();
       const r = rectFromACoords(s.aCoords);
       if (r) {
@@ -173,21 +151,14 @@ function paintSelectionOutlines(canvas) {
   ctx.restore();
 }
 
-/**
- * Install overlay painter and selection change triggers.
- * Preserves Fabric's own marquee by clearing in before:render, drawing in after:render.
- * Returns detach function.
- */
 export function installSelectionOutlines(canvas) {
   if (!canvas) {
     log("ERROR", "[selection-outlines] installSelectionOutlines: canvas is null/undefined");
     return () => {};
   }
 
-  // One-time cleanup for any legacy outline Fabric objects
   removeLegacyOutlineObjects(canvas);
 
-  // Clear overlay fully (DPR-aware) before Fabric draws selection UI
   const clearTop = () => {
     try {
       const ctx = getTopContext(canvas);
@@ -196,7 +167,6 @@ export function installSelectionOutlines(canvas) {
       const w = canvas.getWidth() * dpr;
       const h = canvas.getHeight() * dpr;
       ctx.save();
-      // Reset to identity to clear in device pixels
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, w, h);
       ctx.restore();
@@ -205,7 +175,6 @@ export function installSelectionOutlines(canvas) {
     }
   };
 
-  // Draw our overlays after Fabric renders objects and marquee/controls
   const painter = () => {
     try {
       paintSelectionOutlines(canvas);
@@ -214,11 +183,9 @@ export function installSelectionOutlines(canvas) {
     }
   };
 
-  // Bind hooks (avoid broad canvas.off() to not stomp others)
   canvas.on('before:render', clearTop);
   canvas.on('after:render', painter);
 
-  // Nudge renders when selection changes or objects move
   const onSelectionEvent = () => {
     try {
       if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
@@ -231,7 +198,6 @@ export function installSelectionOutlines(canvas) {
   canvas.on('object:moving', onSelectionEvent);
   canvas.on('object:modified', onSelectionEvent);
 
-  // Also subscribe to store to pick up settings changes or store-driven selection
   const unsub = sceneDesignerStore.subscribe((state, details) => {
     if (!details) return;
     if (
@@ -254,7 +220,6 @@ export function installSelectionOutlines(canvas) {
       canvas.off('object:moving', onSelectionEvent);
       canvas.off('object:modified', onSelectionEvent);
       unsub && unsub();
-      // Final clear of top context
       const ctx = getTopContext(canvas);
       if (ctx) {
         const dpr = getDpr(canvas);
