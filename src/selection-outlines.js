@@ -93,9 +93,83 @@ function expandRect(rect, padding) {
 }
 
 /**
- * Draw per-shape boxes and a single outer hull on top context.
- * DPR-aware, uses getBoundingRect(true, true) to stay in canvas-absolute space
- * even when the selection is an ActiveSelection (temporary group).
+ * Safe wrapper for getBoundingRect with explicit flags.
+ * @param {object} obj - Fabric object
+ * @param {boolean} absolute - true => canvas-absolute; false => relative
+ * @param {boolean} calc - true => force calculation
+ */
+function safeGetBoundingRect(obj, absolute, calc) {
+  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
+  try {
+    return obj.getBoundingRect(absolute, calc);
+  } catch (e) {
+    log("WARN", "[selection-outlines] safeGetBoundingRect failed", { id: obj?._id, absolute, calc, e });
+    return null;
+  }
+}
+
+/**
+ * Build canvas-absolute rects for each member:
+ * - If an ActiveSelection exists: Fabric may report member rects relative to the selection's origin.
+ *   In that case, compute: memberCanvasRect = activeCanvasRect + memberRelativeRect.
+ * - Otherwise (no ActiveSelection): use member's canvas-absolute rect directly.
+ */
+function collectMemberRects(canvas, members) {
+  const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
+  const usingActive = !!(active && active.type === 'activeSelection' && Array.isArray(active._objects));
+
+  let activeAbs = null;
+  if (usingActive) {
+    activeAbs = safeGetBoundingRect(active, true, true);
+    if (!activeAbs) {
+      // Fallback: synthesize from members' absolute rects if possible
+      const absRects = members
+        .map(m => safeGetBoundingRect(m, true, true))
+        .filter(Boolean);
+      if (absRects.length) {
+        const minLeft = Math.min(...absRects.map(r => r.left));
+        const minTop = Math.min(...absRects.map(r => r.top));
+        const maxRight = Math.max(...absRects.map(r => r.left + r.width));
+        const maxBottom = Math.max(...absRects.map(r => r.top + r.height));
+        activeAbs = { left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop };
+      }
+    }
+  }
+
+  const rects = [];
+  for (const s of members) {
+    if (!s) continue;
+
+    // Keep coords fresh (defensive)
+    try { if (typeof s.setCoords === 'function') s.setCoords(); } catch {}
+
+    if (!usingActive || !activeAbs) {
+      // No ActiveSelection context → use absolute rect directly
+      const abs = safeGetBoundingRect(s, true, true);
+      if (abs) rects.push(abs);
+      continue;
+    }
+
+    // With ActiveSelection: try relative-to-group rect, then convert to canvas-absolute
+    const rel = safeGetBoundingRect(s, false, true);
+    if (rel && Number.isFinite(rel.left) && Number.isFinite(rel.top)) {
+      rects.push({
+        left: activeAbs.left + rel.left,
+        top: activeAbs.top + rel.top,
+        width: rel.width,
+        height: rel.height
+      });
+    } else {
+      // Fallback to absolute (if Fabric already returned absolute)
+      const abs = safeGetBoundingRect(s, true, true);
+      if (abs) rects.push(abs);
+    }
+  }
+  return rects;
+}
+
+/**
+ * Draw per-shape boxes and a single outer hull on top context (DPR-aware).
  */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
@@ -104,7 +178,7 @@ function paintSelectionOutlines(canvas) {
   const state = getState();
   const selectedStore = state.selectedShapes || [];
 
-  // Prefer members from Fabric ActiveSelection if present (keeps in sync while dragging group)
+  // Prefer current Fabric members if an ActiveSelection exists (keeps sync while dragging group)
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   const members = (active && active.type === 'activeSelection' && Array.isArray(active._objects))
     ? active._objects
@@ -119,27 +193,20 @@ function paintSelectionOutlines(canvas) {
   const color = anyLocked ? '#e53935' : '#2176ff';
   const showHull = state.settings?.multiDragBox !== false;
 
-  // Prepare DPR transform to draw using CSS pixel coordinates
+  // DPR aware drawing in CSS coordinate space
   const dpr = getDpr(canvas);
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Collect rects in canvas-absolute coordinates via getBoundingRect(true, true)
-  const rects = [];
-  members.forEach(s => {
-    if (!s) return;
-    try {
-      if (typeof s.setCoords === 'function') s.setCoords();
-      const r = s.getBoundingRect(true, true); // include stroke and transforms; canvas absolute
-      if (r && Number.isFinite(r.left) && Number.isFinite(r.top)) {
-        rects.push(r);
-        strokeDashedRect(ctx, r.left, r.top, r.width, r.height, { color, lineWidth: 1, dash: [5, 4] });
-      }
-    } catch (e) {
-      log("WARN", "[selection-outlines] getBoundingRect failed for shape", { id: s?._id, type: s?._type, e });
-    }
+  const rects = collectMemberRects(canvas, members);
+
+  // Draw per-member boxes
+  rects.forEach(r => {
+    if (!r) return;
+    strokeDashedRect(ctx, r.left, r.top, r.width, r.height, { color, lineWidth: 1, dash: [5, 4] });
   });
 
+  // Draw outer hull (optional)
   if (showHull && rects.length > 0) {
     const pad = 4;
     const minLeft = Math.min(...rects.map(r => r.left));
@@ -252,4 +319,3 @@ export function installSelectionOutlines(canvas) {
     }
   };
 }
-
