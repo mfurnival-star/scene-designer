@@ -7,6 +7,9 @@
  * - Always queries fresh DOM reference for button state updates.
  * - Emits actions to actions.js and selection.js only (no business logic here).
  * - Logging via log.js.
+ * - UI tweak: buttons auto-size to text (no fixed/min width), prevent wrapping,
+ *   and use a cleaner font stack. Scaling uses font-size (no transform scale)
+ *   so widths reflow correctly as scale changes.
  * -----------------------------------------------------------
  */
 
@@ -71,9 +74,9 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     const style = document.createElement("style");
     style.id = "scene-designer-toolbar-style";
     style.textContent = `
+      /* Container scales font-size with --toolbar-ui-scale and uses a clean font stack */
       #canvas-toolbar-container {
         width: 100%;
-        min-height: 44px;
         background: linear-gradient(90deg, #f7faff 0%, #e6eaf9 100%);
         border-bottom: 1.5px solid #b8c6e6;
         display: flex;
@@ -82,50 +85,57 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
         align-items: center;
         justify-content: flex-start;
         gap: 14px;
-        padding: 6px 12px 6px 12px;
+        padding: 6px 12px;
         box-shadow: 0 1.5px 6px -2px #b8c6e6;
         border-radius: 0 0 13px 13px;
         box-sizing: border-box;
         overflow-x: auto;
-        font-size: calc(1em * var(--toolbar-ui-scale, 1));
-        transform: scale(var(--toolbar-ui-scale, 1));
-        transform-origin: top left;
+
+        /* Font and scale (no transform so widths reflow with content) */
+        font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+        font-size: calc(14px * var(--toolbar-ui-scale, 1));
+        line-height: 1.2;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
+
       .toolbar-group {
         display: flex;
         align-items: center;
-        gap: 7px;
+        gap: 8px;
         border-radius: 8px;
         background: #f3f6fe;
-        padding: 3px 6px;
+        padding: 4px 6px;
         box-shadow: 0 1px 6px -4px #2176ff;
         margin: 0;
-        height: 38px;
         box-sizing: border-box;
       }
+
       .toolbar-label {
-        font-size: 1em;
         color: #345;
         font-weight: 600;
-        margin-right: 6px;
-        margin-left: 6px;
-        height: 34px;
-        display: flex;
+        display: inline-flex;
         align-items: center;
+        padding: 0 4px;
+        white-space: nowrap;
       }
-      .toolbar-btn,
-      #canvas-toolbar-container select,
-      label[for="toolbar-image-upload"] {
-        font-size: 1em;
-        font-family: inherit;
+
+      /* Base button-like control */
+      .toolbar-btn {
+        font: inherit;
+        color: #234;
         border: 1.2px solid #8ca6c6;
         background: #fff;
-        color: #234;
         border-radius: 7px;
-        padding: 0 11px;
-        min-width: 62px;
-        height: 32px;
-        line-height: 32px;
+
+        /* Auto-size to content */
+        padding: 0.35em 0.75em;
+        width: auto;
+        min-width: 0;
+
+        /* No fixed height/line-height: let content and padding define it */
+        line-height: 1.2;
+
         outline: none;
         box-shadow: 0 1px 3px -1px #e3f0fa;
         transition: background 0.12s, box-shadow 0.11s, border-color 0.10s;
@@ -133,53 +143,97 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
         display: inline-flex;
         align-items: center;
         justify-content: center;
+
         box-sizing: border-box;
+        white-space: nowrap; /* prevent "Upload" and "Image" from wrapping */
       }
+
       .toolbar-btn > svg,
-      .toolbar-btn > span,
-      #canvas-toolbar-container select > option {
+      .toolbar-btn > span {
         vertical-align: middle;
       }
+
       .toolbar-btn:hover,
-      label[for="toolbar-image-upload"]:hover,
+      label[for="toolbar-image-upload"]:hover {
+        background: #eaf2fc;
+        border-color: #2176ff;
+        box-shadow: 0 2px 7px -2px #b8c6e6;
+      }
+
+      .toolbar-btn.disabled,
+      .toolbar-btn[aria-disabled="true"] {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
+      /* File input is hidden; label acts as the button */
+      input[type="file"] {
+        display: none;
+      }
+
+      /* Selects: auto width to fit content, inline-block to respect intrinsic size */
+      #canvas-toolbar-container select {
+        font: inherit;
+        color: #234;
+        border: 1.2px solid #8ca6c6;
+        background: #fff;
+        border-radius: 7px;
+
+        padding: 0.3em 0.6em;
+        width: auto;
+        min-width: 0;
+
+        line-height: 1.2;
+        display: inline-block;
+        box-sizing: border-box;
+        white-space: nowrap;
+        cursor: pointer;
+        outline: none;
+        box-shadow: 0 1px 3px -1px #e3f0fa;
+        transition: background 0.12s, box-shadow 0.11s, border-color 0.10s;
+      }
       #canvas-toolbar-container select:hover {
         background: #eaf2fc;
         border-color: #2176ff;
         box-shadow: 0 2px 7px -2px #b8c6e6;
       }
-      .toolbar-btn.disabled,
-      .toolbar-btn[aria-disabled="true"] {
-        opacity: 0.4;
-        cursor: not-allowed;
-        pointer-events: none;
+
+      /* Upload label styled as button */
+      label[for="toolbar-image-upload"] {
+        font: inherit;
+        color: #234;
+        border: 1.2px solid #8ca6c6;
+        background: #fff;
+        border-radius: 7px;
+
+        padding: 0.35em 0.75em;
+        width: auto;
+        min-width: 0;
+
+        line-height: 1.2;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        white-space: nowrap;
+        cursor: pointer;
+        box-shadow: 0 1px 3px -1px #e3f0fa;
+        transition: background 0.12s, box-shadow 0.11s, border-color 0.10s;
       }
-      input[type="file"] {
-        display: none;
-      }
+
       @media (max-width: 900px) {
         #canvas-toolbar-container {
-          padding: 3px 4px 3px 4px;
-          gap: 6px;
-          min-height: 28px;
-          font-size: calc(0.85em * var(--toolbar-ui-scale, 1));
+          padding: 4px 6px;
+          gap: 8px;
+          font-size: calc(13px * var(--toolbar-ui-scale, 1));
         }
         .toolbar-group {
-          padding: 2px 3px;
-          gap: 4px;
-          height: 26px;
-        }
-        .toolbar-btn,
-        #canvas-toolbar-container select,
-        label[for="toolbar-image-upload"] {
-          font-size: 0.93em;
-          height: 20px;
-          line-height: 20px;
-          min-width: 41px;
-          padding: 0 5px;
+          padding: 3px 4px;
+          gap: 6px;
         }
         .toolbar-label {
-          font-size: 0.89em;
-          height: 20px;
+          font-weight: 600;
         }
       }
     `;
@@ -199,7 +253,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
         <div class="toolbar-group">
           <label for="toolbar-image-upload" class="toolbar-btn" title="Upload image">Upload Image</label>
           <input type="file" id="toolbar-image-upload" accept="image/*">
-          <select id="toolbar-server-image-select" class="toolbar-btn" title="Choose server image">
+          <select id="toolbar-server-image-select" title="Choose server image">
             <option value="">[Server image]</option>
             <option value="sample1.png">sample1.png</option>
             <option value="sample2.png">sample2.png</option>
@@ -207,7 +261,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
         </div>
         <div class="toolbar-group">
           <span class="toolbar-label">Shape:</span>
-          <select id="toolbar-shape-type-select" class="toolbar-btn">
+          <select id="toolbar-shape-type-select" title="Select a shape type">
             <option value="point">Point</option>
             <option value="rect">Rectangle</option>
             <option value="circle">Circle</option>
@@ -225,7 +279,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
           <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
         </div>
       </div>
-    `;
+    ";
 
     // Query toolbar elements
     const container = element.querySelector('#canvas-toolbar-container');
@@ -496,3 +550,4 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
+
