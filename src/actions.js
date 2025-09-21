@@ -308,6 +308,7 @@ export function unlockSelectedShapes() {
 /**
  * Reset rotation (angle) to 0° for all currently selected, unlocked Rect/Circle shapes.
  * - NOP for Point shapes.
+ * - Preserves the visual center position during the rotation reset (keeps pivot).
  * - Calls canvas.requestRenderAll() once at the end.
  */
 export function resetRotationForSelectedShapes() {
@@ -326,27 +327,51 @@ export function resetRotationForSelectedShapes() {
     return;
   }
 
+  const canvas = getState().fabricCanvas;
+
   targets.forEach(shape => {
     try {
-      // Fabric.js rotation uses 'angle' in degrees on the object/group
+      // Capture current center in canvas coordinates
+      const center = (typeof shape.getCenterPoint === "function")
+        ? shape.getCenterPoint()
+        : {
+            x: (shape.left ?? 0) + ((typeof shape.getScaledWidth === "function" ? shape.getScaledWidth() : shape.width) || 0) / 2,
+            y: (shape.top ?? 0) + ((typeof shape.getScaledHeight === "function" ? shape.getScaledHeight() : shape.height) || 0) / 2
+          };
+
+      // Reset rotation around its center
       shape.set({ angle: 0 });
+
+      // Reposition so the center stays invariant
+      if (typeof shape.setPositionByOrigin === "function") {
+        shape.setPositionByOrigin(center, 'center', 'center');
+      } else {
+        // Fallback: compute top-left from center and current dimensions
+        const w = typeof shape.getScaledWidth === "function" ? shape.getScaledWidth() : (shape.width || 0);
+        const h = typeof shape.getScaledHeight === "function" ? shape.getScaledHeight() : (shape.height || 0);
+        shape.set({ left: center.x - w / 2, top: center.y - h / 2 });
+      }
+
       if (typeof shape.setCoords === "function") shape.setCoords();
-      log("DEBUG", "[actions] resetRotationForSelectedShapes: angle set to 0", {
-        id: shape._id, type: shape._type
+
+      log("DEBUG", "[actions] resetRotationForSelectedShapes: angle set to 0 and center preserved", {
+        id: shape._id, type: shape._type, center
       });
     } catch (e) {
       log("ERROR", "[actions] resetRotationForSelectedShapes: failed to reset angle", { shapeId: shape._id, error: e });
     }
   });
 
-  const canvas = getState().fabricCanvas;
   if (canvas) {
     if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
     else canvas.renderAll();
   }
 
-  log("INFO", "[actions] resetRotationForSelectedShapes: Rotation reset to 0° for", { ids: targets.map(t => t._id) });
+  log("INFO", "[actions] resetRotationForSelectedShapes: Rotation reset to 0° (center preserved) for", {
+    ids: targets.map(t => t._id)
+  });
   log("DEBUG", "[actions] resetRotationForSelectedShapes EXIT", {
     selectedAfter: getState().selectedShapes.map(s => ({ id: s?._id, angle: s?.angle }))
   });
 }
+
