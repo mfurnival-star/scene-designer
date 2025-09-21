@@ -13,15 +13,14 @@
  * - installSelectionOutlines(canvas) -> detachFn
  *
  * Behavior:
- * - Clears overlay in 'before:render' (device-pixel identity clear).
- * - Paints overlays in 'after:render' using Fabric’s current context transform
- *   (viewportTransform + retina scaling). Do NOT override transform here.
+ * - Clears overlay in 'before:render' in device pixels (identity transform).
+ * - Paints overlays in 'after:render' with Fabric’s viewportTransform AND retina scaling applied,
+ *   then draws in object/canvas space using aCoords (no extra math, no group offsets).
  * - Hidden for single selection (single selection uses transformer UI).
  *
  * Dependencies:
  * - state.js (getState, sceneDesignerStore)
  * - log.js (log)
- * - fabric-wrapper.js (default export for Point/util if needed)
  * -----------------------------------------------------------
  */
 
@@ -66,13 +65,17 @@ function removeLegacyOutlineObjects(canvas) {
   }
 }
 
-function strokeDashedRectInCanvasSpace(ctx, left, top, width, height, { color = '#2176ff', lineWidth = 1, dash = [6, 4] } = {}) {
+/**
+ * Stroke a dashed rectangle in the CURRENT context transform.
+ * We expect the context to already be set to (viewportTransform × retinaScaling).
+ */
+function strokeDashedRect(ctx, x, y, w, h, { color = '#2176ff', lineWidth = 1.2, dash = [6, 4] } = {}) {
   if (!ctx) return;
   ctx.save();
   try { ctx.setLineDash(dash); } catch {}
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidth;
-  ctx.strokeRect(left, top, width, height);
+  ctx.strokeRect(x, y, w, h);
   ctx.restore();
 }
 
@@ -86,10 +89,10 @@ function expandRect(rect, padding) {
 }
 
 /**
- * Rect from object's aCoords in CANVAS SPACE (no viewport transform applied).
- * Returns { left, top, width, height } in canvas units.
+ * Rect from object's aCoords in CANVAS OBJECT SPACE (pre-viewport).
+ * Returns { left, top, width, height } in object/canvas units.
  */
-function rectFromACoordsCanvasSpace(obj) {
+function rectFromACoords(obj) {
   if (!obj) return null;
   try {
     if (typeof obj.setCoords === 'function') obj.setCoords();
@@ -108,9 +111,25 @@ function rectFromACoordsCanvasSpace(obj) {
 }
 
 /**
+ * Apply Fabric's viewportTransform and retina scaling to the top context,
+ * so drawing in object/canvas coordinates aligns with what you see on screen.
+ */
+function applyViewportAndRetinaToTopContext(canvas, ctx) {
+  const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+  const dpr = getDpr(canvas);
+  // Compose: viewportTransform × retinaScaling
+  // Fabric uses vpt on its draw; the top context is already sized for DPR,
+  // but its current transform at after:render is not guaranteed. We set it explicitly.
+  ctx.setTransform(
+    vpt[0] * dpr, vpt[1] * dpr,
+    vpt[2] * dpr, vpt[3] * dpr,
+    vpt[4] * dpr, vpt[5] * dpr
+  );
+}
+
+/**
  * Draw per-shape boxes and a single outer hull on top context.
- * IMPORTANT: we DO NOT change ctx transform here; we rely on Fabric’s current transform
- * (viewportTransform + retina scaling) already set on contextTop at after:render.
+ * Implementation draws in object/canvas space with the proper transform applied.
  */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
@@ -119,7 +138,7 @@ function paintSelectionOutlines(canvas) {
   const state = getState();
   const selectedStore = state.selectedShapes || [];
 
-  // Prefer current Fabric members if an ActiveSelection exists
+  // Prefer current Fabric members if an ActiveSelection exists (keeps sync while dragging group)
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   const members = (active && active.type === 'activeSelection' && Array.isArray(active._objects))
     ? active._objects
@@ -134,19 +153,18 @@ function paintSelectionOutlines(canvas) {
   const color = anyLocked ? '#e53935' : '#2176ff';
   const showHull = state.settings?.multiDragBox !== false;
 
-  ctx.save(); // DO NOT setTransform – use Fabric’s transform as-is
+  ctx.save();
+  // IMPORTANT: draw in object/canvas coordinates, matching Fabric's draw
+  applyViewportAndRetinaToTopContext(canvas, ctx);
 
+  // Build rects and draw per-member
   const rects = [];
   for (const s of members) {
     if (!s) continue;
-    const r = rectFromACoordsCanvasSpace(s);
+    const r = rectFromACoords(s);
     if (r) {
       rects.push(r);
-      strokeDashedRectInCanvasSpace(ctx, r.left, r.top, r.width, r.height, {
-        color,
-        lineWidth: 1,
-        dash: [5, 4]
-      });
+      strokeDashedRect(ctx, r.left, r.top, r.width, r.height, { color, lineWidth: 1.5, dash: [6, 4] });
     }
   }
 
@@ -160,11 +178,7 @@ function paintSelectionOutlines(canvas) {
       { left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop },
       pad
     );
-    strokeDashedRectInCanvasSpace(ctx, hull.left, hull.top, hull.width, hull.height, {
-      color,
-      lineWidth: 2,
-      dash: [8, 6]
-    });
+    strokeDashedRect(ctx, hull.left, hull.top, hull.width, hull.height, { color, lineWidth: 2, dash: [8, 6] });
   }
 
   ctx.restore();
@@ -172,8 +186,8 @@ function paintSelectionOutlines(canvas) {
 
 /**
  * Install overlay painter and selection change triggers.
- * Clears in before:render at identity (device-pixel clear), paints in after:render
- * using Fabric’s current transform (do not override).
+ * - Clears in before:render at identity in device pixels.
+ * - Paints in after:render with explicit (viewport × retina) transform.
  * Returns detach function.
  */
 export function installSelectionOutlines(canvas) {
@@ -212,7 +226,7 @@ export function installSelectionOutlines(canvas) {
     }
   };
 
-  // Bind hooks
+  // Bind hooks (avoid broad canvas.off() to not stomp others)
   canvas.on('before:render', clearTop);
   canvas.on('after:render', painter);
 
