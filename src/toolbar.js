@@ -550,4 +550,3 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
-
