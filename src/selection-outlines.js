@@ -110,7 +110,7 @@ function rectFromACoords(a) {
 /**
  * Draw per-shape boxes and a single outer hull on top context.
  * DPR-aware and Group/ActiveSelection-aware.
- * When grouped (ActiveSelection), per-member boxes need to be offset by group left/top.
+ * For grouped (ActiveSelection), DO NOT offset by group’s position.
  */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
@@ -140,12 +140,6 @@ function paintSelectionOutlines(canvas) {
   ctx.save();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  let groupOffsetLeft = 0, groupOffsetTop = 0;
-  if (active && active.type === 'activeSelection') {
-    groupOffsetLeft = active.left || 0;
-    groupOffsetTop = active.top || 0;
-  }
-
   // Collect rects from aCoords (robust even when grouped/rotated)
   const rects = [];
   members.forEach(s => {
@@ -155,11 +149,8 @@ function paintSelectionOutlines(canvas) {
       if (typeof s.setCoords === 'function') s.setCoords();
       const r = rectFromACoords(s.aCoords);
       if (r) {
-        // If grouped, offset by group’s position
-        const rx = r.left + groupOffsetLeft;
-        const ry = r.top + groupOffsetTop;
-        rects.push({ left: rx, top: ry, width: r.width, height: r.height });
-        strokeDashedRect(ctx, rx, ry, r.width, r.height, { color, lineWidth: 1, dash: [5, 4] });
+        rects.push(r);
+        strokeDashedRect(ctx, r.left, r.top, r.width, r.height, { color, lineWidth: 1, dash: [5, 4] });
       }
     } catch (e) {
       log("WARN", "[selection-outlines] aCoords rect failed for shape", { id: s?._id, type: s?._type, e });
@@ -278,3 +269,4 @@ export function installSelectionOutlines(canvas) {
     }
   };
 }
+
