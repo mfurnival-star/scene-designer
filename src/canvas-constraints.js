@@ -20,7 +20,6 @@
  * Dependencies:
  * - state.js (getState)
  * - log.js (log)
- * - Fabric.js (via fabric-wrapper.js in caller)
  * -----------------------------------------------------------
  */
 
@@ -31,9 +30,7 @@ import { log } from './log.js';
  * True if the Fabric object is an ActiveSelection (multi-select drag hull).
  */
 function isActiveSelection(obj) {
-  if (!obj) return false;
-  // Fabric 5+ uses type 'activeSelection' for multi-select hulls
-  return obj.type === 'activeSelection' || obj._objects?.length > 0 && obj._activeObject === undefined && obj._isActiveSelection === true;
+  return !!obj && obj.type === 'activeSelection';
 }
 
 /**
@@ -46,10 +43,9 @@ function anyLockedInSelection(activeSel) {
 
 /**
  * Clamp a target's bounding rect to the background image bounds.
- * Adjusts target.left/top to keep the rect fully inside [0..img.width] x [0..img.height].
  */
 function clampTargetWithinImage(target, img) {
-  if (!target || !img) return;
+  if (!target || !img) return false;
 
   try {
     const rect = target.getBoundingRect(true, true);
@@ -95,7 +91,7 @@ export function installCanvasConstraints(canvas) {
 
       const img = getState().bgFabricImage;
       if (!img) {
-        // No background image → still allow movement (no clamping)
+        // No background image → allow movement (no clamping)
         return;
       }
 

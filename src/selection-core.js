@@ -13,7 +13,7 @@
  * - setSelectedShapes(arrayOfShapes)
  * - selectAllShapes()
  * - deselectAll()
- * - attachSelectionHandlers(shape)   // currently a no-op, kept for compatibility
+ * - attachSelectionHandlers(shape)
  * - isShapeSelected(shape) : boolean
  * - getSelectedShapes() : array
  * - getSelectedShape() : shape|null
@@ -42,8 +42,6 @@ import fabric from './fabric-wrapper.js';
 
 /**
  * Resolve a canonical shape reference from the store by _id.
- * @param {Object} shapeLike
- * @returns {Object|null}
  */
 function getCanonicalShapeById(shapeLike) {
   if (!shapeLike || !shapeLike._id) return null;
@@ -59,33 +57,48 @@ function getCanonicalShapeById(shapeLike) {
 
 /**
  * Ensure Fabric has an ActiveSelection for the given shapes when multi-selected.
- * - If the current active object is already an ActiveSelection over the same ids, no-op.
- * - Otherwise, constructs a new fabric.ActiveSelection and sets it active.
+ * Deterministic: discards prior active object, builds new ActiveSelection, and activates it.
  */
 function ensureFabricActiveSelection(shapes) {
   const canvas = getState().fabricCanvas;
   if (!canvas || !Array.isArray(shapes) || shapes.length <= 1) return;
 
+  // Quick id set compare to avoid churn
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
-  const ids = shapes.map(s => s && s._id).filter(Boolean);
+  const wantIds = shapes.map(s => s && s._id).filter(Boolean).sort();
 
-  // If already an ActiveSelection over the same ids, skip churn
   if (active && active.type === 'activeSelection' && Array.isArray(active._objects)) {
     const activeIds = active._objects.map(o => o && o._id).filter(Boolean).sort();
-    const wantIds = [...ids].sort();
     if (activeIds.length === wantIds.length && activeIds.every((v, i) => v === wantIds[i])) {
       log("DEBUG", "[selection-core] ActiveSelection already matches; no-op");
       return;
     }
   }
 
-  // Build and set new ActiveSelection
   try {
+    // Discard anything currently active to avoid mixed states
+    if (typeof canvas.discardActiveObject === 'function') canvas.discardActiveObject();
+
+    // Build a fresh ActiveSelection with the exact members
     const sel = new fabric.ActiveSelection(shapes, { canvas });
+
+    // UX: hull visible, but no transform controls for group drag
+    sel.set({
+      hasControls: false,
+      hasBorders: true,
+      selectable: true
+    });
+
     canvas.setActiveObject(sel);
+
+    // Update coords to keep aCoords fresh for overlay
+    if (typeof sel.setCoords === 'function') sel.setCoords();
+    shapes.forEach(s => { if (typeof s.setCoords === 'function') s.setCoords(); });
+
     if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
     else canvas.renderAll();
-    log("DEBUG", "[selection-core] Fabric ActiveSelection set", { ids });
+
+    log("DEBUG", "[selection-core] Fabric ActiveSelection set", { ids: wantIds });
   } catch (e) {
     log("ERROR", "[selection-core] Failed to create/set ActiveSelection", e);
   }
@@ -93,8 +106,6 @@ function ensureFabricActiveSelection(shapes) {
 
 /**
  * Set a single selected shape (or clear selection with null).
- * Always attaches transformer for single, unlocked, editable shapes.
- * Multi-select outlines are cleared automatically by the overlay (only renders for >1 selection).
  */
 export function setSelectedShape(shape) {
   log("DEBUG", "[selection-core] setSelectedShape ENTRY", {
@@ -123,9 +134,9 @@ export function setSelectedShape(shape) {
     selectShape(canonicalShape);
     const def = getShapeDef(canonicalShape);
     if (def && def.editable && !canonicalShape.locked) {
-      attachTransformerForShape(canonicalShape); // also sets Fabric active object
+      attachTransformerForShape(canonicalShape); // sets Fabric active object
     } else {
-      detachTransformer(); // remove any prior single selection controls
+      detachTransformer();
     }
     fixStrokeWidthAfterTransform();
   } else {
@@ -141,7 +152,6 @@ export function setSelectedShape(shape) {
 
 /**
  * Set the current selection (array of shapes).
- * Resolves all shapes to canonical references by _id first.
  * - Single selection: attach transformer and set Fabric active object.
  * - Multi selection: ensure Fabric ActiveSelection exists (so group drag works).
  */
@@ -158,9 +168,7 @@ export function setSelectedShapes(arr) {
   // Deselect shapes that are no longer selected
   if (Array.isArray(getState().selectedShapes)) {
     getState().selectedShapes.forEach(s => {
-      if (!newArr.includes(s)) {
-        deselectShape(s);
-      }
+      if (!newArr.includes(s)) deselectShape(s);
     });
   }
 
@@ -190,9 +198,8 @@ export function setSelectedShapes(arr) {
     }
     fixStrokeWidthAfterTransform();
   } else if (newArr.length > 1) {
-    // Multi selection → ensure a Fabric ActiveSelection exists. DO NOT discard it.
+    // Multi selection → ensure a Fabric ActiveSelection exists
     ensureFabricActiveSelection(newArr);
-    // No transformer on multi-select; leave group hull active
   } else {
     // None selected
     detachTransformer();
@@ -216,7 +223,6 @@ export function selectAllShapes() {
 
 /**
  * Deselect all shapes and detach transformer.
- * Also clears any Fabric ActiveSelection by discarding active object via detachTransformer().
  */
 export function deselectAll() {
   log("DEBUG", "[selection-core] deselectAll ENTRY");
@@ -231,14 +237,13 @@ export function deselectAll() {
     selectedShapes: []
   });
 
-  detachTransformer(); // also discards any Fabric active/selection hull
+  detachTransformer(); // discards any Fabric active/selection hull
   notifySelectionChanged();
   log("DEBUG", "[selection-core] deselectAll EXIT");
 }
 
 /**
- * Currently unused; selection logic is centralized.
- * Kept for backward compatibility with any existing attachments.
+ * Currently unused; kept for compatibility.
  */
 export function attachSelectionHandlers(shape) {
   log("DEBUG", "[selection-core] attachSelectionHandlers NO-OP", {
@@ -246,36 +251,23 @@ export function attachSelectionHandlers(shape) {
   });
 }
 
-/**
- * Returns true if the shape is currently selected.
- */
+/** Utils */
 export function isShapeSelected(shape) {
   const result = !!shape && !!shape._selected;
   log("DEBUG", "[selection-core] isShapeSelected", { id: shape?._id, result });
   return result;
 }
-
-/**
- * Get array of currently selected shapes.
- */
 export function getSelectedShapes() {
   const arr = getState().selectedShapes || [];
   log("DEBUG", "[selection-core] getSelectedShapes", { ids: arr.map(s => s?._id) });
   return arr;
 }
-
-/**
- * Get the single selected shape (or null).
- */
 export function getSelectedShape() {
   const s = getState().selectedShape || null;
   log("DEBUG", "[selection-core] getSelectedShape", { id: s?._id });
   return s;
 }
 
-/**
- * Internal: notify subscribers that selection changed.
- */
 function notifySelectionChanged() {
   log("DEBUG", "[selection-core] notifySelectionChanged", {
     selectedShape: getState().selectedShape?._id,
