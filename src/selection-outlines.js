@@ -9,23 +9,50 @@
  *    - Blue (#2176ff) for normal selections
  *    - Red (#e53935) if any selected shape is locked (both per-shape and hull)
  *
+ * Diagnostics (temporary, runtime-togglable):
+ * - Set in DevTools console without rebuild:
+ *   - window.__OUTLINE_DEBUG = true   → draw all methods + emit detailed logs
+ *   - window.__OUTLINE_METHOD = 'm1' | 'm2' | 'm3' (default 'm2')
+ *     m1 = aCoords-based (canvas/object space)
+ *     m2 = getBoundingRect(true, true) absolute rect
+ *     m3 = getCoords(true) derived absolute corners
+ *
  * Public Exports:
  * - installSelectionOutlines(canvas) -> detachFn
  *
  * Behavior:
  * - Clears overlay in 'before:render' in device pixels (identity transform).
- * - Paints overlays in 'after:render' with Fabric’s viewportTransform AND retina scaling applied,
- *   then draws in object/canvas space using aCoords (no extra math, no group offsets).
+ * - Paints overlays in 'after:render' using Fabric’s viewportTransform × retina scaling,
+ *   then draws in canvas/object coordinates (for m1/m3). For m2, we draw in the same
+ *   transform (the rects are absolute); visual comparison will tell us which aligns.
  * - Hidden for single selection (single selection uses transformer UI).
  *
  * Dependencies:
  * - state.js (getState, sceneDesignerStore)
  * - log.js (log)
+ * - fabric-wrapper.js (default export for version info if needed)
  * -----------------------------------------------------------
  */
 
 import { getState, sceneDesignerStore } from './state.js';
 import { log } from './log.js';
+import fabric from './fabric-wrapper.js';
+
+/**
+ * Runtime debug flags from window (safe access).
+ */
+function getDebugFlags() {
+  let DEBUG = false;
+  let METHOD = 'm2'; // default
+  try {
+    if (typeof window !== "undefined") {
+      DEBUG = !!window.__OUTLINE_DEBUG;
+      const m = window.__OUTLINE_METHOD;
+      if (m === 'm1' || m === 'm2' || m === 'm3') METHOD = m;
+    }
+  } catch {}
+  return { DEBUG, METHOD };
+}
 
 /**
  * Obtain the overlay (top) 2D context for Fabric.
@@ -67,7 +94,6 @@ function removeLegacyOutlineObjects(canvas) {
 
 /**
  * Stroke a dashed rectangle in the CURRENT context transform.
- * We expect the context to already be set to (viewportTransform × retinaScaling).
  */
 function strokeDashedRect(ctx, x, y, w, h, { color = '#2176ff', lineWidth = 1.2, dash = [6, 4] } = {}) {
   if (!ctx) return;
@@ -89,8 +115,7 @@ function expandRect(rect, padding) {
 }
 
 /**
- * Rect from object's aCoords in CANVAS OBJECT SPACE (pre-viewport).
- * Returns { left, top, width, height } in object/canvas units.
+ * Method m1: Rect from object's aCoords in CANVAS OBJECT SPACE (pre-viewport).
  */
 function rectFromACoords(obj) {
   if (!obj) return null;
@@ -105,7 +130,39 @@ function rectFromACoords(obj) {
     const maxX = Math.max(...xs);
     const maxY = Math.max(...ys);
     return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
-  } catch (e) {
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Method m2: canvas-absolute bounding rect (include stroke + transforms).
+ */
+function rectFromBounding(obj) {
+  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
+  try {
+    return obj.getBoundingRect(true, true);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Method m3: rect from object's absolute corner points (getCoords(true)).
+ */
+function rectFromGetCoords(obj) {
+  if (!obj || typeof obj.getCoords !== 'function') return null;
+  try {
+    const pts = obj.getCoords(true); // absolute
+    if (!Array.isArray(pts) || pts.length === 0) return null;
+    const xs = pts.map(p => p.x);
+    const ys = pts.map(p => p.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    const maxX = Math.max(...xs);
+    const maxY = Math.max(...ys);
+    return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+  } catch {
     return null;
   }
 }
@@ -117,9 +174,6 @@ function rectFromACoords(obj) {
 function applyViewportAndRetinaToTopContext(canvas, ctx) {
   const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
   const dpr = getDpr(canvas);
-  // Compose: viewportTransform × retinaScaling
-  // Fabric uses vpt on its draw; the top context is already sized for DPR,
-  // but its current transform at after:render is not guaranteed. We set it explicitly.
   ctx.setTransform(
     vpt[0] * dpr, vpt[1] * dpr,
     vpt[2] * dpr, vpt[3] * dpr,
@@ -129,12 +183,12 @@ function applyViewportAndRetinaToTopContext(canvas, ctx) {
 
 /**
  * Draw per-shape boxes and a single outer hull on top context.
- * Implementation draws in object/canvas space with the proper transform applied.
  */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
   if (!ctx) return;
 
+  const { DEBUG, METHOD } = getDebugFlags();
   const state = getState();
   const selectedStore = state.selectedShapes || [];
 
@@ -153,32 +207,88 @@ function paintSelectionOutlines(canvas) {
   const color = anyLocked ? '#e53935' : '#2176ff';
   const showHull = state.settings?.multiDragBox !== false;
 
-  ctx.save();
-  // IMPORTANT: draw in object/canvas coordinates, matching Fabric's draw
-  applyViewportAndRetinaToTopContext(canvas, ctx);
-
-  // Build rects and draw per-member
-  const rects = [];
-  for (const s of members) {
-    if (!s) continue;
-    const r = rectFromACoords(s);
-    if (r) {
-      rects.push(r);
-      strokeDashedRect(ctx, r.left, r.top, r.width, r.height, { color, lineWidth: 1.5, dash: [6, 4] });
+  // Diagnostics: one-time per frame environment dump
+  if (DEBUG) {
+    try {
+      const dpr = getDpr(canvas);
+      const vpt = canvas.viewportTransform || [1,0,0,1,0,0];
+      const uEl = canvas.upperCanvasEl;
+      const lc = canvas.getContext && canvas.getContext();
+      const upper = {
+        width: uEl?.width, height: uEl?.height,
+        styleW: uEl?.style?.width, styleH: uEl?.style?.height
+      };
+      const domTx = (typeof ctx.getTransform === 'function') ? ctx.getTransform() : null;
+      log("DEBUG", "[selection-outlines][diag] frame", {
+        fabricVersion: fabric?.version || 'unknown',
+        methodInUse: METHOD,
+        activeType: active?.type,
+        dpr,
+        vpt,
+        upper,
+        ctxTransform: domTx ? [domTx.a, domTx.b, domTx.c, domTx.d, domTx.e, domTx.f] : 'n/a'
+      });
+    } catch (e) {
+      log("WARN", "[selection-outlines][diag] env dump failed", e);
     }
   }
 
-  if (showHull && rects.length > 0) {
-    const pad = 4;
-    const minLeft = Math.min(...rects.map(r => r.left));
-    const minTop = Math.min(...rects.map(r => r.top));
-    const maxRight = Math.max(...rects.map(r => r.left + r.width));
-    const maxBottom = Math.max(...rects.map(r => r.top + r.height));
+  // We will draw with (viewport × retina) transform applied to ctx.
+  ctx.save();
+  applyViewportAndRetinaToTopContext(canvas, ctx);
+
+  const rectsForHull = [];
+
+  // Per-member drawing
+  for (let idx = 0; idx < members.length; idx++) {
+    const s = members[idx];
+    if (!s) continue;
+
+    // Compute all three methods
+    const r1 = rectFromACoords(s);          // canvas/object space (pre-viewport)
+    const r2 = rectFromBounding(s);         // absolute rect
+    const r3 = rectFromGetCoords(s);        // absolute from corners
+
+    if (DEBUG) {
+      log("DEBUG", "[selection-outlines][diag] rects", {
+        idx, id: s._id, type: s._type, locked: s.locked,
+        r1_ac: r1, r2_bbox: r2, r3_coords: r3
+      });
+    }
+
+    // Draw all methods if DEBUG (different colors) to compare visually
+    if (DEBUG) {
+      if (r1) strokeDashedRect(ctx, r1.left, r1.top, r1.width, r1.height, { color: '#2176ff', lineWidth: 1, dash: [5, 3] }); // blue
+      if (r2) strokeDashedRect(ctx, r2.left, r2.top, r2.width, r2.height, { color: '#00c853', lineWidth: 1, dash: [4, 3] }); // green
+      if (r3) strokeDashedRect(ctx, r3.left, r3.top, r3.width, r3.height, { color: '#ff9100', lineWidth: 1, dash: [4, 3] }); // orange
+    }
+
+    // Choose which to use for normal (non-debug) rendering
+    let use = null;
+    if (METHOD === 'm1') use = r1;
+    else if (METHOD === 'm2') use = r2;
+    else use = r3;
+
+    if (!DEBUG) {
+      const c = color; // normal color (blue or red)
+      if (use) strokeDashedRect(ctx, use.left, use.top, use.width, use.height, { color: c, lineWidth: 1.4, dash: [6, 4] });
+    }
+
+    if (use) rectsForHull.push(use);
+  }
+
+  // Draw outer hull (based on chosen method rectangles)
+  if (showHull && rectsForHull.length > 0) {
+    const minLeft = Math.min(...rectsForHull.map(r => r.left));
+    const minTop = Math.min(...rectsForHull.map(r => r.top));
+    const maxRight = Math.max(...rectsForHull.map(r => r.left + r.width));
+    const maxBottom = Math.max(...rectsForHull.map(r => r.top + r.height));
     const hull = expandRect(
       { left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop },
-      pad
+      4
     );
-    strokeDashedRect(ctx, hull.left, hull.top, hull.width, hull.height, { color, lineWidth: 2, dash: [8, 6] });
+    const hullColor = anyLocked ? '#e53935' : (DEBUG ? '#2962ff' : color);
+    strokeDashedRect(ctx, hull.left, hull.top, hull.width, hull.height, { color: hullColor, lineWidth: 2, dash: [8, 6] });
   }
 
   ctx.restore();
@@ -255,7 +365,7 @@ export function installSelectionOutlines(canvas) {
     }
   });
 
-  log("INFO", "[selection-outlines] Overlay selection outlines installed");
+  log("INFO", "[selection-outlines] Overlay selection outlines installed (diagnostics enabled via window.__OUTLINE_DEBUG/__OUTLINE_METHOD)");
   return function detach() {
     try {
       canvas.off('before:render', clearTop);
@@ -281,4 +391,3 @@ export function installSelectionOutlines(canvas) {
     }
   };
 }
-
