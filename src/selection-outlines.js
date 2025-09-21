@@ -15,7 +15,8 @@
  * - installSelectionOutlines(canvas) -> detachFn
  *
  * Behavior:
- * - Hooks into Fabric 'after:render' to paint overlays each frame.
+ * - Clears overlay in 'before:render' to preserve Fabric's own marquee/hud.
+ * - Paints overlays in 'after:render' each frame.
  * - Requests re-render on selection changes and during object moves.
  * - Respects settings.multiDragBox (if false, draws only per-shape boxes; hull optional).
  * - Hidden for single selection (single selection uses transformer UI).
@@ -39,7 +40,6 @@ import { log } from './log.js';
  */
 function getTopContext(canvas) {
   if (!canvas) return null;
-  // Fabric v2/3: upperCanvasEl; v4/5: contextTop exists
   const ctx =
     canvas.contextTop ||
     (canvas.upperCanvasEl && canvas.upperCanvasEl.getContext && canvas.upperCanvasEl.getContext('2d')) ||
@@ -69,9 +69,7 @@ function strokeDashedRect(ctx, x, y, w, h, { color = '#2176ff', lineWidth = 1, d
   ctx.save();
   try {
     ctx.setLineDash(dash);
-  } catch {
-    // Older browsers may not support; ignore
-  }
+  } catch {}
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidth;
   ctx.strokeRect(x, y, w, h);
@@ -96,17 +94,13 @@ function paintSelectionOutlines(canvas) {
 
   const selected = getState().selectedShapes || [];
   if (!Array.isArray(selected) || selected.length <= 1) {
-    // Single selection or none: clear overlay and exit (transformer handles single)
-    ctx.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+    // Single selection or none: nothing to draw (transformer handles single)
     return;
   }
 
   const anyLocked = selected.some(s => s && s.locked);
   const color = anyLocked ? '#e53935' : '#2176ff';
   const showHull = getState().settings?.multiDragBox !== false;
-
-  // Clear the top overlay before drawing
-  ctx.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
   // Collect each shape's bounding rect (true, true => include stroke and transformations)
   const rects = [];
@@ -140,6 +134,7 @@ function paintSelectionOutlines(canvas) {
 
 /**
  * Install overlay painter and selection change triggers.
+ * Preserves Fabric's own marquee by clearing in before:render, drawing in after:render.
  * Returns detach function.
  */
 export function installSelectionOutlines(canvas) {
@@ -151,8 +146,17 @@ export function installSelectionOutlines(canvas) {
   // One-time cleanup for any legacy outline Fabric objects
   removeLegacyOutlineObjects(canvas);
 
-  // Ensure top context exists at least once (Fabric sets it up after first render)
-  // We'll still guard inside painter.
+  // Clear our overlay before Fabric draws its selection UI (preserve marquee)
+  const clearTop = () => {
+    try {
+      const ctx = getTopContext(canvas);
+      if (ctx) ctx.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+    } catch (e) {
+      log("WARN", "[selection-outlines] clearTop failed", e);
+    }
+  };
+
+  // Draw our overlays after Fabric renders objects and marquee/controls
   const painter = () => {
     try {
       paintSelectionOutlines(canvas);
@@ -161,8 +165,8 @@ export function installSelectionOutlines(canvas) {
     }
   };
 
-  // Bind after:render; remove existing handler if any (avoid dup on hot-reload)
-  canvas.off('after:render');
+  // Bind hooks (avoid broad canvas.off() to not stomp others)
+  canvas.on('before:render', clearTop);
   canvas.on('after:render', painter);
 
   // Nudge renders when selection changes or objects move
@@ -194,6 +198,7 @@ export function installSelectionOutlines(canvas) {
 
   return function detach() {
     try {
+      canvas.off('before:render', clearTop);
       canvas.off('after:render', painter);
       canvas.off('selection:created', onSelectionEvent);
       canvas.off('selection:updated', onSelectionEvent);

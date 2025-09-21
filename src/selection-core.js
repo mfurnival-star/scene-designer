@@ -25,6 +25,7 @@
  * - shape-defs.js (getShapeDef)
  * - shapes.js (fixStrokeWidthAfterTransform)
  * - state.js (sceneDesignerStore, getState)
+ * - fabric-wrapper.js (default fabric namespace for ActiveSelection)
  * -----------------------------------------------------------
  */
 
@@ -37,6 +38,7 @@ import {
   sceneDesignerStore,
   getState
 } from './state.js';
+import fabric from './fabric-wrapper.js';
 
 /**
  * Resolve a canonical shape reference from the store by _id.
@@ -53,6 +55,40 @@ function getCanonicalShapeById(shapeLike) {
     ids: shapes.map(s => s._id)
   });
   return result;
+}
+
+/**
+ * Ensure Fabric has an ActiveSelection for the given shapes when multi-selected.
+ * - If the current active object is already an ActiveSelection over the same ids, no-op.
+ * - Otherwise, constructs a new fabric.ActiveSelection and sets it active.
+ */
+function ensureFabricActiveSelection(shapes) {
+  const canvas = getState().fabricCanvas;
+  if (!canvas || !Array.isArray(shapes) || shapes.length <= 1) return;
+
+  const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
+  const ids = shapes.map(s => s && s._id).filter(Boolean);
+
+  // If already an ActiveSelection over the same ids, skip churn
+  if (active && active.type === 'activeSelection' && Array.isArray(active._objects)) {
+    const activeIds = active._objects.map(o => o && o._id).filter(Boolean).sort();
+    const wantIds = [...ids].sort();
+    if (activeIds.length === wantIds.length && activeIds.every((v, i) => v === wantIds[i])) {
+      log("DEBUG", "[selection-core] ActiveSelection already matches; no-op");
+      return;
+    }
+  }
+
+  // Build and set new ActiveSelection
+  try {
+    const sel = new fabric.ActiveSelection(shapes, { canvas });
+    canvas.setActiveObject(sel);
+    if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
+    else canvas.renderAll();
+    log("DEBUG", "[selection-core] Fabric ActiveSelection set", { ids });
+  } catch (e) {
+    log("ERROR", "[selection-core] Failed to create/set ActiveSelection", e);
+  }
 }
 
 /**
@@ -87,9 +123,9 @@ export function setSelectedShape(shape) {
     selectShape(canonicalShape);
     const def = getShapeDef(canonicalShape);
     if (def && def.editable && !canonicalShape.locked) {
-      attachTransformerForShape(canonicalShape);
+      attachTransformerForShape(canonicalShape); // also sets Fabric active object
     } else {
-      detachTransformer();
+      detachTransformer(); // remove any prior single selection controls
     }
     fixStrokeWidthAfterTransform();
   } else {
@@ -106,8 +142,8 @@ export function setSelectedShape(shape) {
 /**
  * Set the current selection (array of shapes).
  * Resolves all shapes to canonical references by _id first.
- * Attaches transformer only when exactly one unlocked, editable shape is selected.
- * The overlay painter will draw multi-select outlines automatically.
+ * - Single selection: attach transformer and set Fabric active object.
+ * - Multi selection: ensure Fabric ActiveSelection exists (so group drag works).
  */
 export function setSelectedShapes(arr) {
   log("DEBUG", "[selection-core] setSelectedShapes ENTRY", {
@@ -144,8 +180,8 @@ export function setSelectedShapes(arr) {
     if (newArr.length === 1) selectShape(shape);
   });
 
-  // Transformer logic: only for single, unlocked, editable
   if (newArr.length === 1 && newArr[0] && !newArr[0].locked) {
+    // Single selection → attach transformer (sets Fabric active object)
     const def = getShapeDef(newArr[0]);
     if (def && def.editable) {
       attachTransformerForShape(newArr[0]);
@@ -153,9 +189,13 @@ export function setSelectedShapes(arr) {
       detachTransformer();
     }
     fixStrokeWidthAfterTransform();
+  } else if (newArr.length > 1) {
+    // Multi selection → ensure a Fabric ActiveSelection exists. DO NOT discard it.
+    ensureFabricActiveSelection(newArr);
+    // No transformer on multi-select; leave group hull active
   } else {
+    // None selected
     detachTransformer();
-    fixStrokeWidthAfterTransform();
   }
 
   notifySelectionChanged();
@@ -176,7 +216,7 @@ export function selectAllShapes() {
 
 /**
  * Deselect all shapes and detach transformer.
- * The overlay painter will clear any multi-select outlines automatically.
+ * Also clears any Fabric ActiveSelection by discarding active object via detachTransformer().
  */
 export function deselectAll() {
   log("DEBUG", "[selection-core] deselectAll ENTRY");
@@ -191,7 +231,7 @@ export function deselectAll() {
     selectedShapes: []
   });
 
-  detachTransformer();
+  detachTransformer(); // also discards any Fabric active/selection hull
   notifySelectionChanged();
   log("DEBUG", "[selection-core] deselectAll EXIT");
 }
