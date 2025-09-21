@@ -6,7 +6,7 @@
  * - Manage single/multi-shape selection state for Fabric.js objects.
  * - Own the transformer lifecycle (attach/detach/update) using transformer.js.
  * - Integrate shape-state.js and shape-defs.js for per-shape behavior.
- * - Delegate multi-select dashed outline drawing to selection-outlines.js.
+ * - Multi-select dashed outlines are rendered by the overlay painter installed in canvas-core.js.
  *
  * Exports (public API):
  * - setSelectedShape(shape|null)
@@ -25,7 +25,6 @@
  * - shape-defs.js (getShapeDef)
  * - shapes.js (fixStrokeWidthAfterTransform)
  * - state.js (sceneDesignerStore, getState)
- * - selection-outlines.js (refreshMultiSelectOutlines, clearAllSelectionOutlines)
  * -----------------------------------------------------------
  */
 
@@ -34,11 +33,6 @@ import { attachTransformerForShape, detachTransformer } from './transformer.js';
 import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
 import { getShapeDef } from './shape-defs.js';
 import { fixStrokeWidthAfterTransform } from './shapes.js';
-import {
-  refreshMultiSelectOutlines,
-  clearAllSelectionOutlines
-} from './selection-outlines.js';
-
 import {
   sceneDesignerStore,
   getState
@@ -64,7 +58,7 @@ function getCanonicalShapeById(shapeLike) {
 /**
  * Set a single selected shape (or clear selection with null).
  * Always attaches transformer for single, unlocked, editable shapes.
- * Clears multi-select outlines.
+ * Multi-select outlines are cleared automatically by the overlay (only renders for >1 selection).
  */
 export function setSelectedShape(shape) {
   log("DEBUG", "[selection-core] setSelectedShape ENTRY", {
@@ -102,9 +96,6 @@ export function setSelectedShape(shape) {
     detachTransformer();
   }
 
-  // Single selection uses transformer; clear multi-select outlines
-  clearAllSelectionOutlines();
-
   notifySelectionChanged();
   log("DEBUG", "[selection-core] setSelectedShape EXIT", {
     selectedShape: getState().selectedShape?._id,
@@ -113,10 +104,10 @@ export function setSelectedShape(shape) {
 }
 
 /**
- * Set the current multi-selection (array of shapes).
+ * Set the current selection (array of shapes).
  * Resolves all shapes to canonical references by _id first.
  * Attaches transformer only when exactly one unlocked, editable shape is selected.
- * Updates multi-select outlines via selection-outlines.js.
+ * The overlay painter will draw multi-select outlines automatically.
  */
 export function setSelectedShapes(arr) {
   log("DEBUG", "[selection-core] setSelectedShapes ENTRY", {
@@ -167,9 +158,6 @@ export function setSelectedShapes(arr) {
     fixStrokeWidthAfterTransform();
   }
 
-  // Multi-select dashed outlines
-  refreshMultiSelectOutlines(newArr);
-
   notifySelectionChanged();
   log("DEBUG", "[selection-core] setSelectedShapes EXIT", {
     selectedShape: getState().selectedShape?._id,
@@ -187,7 +175,8 @@ export function selectAllShapes() {
 }
 
 /**
- * Deselect all shapes, detach transformer, and clear outlines.
+ * Deselect all shapes and detach transformer.
+ * The overlay painter will clear any multi-select outlines automatically.
  */
 export function deselectAll() {
   log("DEBUG", "[selection-core] deselectAll ENTRY");
@@ -203,7 +192,6 @@ export function deselectAll() {
   });
 
   detachTransformer();
-  clearAllSelectionOutlines();
   notifySelectionChanged();
   log("DEBUG", "[selection-core] deselectAll EXIT");
 }
