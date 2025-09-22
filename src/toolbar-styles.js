@@ -4,8 +4,10 @@
  * Scene Designer – Toolbar Styles Injector (ESM ONLY)
  * Purpose:
  * - Inject the toolbar CSS once per document.
- * - Styles are designed so button widths auto-fit their text content and
- *   reflow naturally when the scale changes (no transform scaling).
+ * - Two-row toolbar layout:
+ *    - Row 1: Image controls + shape add + primary actions
+ *    - Row 2: Edit actions + color pickers
+ * - Buttons auto-size to content; scaling via font-size so widths reflow with scale.
  * - Includes styling for Pickr host buttons (stroke/fill color pickers).
  *
  * Public Exports:
@@ -31,22 +33,20 @@ export function ensureToolbarStylesInjected() {
   const style = document.createElement("style");
   style.id = "scene-designer-toolbar-style";
   style.textContent = `
-    /* Container scales font-size with --toolbar-ui-scale and uses a clean font stack */
+    /* Root container: now a column with two rows to reduce horizontal scrolling */
     #canvas-toolbar-container {
       width: 100%;
       background: linear-gradient(90deg, #f7faff 0%, #e6eaf9 100%);
       border-bottom: 1.5px solid #b8c6e6;
       display: flex;
-      flex-direction: row;
-      flex-wrap: nowrap;
-      align-items: center;
+      flex-direction: column;      /* two rows stacked */
+      align-items: stretch;
       justify-content: flex-start;
-      gap: 14px;
-      padding: 6px 12px;
+      gap: 10px;                   /* space between rows */
+      padding: 8px 12px;           /* slightly taller for two rows */
       box-shadow: 0 1.5px 6px -2px #b8c6e6;
       border-radius: 0 0 13px 13px;
       box-sizing: border-box;
-      overflow-x: auto;
 
       /* Font and scale (no transform so widths reflow with content) */
       font-family: "Segoe UI", Arial, Helvetica, sans-serif;
@@ -54,6 +54,20 @@ export function ensureToolbarStylesInjected() {
       line-height: 1.2;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Each toolbar row is a horizontal flex lane of groups */
+    .toolbar-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 14px;
+      flex-wrap: nowrap;           /* preserve intended grouping per row */
+      width: 100%;
+      box-sizing: border-box;
+      overflow-x: auto;            /* allow scroll when extremely narrow */
+      overflow-y: visible;
     }
 
     .toolbar-group {
@@ -66,6 +80,7 @@ export function ensureToolbarStylesInjected() {
       box-shadow: 0 1px 6px -4px #2176ff;
       margin: 0;
       box-sizing: border-box;
+      flex: 0 0 auto;
     }
 
     .toolbar-label {
@@ -229,9 +244,17 @@ export function ensureToolbarStylesInjected() {
       margin-right: 2px;
     }
 
+    /* Responsive polish: allow rows to wrap under tight widths */
+    @media (max-width: 1100px) {
+      .toolbar-row {
+        flex-wrap: wrap;           /* permit group wrap within each row on smaller screens */
+        gap: 10px;
+      }
+    }
+
     @media (max-width: 900px) {
       #canvas-toolbar-container {
-        padding: 4px 6px;
+        padding: 6px 8px;
         gap: 8px;
         font-size: calc(13px * var(--toolbar-ui-scale, 1));
       }

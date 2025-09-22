@@ -4,6 +4,7 @@
  * Scene Designer – Toolbar DOM Renderer (ESM ONLY)
  * Purpose:
  * - Render the toolbar HTML markup into the provided element.
+ * - Structure now uses two rows to reduce horizontal scrolling.
  * - Query and return strongly-typed references to all interactive DOM nodes.
  * - No business logic, no event wiring here (handlers live in toolbar-handlers.js).
  * - Styles are injected by toolbar-styles.js.
@@ -24,8 +25,8 @@
  * - selectAllBtn
  * - lockBtn
  * - unlockBtn
- * - strokePickrEl       ← Pickr host element for stroke
- * - fillPickrEl         ← Pickr host element for fill (with alpha)
+ * - strokePickrEl
+ * - fillPickrEl
  *
  * Dependencies:
  * - log.js (logging)
@@ -50,51 +51,63 @@ export function renderToolbar(element) {
     throw new Error(msg);
   }
 
-  // Render markup (single row, grouped)
+  // Render markup (two rows, grouped)
   element.innerHTML = `
     <div id="canvas-toolbar-container">
-      <div class="toolbar-group">
-        <label for="toolbar-image-upload" class="toolbar-btn" title="Upload image">Upload Image</label>
-        <input type="file" id="toolbar-image-upload" accept="image/*">
-        <select id="toolbar-server-image-select" title="Choose server image">
-          <option value="">[Server image]</option>
-          <option value="sample1.png">sample1.png</option>
-          <option value="sample2.png">sample2.png</option>
-        </select>
+      <!-- Row 1: Image + Shape add + Primary actions -->
+      <div class="toolbar-row" id="toolbar-row-1">
+        <div class="toolbar-group">
+          <label for="toolbar-image-upload" class="toolbar-btn" title="Upload image">Upload Image</label>
+          <input type="file" id="toolbar-image-upload" accept="image/*">
+          <select id="toolbar-server-image-select" title="Choose server image">
+            <option value="">[Server image]</option>
+            <option value="sample1.png">sample1.png</option>
+            <option value="sample2.png">sample2.png</option>
+          </select>
+        </div>
+
+        <div class="toolbar-group">
+          <span class="toolbar-label">Shape:</span>
+          <select id="toolbar-shape-type-select" title="Select a shape type">
+            <option value="point">Point</option>
+            <option value="rect">Rectangle</option>
+            <option value="circle">Circle</option>
+          </select>
+          <button id="toolbar-add-shape-btn" class="toolbar-btn" title="Add shape">
+            <span style="font-size:1em;margin-right:3px;">&#x2795;</span> Add
+          </button>
+        </div>
+
+        <div class="toolbar-group">
+          <button id="toolbar-delete-shape-btn" class="toolbar-btn" title="Delete selected shape(s)">
+            <span style="font-size:1em;margin-right:3px;">&#x1F5D1;</span> Delete
+          </button>
+          <button id="toolbar-select-all-btn" class="toolbar-btn" title="Select all shapes">Select All</button>
+        </div>
       </div>
 
-      <div class="toolbar-group">
-        <span class="toolbar-label">Shape:</span>
-        <select id="toolbar-shape-type-select" title="Select a shape type">
-          <option value="point">Point</option>
-          <option value="rect">Rectangle</option>
-          <option value="circle">Circle</option>
-        </select>
-        <button id="toolbar-add-shape-btn" class="toolbar-btn" title="Add shape">
-          <span style="font-size:1em;margin-right:3px;">&#x2795;</span> Add
-        </button>
-        <button id="toolbar-delete-shape-btn" class="toolbar-btn" title="Delete selected shape(s)">
-          <span style="font-size:1em;margin-right:3px;">&#x1F5D1;</span> Delete
-        </button>
-        <button id="toolbar-duplicate-shape-btn" class="toolbar-btn" title="Duplicate selected shape(s)">Duplicate</button>
-        <button id="toolbar-reset-rotation-btn" class="toolbar-btn" title="Reset rotation to 0°">Reset Rotation</button>
-        <button id="toolbar-select-all-btn" class="toolbar-btn" title="Select all shapes">Select All</button>
-        <button id="toolbar-lock-btn" class="toolbar-btn" title="Lock selected shape(s)">Lock</button>
-        <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
-      </div>
+      <!-- Row 2: Edit actions + Color controls -->
+      <div class="toolbar-row" id="toolbar-row-2">
+        <div class="toolbar-group">
+          <button id="toolbar-duplicate-shape-btn" class="toolbar-btn" title="Duplicate selected shape(s)">Duplicate</button>
+          <button id="toolbar-reset-rotation-btn" class="toolbar-btn" title="Reset rotation to 0°">Reset Rotation</button>
+          <button id="toolbar-lock-btn" class="toolbar-btn" title="Lock selected shape(s)">Lock</button>
+          <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
+        </div>
 
-      <div class="toolbar-group" id="toolbar-color-group">
-        <span class="toolbar-label">Color:</span>
+        <div class="toolbar-group" id="toolbar-color-group">
+          <span class="toolbar-label">Color:</span>
 
-        <label class="toolbar-label" for="toolbar-stroke-pickr" title="Stroke color">Stroke</label>
-        <button id="toolbar-stroke-pickr" class="toolbar-btn pickr-btn" type="button" title="Stroke color">
-          Pick
-        </button>
+          <label class="toolbar-label" for="toolbar-stroke-pickr" title="Stroke color">Stroke</label>
+          <button id="toolbar-stroke-pickr" class="toolbar-btn pickr-btn" type="button" title="Stroke color">
+            Pick
+          </button>
 
-        <label class="toolbar-label" for="toolbar-fill-pickr" title="Fill color + Alpha">Fill</label>
-        <button id="toolbar-fill-pickr" class="toolbar-btn pickr-btn" type="button" title="Fill color + Alpha">
-          Pick
-        </button>
+          <label class="toolbar-label" for="toolbar-fill-pickr" title="Fill color + Alpha">Fill</label>
+          <button id="toolbar-fill-pickr" class="toolbar-btn pickr-btn" type="button" title="Fill color + Alpha">
+            Pick
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -145,7 +158,7 @@ export function renderToolbar(element) {
     log("WARN", "[toolbar-dom] Some toolbar refs are missing", { missing });
   }
 
-  log("INFO", "[toolbar-dom] Toolbar DOM rendered");
+  log("INFO", "[toolbar-dom] Toolbar DOM rendered (two-row layout)");
   log("TRACE", "[toolbar-dom] renderToolbar EXIT");
 
   return refs;
