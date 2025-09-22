@@ -13,12 +13,11 @@
  * - installSelectionOutlines(canvas) -> detachFn
  *
  * Behavior:
- * - Clears overlay in 'before:render' in device pixels (identity transform).
+ * - Clears overlay in 'before:render' (device pixels, identity transform).
  * - Paints overlays in 'after:render'.
- * - When an ActiveSelection exists, compute each member's rect by composing:
- *     memberAbs = activeAbs (true,true) + memberRel (false,true)
- *   This matches Fabric's group rebasing during Select All.
- * - Hidden for single selection (single selection uses transformer UI).
+ * - When an ActiveSelection exists, compute each member's rect using the group's
+ *   canvas-space origin (active.left/top) plus the member's own left/top and scaled size.
+ * - Hidden for single selection (single uses transformer UI).
  *
  * Dependencies:
  * - state.js (getState, sceneDesignerStore)
@@ -86,66 +85,62 @@ function expandRect(rect, padding) {
   };
 }
 
-// Safe wrapper around getBoundingRect
-function safeBBox(obj, absolute, calc) {
-  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
+/**
+ * Safe scaled width/height helpers.
+ */
+function scaledWidth(obj) {
   try {
-    return obj.getBoundingRect(absolute, calc);
-  } catch (e) {
-    log("WARN", "[selection-outlines] getBoundingRect failed", { absolute, calc, e });
-    return null;
-  }
+    if (typeof obj.getScaledWidth === 'function') return obj.getScaledWidth();
+    if (obj.scaleX && obj.width) return obj.scaleX * obj.width;
+    return obj.width || 0;
+  } catch { return obj?.width || 0; }
+}
+function scaledHeight(obj) {
+  try {
+    if (typeof obj.getScaledHeight === 'function') return obj.getScaledHeight();
+    if (obj.scaleY && obj.height) return obj.scaleY * obj.height;
+    return obj.height || 0;
+  } catch { return obj?.height || 0; }
 }
 
 /**
  * Build absolute rects for members.
- * - If ActiveSelection is present:
- *    - activeAbs = active.getBoundingRect(true, true)
- *    - memberRel = member.getBoundingRect(false, true)
- *    - memberAbs = activeAbs + memberRel (left/top only; width/height from memberRel)
- * - Otherwise:
- *    - memberAbs = member.getBoundingRect(true, true)
+ * Robust mapping observed to match Fabric’s visual positions across platforms:
+ * - If ActiveSelection exists:
+ *    anchor = { left: active.left, top: active.top }  // canvas-space origin of group
+ *    memberAbs.left  = anchor.left + member.left
+ *    memberAbs.top   = anchor.top  + member.top
+ *    memberAbs.width  = member.getScaledWidth()
+ *    memberAbs.height = member.getScaledHeight()
+ * - Else (no ActiveSelection):
+ *    memberAbs from member.left/top + scaled size directly.
+ *
+ * Notes:
+ * - We avoid getBoundingRect()/aCoords here because some Fabric builds report
+ *   member rects in group space during ActiveSelection; anchoring to
+ *   active.left/top consistently reprojects into canvas space.
  */
 function collectMemberAbsoluteRects(canvas, members) {
   const rects = [];
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   const isActiveSel = !!(active && active.type === 'activeSelection');
 
-  let activeAbs = null;
-  if (isActiveSel) {
-    activeAbs = safeBBox(active, true, true);
-    if (!activeAbs) {
-      // Fallback: synthesize from member absolutes
-      const absRects = members.map(m => safeBBox(m, true, true)).filter(Boolean);
-      if (absRects.length) {
-        const minLeft = Math.min(...absRects.map(r => r.left));
-        const minTop = Math.min(...absRects.map(r => r.top));
-        const maxRight = Math.max(...absRects.map(r => r.left + r.width));
-        const maxBottom = Math.max(...absRects.map(r => r.top + r.height));
-        activeAbs = { left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop };
-      } else {
-        activeAbs = { left: 0, top: 0, width: 0, height: 0 };
-      }
-    }
-  }
+  const anchorLeft = isActiveSel ? (active.left ?? 0) : 0;
+  const anchorTop  = isActiveSel ? (active.top  ?? 0) : 0;
 
   for (const s of members) {
     if (!s) continue;
     try { if (typeof s.setCoords === 'function') s.setCoords(); } catch {}
-    if (isActiveSel && activeAbs) {
-      const rel = safeBBox(s, false, true);
-      if (rel) {
-        rects.push({
-          left: activeAbs.left + rel.left,
-          top: activeAbs.top + rel.top,
-          width: rel.width,
-          height: rel.height
-        });
-      }
-    } else {
-      const abs = safeBBox(s, true, true);
-      if (abs) rects.push(abs);
-    }
+
+    const w = scaledWidth(s);
+    const h = scaledHeight(s);
+
+    // In ActiveSelection: member.left/top are relative to group origin
+    // Otherwise: member.left/top are already canvas-space
+    const L = (s.left ?? 0) + (isActiveSel ? anchorLeft : 0);
+    const T = (s.top  ?? 0) + (isActiveSel ? anchorTop  : 0);
+
+    rects.push({ left: L, top: T, width: w, height: h });
   }
   return rects;
 }
@@ -176,8 +171,7 @@ function paintSelectionOutlines(canvas) {
   const showHull = state.settings?.multiDragBox !== false;
 
   ctx.save();
-  // Do not override transform; Fabric uses identity top-context for selection UI
-  // in our current setup (DPR handled in clear).
+  // Do not override ctx transform; keep as Fabric leaves it for the top context.
 
   const rects = collectMemberAbsoluteRects(canvas, members);
 
@@ -299,3 +293,4 @@ export function installSelectionOutlines(canvas) {
     }
   };
 }
+
