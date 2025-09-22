@@ -24,9 +24,8 @@
  * - selectAllBtn
  * - lockBtn
  * - unlockBtn
- * - strokeColorInput
- * - fillColorInput
- * - fillAlphaSlider
+ * - strokePickrEl       ← Pickr host element for stroke
+ * - fillPickrEl         ← Pickr host element for fill (with alpha)
  *
  * Dependencies:
  * - log.js (logging)
@@ -86,22 +85,16 @@ export function renderToolbar(element) {
 
       <div class="toolbar-group" id="toolbar-color-group">
         <span class="toolbar-label">Color:</span>
-        <label class="toolbar-label" for="toolbar-stroke-color-input" title="Stroke color">Stroke</label>
-        <input type="color" id="toolbar-stroke-color-input" title="Stroke color (#RRGGBB)">
 
-        <label class="toolbar-label" for="toolbar-fill-color-input" title="Fill color">Fill</label>
-        <input type="color" id="toolbar-fill-color-input" title="Fill color (#RRGGBB)">
-        <input
-          type="range"
-          id="toolbar-fill-alpha-input"
-          min="0"
-          max="100"
-          step="1"
-          value="0"
-          title="Fill Alpha (0–100%)"
-          style="width:120px;"
-        >
-        <span id="toolbar-fill-alpha-value" aria-hidden="true" style="min-width:2.5em;text-align:right;">0%</span>
+        <label class="toolbar-label" for="toolbar-stroke-pickr" title="Stroke color">Stroke</label>
+        <button id="toolbar-stroke-pickr" class="toolbar-btn pickr-btn" type="button" title="Stroke color">
+          Pick
+        </button>
+
+        <label class="toolbar-label" for="toolbar-fill-pickr" title="Fill color + Alpha">Fill</label>
+        <button id="toolbar-fill-pickr" class="toolbar-btn pickr-btn" type="button" title="Fill color + Alpha">
+          Pick
+        </button>
       </div>
     </div>
   `;
@@ -123,20 +116,9 @@ export function renderToolbar(element) {
   const lockBtn = element.querySelector('#toolbar-lock-btn');
   const unlockBtn = element.querySelector('#toolbar-unlock-btn');
 
-  // New color controls
-  const strokeColorInput = element.querySelector('#toolbar-stroke-color-input');
-  const fillColorInput = element.querySelector('#toolbar-fill-color-input');
-  const fillAlphaSlider = element.querySelector('#toolbar-fill-alpha-input');
-  const fillAlphaValue = element.querySelector('#toolbar-fill-alpha-value');
-
-  // Initialize simple alpha value readout (no state coupling here)
-  if (fillAlphaSlider && fillAlphaValue) {
-    fillAlphaValue.textContent = `${fillAlphaSlider.value}%`;
-    // Lightweight UI update; event wiring to business logic happens in toolbar-handlers.js
-    fillAlphaSlider.addEventListener('input', () => {
-      fillAlphaValue.textContent = `${fillAlphaSlider.value}%`;
-    });
-  }
+  // Pickr hosts (replaces native color inputs/alpha slider)
+  const strokePickrEl = element.querySelector('#toolbar-stroke-pickr');
+  const fillPickrEl = element.querySelector('#toolbar-fill-pickr');
 
   const refs = {
     container,
@@ -151,9 +133,8 @@ export function renderToolbar(element) {
     selectAllBtn,
     lockBtn,
     unlockBtn,
-    strokeColorInput,
-    fillColorInput,
-    fillAlphaSlider
+    strokePickrEl,
+    fillPickrEl
   };
 
   // Basic sanity check

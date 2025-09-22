@@ -6,6 +6,7 @@
  * - Assemble the toolbar panel: inject styles, render DOM, wire handlers, and
  *   install state-driven enable/disable logic.
  * - Keeps business logic in actions.js; this module only wires UI events.
+ * - Uses Pickr-based color pickers via toolbar-handlers → toolbar-color.
  *
  * Public Exports:
  * - buildCanvasToolbarPanel({ element, title, componentName })
@@ -46,7 +47,7 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     // 2) Render DOM and get strongly-typed refs to elements
     const refs = renderToolbar(element);
 
-    // 3) Wire event handlers (clicks, file input, etc.)
+    // 3) Wire event handlers (clicks, file input, color pickers, etc.)
     const detachHandlers = attachToolbarHandlers(refs);
 
     // 4) Install state-driven UI behavior
@@ -87,3 +88,4 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     componentName
   });
 }
+

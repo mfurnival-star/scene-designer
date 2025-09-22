@@ -6,6 +6,7 @@
  * - Inject the toolbar CSS once per document.
  * - Styles are designed so button widths auto-fit their text content and
  *   reflow naturally when the scale changes (no transform scaling).
+ * - Includes styling for Pickr host buttons (stroke/fill color pickers).
  *
  * Public Exports:
  * - ensureToolbarStylesInjected()
@@ -178,6 +179,56 @@ export function ensureToolbarStylesInjected() {
       transition: background 0.12s, box-shadow 0.11s, border-color 0.10s;
     }
 
+    /* --- Pickr integration (host buttons) --- */
+
+    /* Host button base (acts like a normal toolbar button) */
+    .pickr-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0.35em 0.6em;
+      min-width: 44px; /* comfortable hit area */
+      position: relative;
+    }
+
+    /* When Pickr applies .pcr-button to the host element itself */
+    .pickr-btn.pcr-button {
+      border: 1.2px solid #8ca6c6;
+      border-radius: 7px;
+      box-shadow: 0 1px 3px -1px #e3f0fa;
+    }
+
+    /* If Pickr injects its own inner button element, style it */
+    .pickr-btn .pcr-button {
+      width: 26px;
+      height: 18px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,0.18);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+      padding: 0;
+    }
+
+    /* Provide a subtle focus ring when Pickr host is focused */
+    .pickr-btn:focus-visible,
+    .pickr-btn.pcr-button:focus-visible {
+      outline: 2px solid #2176ff;
+      outline-offset: 2px;
+    }
+
+    /* Keep hover consistent with other buttons */
+    .pickr-btn:hover {
+      background: #eaf2fc;
+      border-color: #2176ff;
+      box-shadow: 0 2px 7px -2px #b8c6e6;
+    }
+
+    /* Label + pickr alignment in the color group */
+    #toolbar-color-group .toolbar-label {
+      margin-left: 2px;
+      margin-right: 2px;
+    }
+
     @media (max-width: 900px) {
       #canvas-toolbar-container {
         padding: 4px 6px;
@@ -191,8 +242,16 @@ export function ensureToolbarStylesInjected() {
       .toolbar-label {
         font-weight: 600;
       }
+      .pickr-btn {
+        min-width: 38px;
+      }
+      .pickr-btn .pcr-button {
+        width: 22px;
+        height: 16px;
+      }
     }
   `;
   document.head.appendChild(style);
   log("INFO", "[toolbar-styles] Styles injected");
 }
+

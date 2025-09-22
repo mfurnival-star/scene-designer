@@ -6,9 +6,7 @@
  * - Attach all toolbar UI handlers (click/change) to DOM refs returned by renderToolbar().
  * - Dispatch intents to actions.js and selection.js (no business logic here).
  * - Handle image upload/server image selection via state.setImage().
- * - NEW (STY-01): Wire stroke/fill color controls with fill alpha.
- *   - If selection exists → apply to unlocked selected shapes.
- *   - If no selection → update defaults in settings (persisted).
+ * - Color controls use Pickr via toolbar-color.js (no native <input type="color"> here).
  *
  * Public Exports:
  * - attachToolbarHandlers(refs) -> detachFn
@@ -16,7 +14,7 @@
  *       container, imageUploadInput, imageUploadLabel, serverImageSelect,
  *       shapeTypeSelect, addShapeBtn, deleteBtn, duplicateBtn, resetRotationBtn,
  *       selectAllBtn, lockBtn, unlockBtn,
- *       strokeColorInput?, fillColorInput?, fillAlphaSlider?
+ *       strokePickrEl?, fillPickrEl?
  *     }
  *
  * Dependencies:
@@ -24,8 +22,7 @@
  * - state.js (setImage, getState)
  * - actions.js (add/delete/duplicate/lock/unlock/resetRotation)
  * - selection.js (selectAllShapes)
- * - settings-core.js (setSettingAndSave)
- * - shapes.js (setStrokeColorForSelectedShapes, setFillColorForSelectedShapes)
+ * - toolbar-color.js (installColorPickers)
  * -----------------------------------------------------------
  */
 
@@ -40,59 +37,7 @@ import {
   resetRotationForSelectedShapes
 } from './actions.js';
 import { selectAllShapes } from './selection.js';
-import { setSettingAndSave } from './settings-core.js';
-import {
-  setStrokeColorForSelectedShapes,
-  setFillColorForSelectedShapes
-} from './shapes.js';
-
-/** --- Helpers for color parsing/formatting --- */
-
-// Ensure string starts with '#'
-function ensureHash(hex) {
-  if (typeof hex !== "string") return "#000000";
-  return hex.startsWith("#") ? hex : ("#" + hex);
-}
-
-// Get #RRGGBB from #RRGGBB or #RRGGBBAA (fallback #000000)
-function toHex6(hex) {
-  const h = ensureHash(hex).toLowerCase();
-  if (h.length === 7) return h;
-  if (h.length === 9) return h.slice(0, 7);
-  // #RGB fallback expand
-  if (h.length === 4) {
-    return "#" + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
-  }
-  return "#000000";
-}
-
-// Convert alpha percent (0–100) to AA hex (00–FF)
-function alphaPctToAA(percent) {
-  let p = Number(percent);
-  if (!Number.isFinite(p)) p = 100;
-  if (p < 0) p = 0;
-  if (p > 100) p = 100;
-  const v = Math.round((p / 100) * 255);
-  return v.toString(16).padStart(2, "0");
-}
-
-// Extract alpha percent (0–100) from #RRGGBBAA or default (100 if missing)
-function alphaPctFromHex(hex, defaultPct = 100) {
-  const h = ensureHash(hex);
-  if (h.length === 9) {
-    const aa = h.slice(7, 9);
-    const v = parseInt(aa, 16);
-    if (Number.isFinite(v)) {
-      return Math.round((v / 255) * 100);
-    }
-  }
-  return defaultPct;
-}
-
-// Compose #RRGGBBAA from #RRGGBB and alpha percent
-function makeHex8(hex6, alphaPercent) {
-  return toHex6(hex6) + alphaPctToAA(alphaPercent);
-}
+import { installColorPickers } from './toolbar-color.js';
 
 /**
  * Attach all toolbar handlers. Returns a detach() function for cleanup.
@@ -117,14 +62,14 @@ export function attachToolbarHandlers(refs) {
     selectAllBtn,
     lockBtn,
     unlockBtn,
-    // NEW color controls (may be absent on older toolbars)
-    strokeColorInput,
-    fillColorInput,
-    fillAlphaSlider
+    // Pickr hosts (optional if toolbar DOM is legacy)
+    strokePickrEl,
+    fillPickrEl
   } = refs;
 
-  // Keep references to handlers for clean removal on detach()
+  // Keep references to handlers and detach fns for clean removal on detach()
   const handlers = [];
+  let detachPickrs = null;
 
   // Utility to bind and track
   function on(el, evt, fn, opts) {
@@ -299,95 +244,20 @@ export function attachToolbarHandlers(refs) {
   };
   on(unlockBtn, 'click', onUnlockClick);
 
-  // --- NEW: STY-01 Color Controls ---
-
-  // Initialize UI with current defaults (tolerant of missing controls)
+  // --- Color pickers (Pickr) ---
   try {
-    const settings = getState().settings || {};
-    if (strokeColorInput) {
-      const strokeHex6 = toHex6(settings.defaultStrokeColor || "#000000ff");
-      strokeColorInput.value = strokeHex6;
-    }
-    if (fillColorInput) {
-      const fillHex6 = toHex6(settings.defaultFillColor || "#00000000");
-      fillColorInput.value = fillHex6;
-    }
-    if (fillAlphaSlider) {
-      const alphaPct = alphaPctFromHex(settings.defaultFillColor || "#00000000", 0);
-      fillAlphaSlider.value = String(alphaPct);
-      // Note: the visual readout span is updated in toolbar-dom.js on 'input'
+    if (strokePickrEl && fillPickrEl) {
+      detachPickrs = installColorPickers({ strokePickrEl, fillPickrEl });
+      log("INFO", "[toolbar-handlers] Pickr color pickers installed via toolbar-color.js");
+    } else {
+      log("WARN", "[toolbar-handlers] Pickr hosts missing; color pickers not installed", {
+        hasStrokeHost: !!strokePickrEl,
+        hasFillHost: !!fillPickrEl
+      });
     }
   } catch (e) {
-    log("WARN", "[toolbar-handlers] Failed to init color inputs from settings", e);
+    log("ERROR", "[toolbar-handlers] Failed to install Pickr color pickers", e);
   }
-
-  // Utility: whether any shapes are currently selected
-  function hasSelection() {
-    const sel = getState().selectedShapes || [];
-    return Array.isArray(sel) && sel.length > 0;
-  }
-
-  // Stroke color change
-  const onStrokeColorChange = (e) => {
-    try {
-      const hex6 = toHex6(e?.target?.value || "#000000");
-      if (hasSelection()) {
-        setStrokeColorForSelectedShapes(hex6);
-        log("INFO", "[toolbar-handlers] Applied stroke color to selection", { hex6 });
-      } else {
-        // Persist default with opaque alpha (FF)
-        const hex8 = makeHex8(hex6, 100);
-        setSettingAndSave("defaultStrokeColor", hex8);
-        log("INFO", "[toolbar-handlers] Updated defaultStrokeColor", { hex8 });
-      }
-    } catch (err) {
-      log("ERROR", "[toolbar-handlers] Stroke color change failed", err);
-    }
-  };
-  on(strokeColorInput, 'change', onStrokeColorChange);
-  // Optional live feedback while dragging the picker
-  on(strokeColorInput, 'input', onStrokeColorChange);
-
-  // Fill color change
-  const onFillColorChange = (e) => {
-    try {
-      const hex6 = toHex6(e?.target?.value || "#000000");
-      const alphaPct = fillAlphaSlider ? Number(fillAlphaSlider.value) : 100;
-      if (hasSelection()) {
-        setFillColorForSelectedShapes(hex6, alphaPct);
-        log("INFO", "[toolbar-handlers] Applied fill color (+alpha) to selection", { hex6, alphaPct });
-      } else {
-        const hex8 = makeHex8(hex6, alphaPct);
-        setSettingAndSave("defaultFillColor", hex8);
-        log("INFO", "[toolbar-handlers] Updated defaultFillColor", { hex8 });
-      }
-    } catch (err) {
-      log("ERROR", "[toolbar-handlers] Fill color change failed", err);
-    }
-  };
-  on(fillColorInput, 'change', onFillColorChange);
-  on(fillColorInput, 'input', onFillColorChange);
-
-  // Fill alpha change (slider)
-  const onFillAlphaInput = (e) => {
-    try {
-      const alphaPct = Number(e?.target?.value ?? 100);
-      const hex6 = fillColorInput ? toHex6(fillColorInput.value || "#000000") : "#000000";
-      if (hasSelection()) {
-        setFillColorForSelectedShapes(hex6, alphaPct);
-        log("INFO", "[toolbar-handlers] Applied fill alpha to selection", { hex6, alphaPct });
-      } else {
-        const hex8 = makeHex8(hex6, alphaPct);
-        setSettingAndSave("defaultFillColor", hex8);
-        log("INFO", "[toolbar-handlers] Updated defaultFillColor alpha", { hex8 });
-      }
-      // Note: visual "% value" label is handled in toolbar-dom.js listener
-    } catch (err) {
-      log("ERROR", "[toolbar-handlers] Fill alpha change failed", err);
-    }
-  };
-  on(fillAlphaSlider, 'input', onFillAlphaInput);
-  on(fillAlphaSlider, 'change', onFillAlphaInput);
 
   log("INFO", "[toolbar-handlers] Toolbar handlers attached");
 
@@ -397,6 +267,7 @@ export function attachToolbarHandlers(refs) {
       handlers.forEach(off => {
         try { off(); } catch {}
       });
+      try { detachPickrs && detachPickrs(); } catch {}
       log("INFO", "[toolbar-handlers] Toolbar handlers detached");
     } catch (e) {
       log("ERROR", "[toolbar-handlers] Detach handlers error", e);

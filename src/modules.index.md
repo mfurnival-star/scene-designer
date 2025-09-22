@@ -125,7 +125,7 @@ Notes:
 
 ---
 
-## 11. Module Inventory and Recent Changes (2025-09-20)
+## 11. Module Inventory and Recent Changes (2025-09-22)
 
 The following modules were added/split to comply with the file size policy and improve separation of concerns. Public import paths remain unchanged where facades are provided.
 
@@ -188,7 +188,7 @@ To address a syntax error in the monolithic toolbar and comply with the file-siz
     - Facade that re-exports buildCanvasToolbarPanel from toolbar-panel.js.
     - External imports should continue using: import { buildCanvasToolbarPanel } from './toolbar.js'.
 
-- New modules (split)
+- Split modules
   - src/toolbar-panel.js
     - Panel assembly: injects styles, renders DOM, wires handlers, and installs state-driven enable/disable logic.
     - Exports: buildCanvasToolbarPanel({ element, title, componentName }).
@@ -237,82 +237,109 @@ New module
       - If target is an ActiveSelection and any member is locked → block the move (revert to previous left/top).
       - Clamp the moving target’s bounding rect to the background image bounds for both single objects and ActiveSelection hulls.
     - Tracks target._prevLeft/_prevTop to support revert on blocked multi-drag.
-  - Dependencies: state.js (getState), log.js (log). Installed by canvas-core.
 
 Updated modules
 - src/actions.js
   - Lock/unlock UX reworked to keep shapes selectable while preventing transforms/movement:
-    - lockSelectedShapes():
-      - shape.locked = true
-      - Keep selectable/evented true to enable selection via sidebar/marquee
-      - Apply Fabric locks: lockMovementX/Y, lockScalingX/Y, lockRotation = true
-      - Set hoverCursor = 'not-allowed'
-    - unlockSelectedShapes():
-      - Clears the Fabric locks above and restores hoverCursor = 'move'
-      - Works on selected shapes, or all locked shapes if none selected (selection preserved)
-  - Duplicate/delete logic unchanged functionally; minor defensive updates for cloning and strokeUniform.
+    - lockSelectedShapes() keeps shapes selectable/evented, sets Fabric movement/transform locks, hover cursor 'not-allowed'.
+    - unlockSelectedShapes() clears Fabric locks; works on selection or all locked when none selected.
 
 - src/canvas-core.js
-  - Installs movement constraints: installCanvasConstraints(canvas).
-  - Suppresses iOS Safari double‑tap zoom inside the canvas container:
-    - CSS: touch-action: manipulation on container and canvas elements.
-    - JS: touchend double‑tap timing guard with preventDefault (passive: false).
-    - JS: preventDefault on gesturestart/gesturechange for legacy Safari behavior.
-  - Retains selection syncing via canvas-events.js and “shapes above background” ordering.
+  - Installs movement constraints (installCanvasConstraints).
+  - Suppresses iOS double‑tap zoom in canvas area.
+  - Installs overlay dashed outlines for multi-select on top context.
 
 Acceptance outcomes
-- Multi-select group drag:
-  - Dragging an ActiveSelection moves all member shapes together as a group.
-  - If any selected shape is locked, group movement is blocked (no drift).
-  - Movement is clamped so no part of the selection can leave the image bounds.
-- Lock/unlock UX:
-  - Locked shapes remain selectable (sidebar/marquee), but cannot move/transform/rotate.
-  - Unlock works for currently selected shapes; if none selected and locked shapes exist, “Unlock” unlocks all locked shapes.
-- iOS Safari:
-  - Rapid double‑taps within the canvas do not zoom the page.
-  - Normal interactions (tap select, drag, marquee) remain unaffected.
-  - Non-canvas areas preserve normal page behavior.
-
-PR summary guidance for this P1 triage:
-- "Add canvas-constraints.js to clamp movement to image bounds and block multi-drag when any selected is locked."
-- "Refine lock/unlock UX: keep shapes selectable; apply Fabric movement/transform locks; update cursors."
-- "Suppress iOS Safari double‑tap zoom in canvas area via touch-action + event guards."
-- "No public API/import path changes. exports.index.json will update to include installCanvasConstraints."
-
-Verification checklist
-- Multi-select drag moves the group; any locked member blocks the drag; edges clamp correctly.
-- Locked shapes show not-allowed cursor on hover and ignore drag/transform attempts.
-- Unlock behavior works with and without an active selection.
-- On iPhone Safari, double‑tapping inside the canvas does not zoom; interactions still work.
+- Group drag is clamped to image bounds; any locked member blocks group drag.
+- Locked shapes remain selectable; unlock works with or without an active selection.
+- On iPhone Safari, double‑tapping inside the canvas does not zoom.
 
 ---
 
 ## 15. Multi-select outlines overlay refactor (2025-09-21)
 
-Goal
-- Eliminate “ghost dashed boxes” and “select twice” behavior during multi-select drags by rendering outlines as an overlay instead of Fabric objects.
-
-Changes
 - src/selection-outlines.js
-  - Reworked to paint per-shape and hull dashed boxes on Fabric’s top context (overlay) in an after:render hook.
-  - Colors: blue (#2176ff) normally; red (#e53935) if any selected shape is locked.
-  - No Fabric objects are created; nothing to clone/export; no ghosting during drags.
-  - Exports: installSelectionOutlines(canvas) -> detachFn.
+  - paints multi-select per-shape and hull dashed boxes on Fabric’s top context.
+  - Blue normally; red if any selected is locked.
+  - No Fabric outline objects remain; avoids “ghost dashed boxes”.
+
 - src/canvas-core.js
-  - Now imports and installs installSelectionOutlines(canvas) after selection sync so outlines render immediately on selection and move events.
-
-Follow-up required
-- selection-core.js should stop importing refreshMultiSelectOutlines/clearAllSelectionOutlines (legacy API) because outlines are now drawn by the overlay painter and auto-refresh on selection and movement events.
-  - Update selection-core.js to remove those imports and related calls, relying solely on transformer for single-selection and overlay for multi-selection.
-
-Acceptance outcomes
-- One marquee or Select All immediately shows dashed outlines and a single hull.
-- Drag any selected member: the entire group moves on the first attempt; outlines stay in sync (no ghosts).
-- Locked shape in selection still blocks group drag (enforced by canvas-constraints.js).
-
-PR summary guidance
-- "Refactor selection-outlines to overlay painter (after:render) to prevent ghost outlines and require-only-once selection."
-- "Wire overlay into canvas-core; remove legacy outline Fabric objects."
-- "Update selection-core to remove explicit refresh/clear outline calls."
+  - Installs the overlay painter via installSelectionOutlines(canvas).
 
 ---
+
+## 16. STY-01 Pickr Integration (2025-09-22)
+
+Goal
+- Replace native color inputs and alpha slider with Pickr-based color pickers.
+- Stroke uses hex only; Fill uses hex + opacity.
+
+New module
+- src/toolbar-color.js
+  - Purpose: Encapsulate @simonwep/pickr integration for stroke/fill color controls.
+  - Export: installColorPickers({ strokePickrEl, fillPickrEl }) -> detachFn.
+  - Behavior:
+    - If shapes are selected: live-apply stroke/fill(+alpha) to all unlocked selected shapes via shapes.js.
+    - If none selected: update defaults in settings (persisted) using settings-core.js.
+  - ESM import:
+    ```js
+    import Pickr from '@simonwep/pickr';
+    import '@simonwep/pickr/dist/themes/classic.min.css';
+    ```
+
+Updated modules
+- src/toolbar-dom.js
+  - Replaces:
+    - input[type="color"] stroke/fill
+    - range alpha slider
+  - With:
+    - Two Pickr host buttons: #toolbar-stroke-pickr and #toolbar-fill-pickr.
+- src/toolbar-handlers.js
+  - Installs Pickr controls by calling installColorPickers(refs).
+  - Removes native color/alpha wiring.
+- src/toolbar-styles.js
+  - Adds styling for Pickr host buttons to match toolbar look and feel.
+- src/toolbar-panel.js
+  - No public API change; continues to assemble styles/DOM/handlers/state.
+  - Now indirectly wires Pickr via handlers.
+
+Notes
+- Public import path unchanged (still import { buildCanvasToolbarPanel } from './toolbar.js').
+- exports.index.json remains valid (auto-generated).
+- Dependency: @simonwep/pickr must be present in package.json and imported as ESM.
+
+Acceptance
+- With selection:
+  - Stroke picker updates stroke color on unlocked Rect/Circle and Point reticle lines/rings.
+  - Fill picker updates Rect/Circle fill; for Point, only halo-like semi-transparent circles change.
+- Without selection:
+  - Stroke picker updates settings.defaultStrokeColor (#RRGGBBAA with FF alpha).
+  - Fill picker updates settings.defaultFillColor (#RRGGBBAA).
+- Stroke remains strokeUniform for shapes that support it.
+- Pickr UI loads with defaults from settings and reflects changes live.
+
+---
+
+## 17. Public Facades (unchanged)
+
+- src/toolbar.js → export { buildCanvasToolbarPanel } from './toolbar-panel.js'
+- src/shapes.js → re-exports from shapes-core.js and shapes-point.js
+- src/settings.js → re-exports from settings-core.js and settings-ui.js
+- src/selection.js → re-exports from selection-core.js
+
+---
+
+## 18. Verification Checklist (running dev)
+
+- Ensure @simonwep/pickr is installed and resolves as an ES module.
+- Toolbar renders:
+  - Stroke/Fill “Pick” buttons present; opening shows Pickr popover.
+  - Buttons auto-size; toolbar scales via settings.toolbarUIScale.
+- Actions: Add/Delete/Duplicate/Reset Rotation/Select All/Lock/Unlock work and enable/disable correctly.
+- Color behavior:
+  - Live updates when selection exists; defaults updated when none selected.
+  - Point halo-only fill changes when applicable; hit target and cutout holes remain untouched.
+- Build/dev has no Vite syntax errors.
+
+---
+
