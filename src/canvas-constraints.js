@@ -12,10 +12,15 @@
  * - installCanvasConstraints(canvas) -> detachFn
  *
  * Behavior:
+ * - On 'selection:created' / 'selection:updated':
+ *   - If the active object is an ActiveSelection and any member is locked, set
+ *     lockMovementX/Y=true on the group and use 'not-allowed' cursor.
+ *   - Record the group's origin so we can snap back if a move sneaks through.
  * - On 'object:moving':
- *   - If target is an ActiveSelection and any member is locked -> revert to previous position (block move).
- *   - Otherwise, clamp the target's bounding rect within bg image bounds.
- *   - Stores target._prevLeft/_prevTop each tick for revert logic.
+ *   - If target is an ActiveSelection and any member is locked -> reset position to origin
+ *     and render (secondary guard).
+ *   - Otherwise, clamp the moving target’s bounding rect to the background image bounds.
+ *   - Tracks target._prevLeft/_prevTop and _moveStartLeft/_moveStartTop for stability.
  *
  * Dependencies:
  * - state.js (getState)
@@ -72,6 +77,40 @@ function clampTargetWithinImage(target, img) {
 }
 
 /**
+ * Cache the current position of the active object as a "move start" origin.
+ */
+function recordMoveStartPosition(target) {
+  if (!target) return;
+  // Only record once per drag gesture; if missing, set now
+  if (target._moveStartLeft === undefined || target._moveStartTop === undefined) {
+    target._moveStartLeft = target.left ?? 0;
+    target._moveStartTop = target.top ?? 0;
+  }
+  // Always keep a rolling previous for incremental deltas if needed
+  target._prevLeft = target.left ?? 0;
+  target._prevTop = target.top ?? 0;
+}
+
+/**
+ * Reset group move lock state and cursor according to lock membership.
+ */
+function applyGroupMoveLockState(activeSel) {
+  if (!isActiveSelection(activeSel)) return;
+  const locked = anyLockedInSelection(activeSel);
+  activeSel.lockMovementX = locked;
+  activeSel.lockMovementY = locked;
+  activeSel.hoverCursor = locked ? 'not-allowed' : 'move';
+  // Record origin whenever we set the state so we can snap back if needed
+  try {
+    // Use absolute bbox to derive a stable origin, but 'left/top' is fine for snapping
+    recordMoveStartPosition(activeSel);
+  } catch {}
+  log("DEBUG", "[canvas-constraints] Group move lock state", {
+    locked, left: activeSel.left, top: activeSel.top
+  });
+}
+
+/**
  * Install movement constraints and guards on the Fabric canvas.
  * Returns a detach function to remove handlers.
  */
@@ -83,6 +122,49 @@ export function installCanvasConstraints(canvas) {
 
   // Detach prior handlers (in case of hot reload or panel rebuild)
   canvas.off('object:moving');
+  canvas.off('selection:created');
+  canvas.off('selection:updated');
+  canvas.off('selection:cleared');
+  canvas.off('mouse:down');
+
+  const onSelectionCreatedOrUpdated = () => {
+    try {
+      const active = typeof canvas.getActiveObject === "function" ? canvas.getActiveObject() : null;
+      if (!isActiveSelection(active)) return;
+
+      // Ensure coords are up-to-date and then apply lock state
+      if (typeof active.setCoords === "function") {
+        try { active.setCoords(); } catch {}
+      }
+      applyGroupMoveLockState(active);
+      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+      else canvas.renderAll();
+    } catch (e) {
+      log("ERROR", "[canvas-constraints] selection created/updated handler error", e);
+    }
+  };
+
+  const onSelectionCleared = () => {
+    try {
+      const active = typeof canvas.getActiveObject === "function" ? canvas.getActiveObject() : null;
+      if (active) {
+        // Clear any cached move-start state
+        active._moveStartLeft = undefined;
+        active._moveStartTop = undefined;
+        active._prevLeft = undefined;
+        active._prevTop = undefined;
+      }
+    } catch {}
+  };
+
+  const onMouseDown = () => {
+    try {
+      const active = typeof canvas.getActiveObject === "function" ? canvas.getActiveObject() : null;
+      if (!active) return;
+      // Record origin at the start of a drag gesture
+      recordMoveStartPosition(active);
+    } catch {}
+  };
 
   const onObjectMoving = (opt) => {
     try {
@@ -90,53 +172,72 @@ export function installCanvasConstraints(canvas) {
       if (!target) return;
 
       const img = getState().bgFabricImage;
-      if (!img) {
-        // No background image → allow movement (no clamping)
+      // If no background image → allow movement (no clamping)
+      // We still enforce group lock below even without an image.
+      const isGroup = isActiveSelection(target);
+      const anyLocked = isGroup && anyLockedInSelection(target);
+
+      // Secondary guard: if any selected is locked, block movement immediately.
+      if (isGroup && anyLocked) {
+        // Snap back to the recorded origin (if available), else keep current but do not progress
+        const backLeft = (target._moveStartLeft !== undefined) ? target._moveStartLeft : (target._prevLeft ?? target.left);
+        const backTop = (target._moveStartTop !== undefined) ? target._moveStartTop : (target._prevTop ?? target.top);
+
+        if (typeof target.set === "function") {
+          target.set({ left: backLeft, top: backTop });
+          if (typeof target.setCoords === 'function') target.setCoords();
+        }
+
+        // Re-assert lock on the group so Fabric stops processing further drags
+        target.lockMovementX = true;
+        target.lockMovementY = true;
+        target.hoverCursor = 'not-allowed';
+
+        if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+        else canvas.renderAll();
+
+        log("INFO", "[canvas-constraints] Blocked ActiveSelection move (locked member present)");
         return;
       }
 
-      // Guard multi-drag if any selected member is locked
-      if (isActiveSelection(target)) {
-        if (anyLockedInSelection(target)) {
-          // Revert to last valid position
-          if (typeof target.set === "function") {
-            const prevL = target._prevLeft ?? target.left;
-            const prevT = target._prevTop ?? target.top;
-            target.set({ left: prevL, top: prevT });
-            if (typeof target.setCoords === 'function') target.setCoords();
-          }
+      // Normal path: clamp within background image bounds
+      if (img) {
+        const didClamp = clampTargetWithinImage(target, img);
+        if (didClamp) {
           if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
           else canvas.renderAll();
-          log("INFO", "[canvas-constraints] Blocked ActiveSelection move (locked member present)");
-          return;
+          log("DEBUG", "[canvas-constraints] Movement clamped within image bounds", {
+            left: target.left, top: target.top
+          });
         }
       }
-
-      // Clamp within background image bounds for both ActiveSelection and single objects
-      const didClamp = clampTargetWithinImage(target, img);
 
       // Persist previous position for revert logic
       target._prevLeft = target.left;
       target._prevTop = target.top;
-
-      if (didClamp) {
-        if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-        else canvas.renderAll();
-        log("DEBUG", "[canvas-constraints] Movement clamped within image bounds", {
-          left: target.left, top: target.top
-        });
+      // Only set moveStart if not set yet (start of gesture)
+      if (target._moveStartLeft === undefined || target._moveStartTop === undefined) {
+        recordMoveStartPosition(target);
       }
     } catch (e) {
       log("ERROR", "[canvas-constraints] onObjectMoving error", e);
     }
   };
 
+  canvas.on('selection:created', onSelectionCreatedOrUpdated);
+  canvas.on('selection:updated', onSelectionCreatedOrUpdated);
+  canvas.on('selection:cleared', onSelectionCleared);
+  canvas.on('mouse:down', onMouseDown);
   canvas.on('object:moving', onObjectMoving);
 
-  log("INFO", "[canvas-constraints] Installed object:moving handler (clamp + lock guard)");
+  log("INFO", "[canvas-constraints] Installed constraints (selection guards + object:moving clamp/lock)");
 
   return function detach() {
     try {
+      canvas.off('selection:created', onSelectionCreatedOrUpdated);
+      canvas.off('selection:updated', onSelectionCreatedOrUpdated);
+      canvas.off('selection:cleared', onSelectionCleared);
+      canvas.off('mouse:down', onMouseDown);
       canvas.off('object:moving', onObjectMoving);
       log("INFO", "[canvas-constraints] Detached constraints handlers");
     } catch (e) {
@@ -144,3 +245,4 @@ export function installCanvasConstraints(canvas) {
     }
   };
 }
+
