@@ -59,10 +59,6 @@ Notes
   - Buttons: Align to H center, V center.
   - Acceptance: Centers selection relative to image bounds.
 
-- [ALN-04] (P1) Reset rotation
-  - Button to set selected shapes’ rotation to 0°.
-  - Acceptance: NOP for point; visuals update immediately.
-
 ---
 
 ## INT — Interaction & Creation
@@ -94,14 +90,6 @@ Notes
 ---
 
 ## SEL — Selection & Transform
-
-- [SEL-01] (P1) Multi-select group drag + hull + clamp [defect14]
-  - Drag outer hull to move all selected; clamp group to image bounds.
-  - Acceptance: Hull visible during drag; blocked if any locked in selection.
-
-- [SEL-02] (P1) Locked-drag feedback
-  - On blocked drag (due to locked items), flash outlines red briefly.
-  - Acceptance: 700–1000ms flash; no movement occurs.
 
 - [SEL-03] (P2) Numeric properties mini panel (single selection)
   - X, Y, W, H, R edit controls; Enter to apply; up/down to increment.
@@ -151,10 +139,6 @@ Notes
 ---
 
 ## MOB — Mobile/Touch/Accessibility
-
-- [MOB-01] (P1) iOS double‑tap zoom suppression [defect19]
-  - Prevent page zoom on canvas; use touch-action and event guard.
-  - Acceptance: No double‑tap zoom on iPhone; other browsers unaffected.
 
 - [MOB-02] (P2) Touch ergonomics
   - Larger hit targets for handles; touch-action: manipulation.
@@ -221,16 +205,26 @@ Notes
 
 ## Defects folded into this TODO (for convenience)
 
-- [DEF-14] (P1) Multi‑select group drag + clamping — see [SEL-01]
+- [DEF-14] (P1) Multi‑select group drag + clamping — see [SEL-01] (done 2025‑09‑22)
 - [DEF-15] (P1) Lock/unlock selection UX and safeguards
   - Unlock when none selected (all locked) via toolbar still available.
   - Ensure locked shapes are discoverable/selectable via Sidebar for targeted unlock.
-- [DEF-19] (P1) iOS Safari double‑tap zoom suppression — see [MOB-01]
+- [DEF-19] (P1) iOS Safari double‑tap zoom suppression — see [MOB-01] (done 2025‑09‑22)
 
 ---
 
 ## Done (recent)
 
-- (Add shipped items here with short notes and dates)
-  - e.g., 2025‑09‑20: Duplicate preserves all properties; Unlock button logic improved; Multi-select outlines.
+- 2025‑09‑22: [SEL-01] Multi‑select group drag + hull + clamp
+  - Implemented canvas-constraints.js clamping and multi-drag lock guard; overlay painter renders dashed hull for ActiveSelection.
+
+- 2025‑09‑22: [SEL-02] Locked‑drag feedback
+  - When a group contains any locked member, drag is blocked, cursor shows not‑allowed, and multi‑select outlines render red to indicate the lock state. If you prefer a temporary flash instead of persistent red, we can add a 700–1000ms pulse.
+
+- 2025‑09‑22: [ALN-04] Reset rotation
+  - Added resetRotationForSelectedShapes() and wired toolbar button; preserves center and respects locks.
+
+- 2025‑09‑22: [MOB-01] iOS double‑tap zoom suppression
+  - touch-action: manipulation + touchend timing guard and gesture* preventDefault in canvas-core.js.
+
 
