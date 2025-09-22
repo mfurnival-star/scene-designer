@@ -25,14 +25,14 @@
  *    setGroupDiagnosticLabelVisible
  *
  * Dependencies:
- * - fabric-wrapper.js (Rect, Circle, Group)
+ * - fabric-wrapper.js (Rect, Circle, Group, Text)
  * - state.js (getState)
  * - log.js (log)
  * - shape-state.js (setShapeState)
  * -----------------------------------------------------------
  */
 
-import { Rect, Circle, Group } from './fabric-wrapper.js';
+import { Rect, Circle, Group, Text } from './fabric-wrapper.js';
 import { log } from './log.js';
 import { setShapeState } from './shape-state.js';
 import { getState } from './state.js';
@@ -121,7 +121,7 @@ export function setShapeStrokeWidth(shape, width = 1) {
 
 // ---------- Diagnostic label helpers ----------
 export function makeDiagnosticLabel(label, id, x, y) {
-  const text = new window.fabric.Text(`${label}\n${id}`, {
+  const text = new Text(`${label}\n${id}`, {
     left: x,
     top: y - 18,
     fontSize: 11,
@@ -321,3 +321,4 @@ export function makeCircleShape(x, y, r) {
   log("DEBUG", "[shapes] makeCircleShape EXIT", { id: group._id });
   return group;
 }
+
