@@ -15,10 +15,12 @@
  * Behavior:
  * - Clears overlay in 'before:render' (device pixels, identity transform).
  * - Paints overlays in 'after:render'.
- * - When an ActiveSelection exists:
- *   - Anchor to active.aCoords.tl (absolute canvas-space top-left of the hull).
- *   - For each member, take member.getBoundingRect(false, true) (relative), then
- *     compose: abs = anchor + relative. This matches Fabric’s rebasing reliably.
+ * - When an ActiveSelection exists, member getBoundingRect(false, true) can be
+ *   relative to the selection’s CENTER. We compose absolute rects as:
+ *     activeAbs = active.getBoundingRect(true, true)
+ *     center = { x: activeAbs.left + activeAbs.width/2, y: activeAbs.top + activeAbs.height/2 }
+ *     memberRel = member.getBoundingRect(false, true)
+ *     memberAbs = { left: center.x + memberRel.left, top: center.y + memberRel.top, ... }
  * - Hidden for single selection (single uses transformer UI).
  *
  * Dependencies:
@@ -104,7 +106,6 @@ function safeBBox(obj, absolute, calc) {
 function norm(n) {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 0;
   const r = Math.round(n * 100) / 100; // keep to 0.01 precision
-  // snap near-integers to integer to stabilize dashes
   const near = Math.round(r);
   return Math.abs(r - near) < 0.01 ? near : r;
 }
@@ -113,9 +114,10 @@ function norm(n) {
  * Build absolute rects for members.
  * Strategy that tracks Fabric’s visual hull on ActiveSelection:
  * - If ActiveSelection is present:
- *    - anchor = active.aCoords.tl (absolute canvas-space TL of the selection)
- *    - memberRel = member.getBoundingRect(false, true)  // relative to group's origin
- *    - memberAbs = anchor + memberRel
+ *    - activeAbs = active.getBoundingRect(true, true)  // absolute hull
+ *    - center = (activeAbs.left + activeAbs.width/2, activeAbs.top + activeAbs.height/2)
+ *    - memberRel = member.getBoundingRect(false, true) // relative to group's CENTER on some builds
+ *    - memberAbs = center + memberRel (left/top), width/height from memberRel
  * - Otherwise:
  *    - memberAbs = member.getBoundingRect(true, true)
  */
@@ -124,22 +126,25 @@ function collectMemberAbsoluteRects(canvas, members) {
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   const isActiveSel = !!(active && active.type === 'activeSelection');
 
-  // Determine anchor for ActiveSelection
-  let anchorLeft = 0;
-  let anchorTop = 0;
+  let centerX = 0;
+  let centerY = 0;
 
   if (isActiveSel) {
     try { if (typeof active.setCoords === 'function') active.setCoords(); } catch {}
-    const aAC = active.aCoords;
-    if (aAC && aAC.tl && typeof aAC.tl.x === 'number' && typeof aAC.tl.y === 'number') {
-      anchorLeft = aAC.tl.x;
-      anchorTop = aAC.tl.y;
+    const activeAbs = safeBBox(active, true, true);
+    if (activeAbs) {
+      centerX = (activeAbs.left || 0) + (activeAbs.width || 0) / 2;
+      centerY = (activeAbs.top || 0) + (activeAbs.height || 0) / 2;
     } else {
-      // Fallback to active absolute bbox (should be equivalent for TL)
-      const aAbs = safeBBox(active, true, true);
-      if (aAbs) {
-        anchorLeft = aAbs.left || 0;
-        anchorTop = aAbs.top || 0;
+      // Fallback: synthesize center from members' absolute rects
+      const absRects = members.map(m => safeBBox(m, true, true)).filter(Boolean);
+      if (absRects.length) {
+        const minLeft = Math.min(...absRects.map(r => r.left));
+        const minTop = Math.min(...absRects.map(r => r.top));
+        const maxRight = Math.max(...absRects.map(r => r.left + r.width));
+        const maxBottom = Math.max(...absRects.map(r => r.top + r.height));
+        centerX = (minLeft + maxRight) / 2;
+        centerY = (minTop + maxBottom) / 2;
       }
     }
   }
@@ -149,14 +154,26 @@ function collectMemberAbsoluteRects(canvas, members) {
     try { if (typeof s.setCoords === 'function') s.setCoords(); } catch {}
 
     if (isActiveSel) {
+      // Use member rect relative to group; compose with group CENTER
       const rel = safeBBox(s, false, true);
       if (rel) {
         rects.push({
-          left: norm(anchorLeft + rel.left),
-          top: norm(anchorTop + rel.top),
+          left: norm(centerX + rel.left),
+          top: norm(centerY + rel.top),
           width: norm(rel.width),
           height: norm(rel.height)
         });
+      } else {
+        // Fallback to absolute (if available)
+        const abs = safeBBox(s, true, true);
+        if (abs) {
+          rects.push({
+            left: norm(abs.left),
+            top: norm(abs.top),
+            width: norm(abs.width),
+            height: norm(abs.height)
+          });
+        }
       }
     } else {
       const abs = safeBBox(s, true, true);
