@@ -15,8 +15,9 @@
  * Behavior:
  * - Clears overlay in 'before:render' in device pixels (identity transform).
  * - Paints overlays in 'after:render'.
- * - When an ActiveSelection exists, member aCoords are relative to the group's origin
- *   on some platforms; we anchor to the group's absolute top-left and offset members.
+ * - When an ActiveSelection exists, compute each member's rect by composing:
+ *     memberAbs = activeAbs (true,true) + memberRel (false,true)
+ *   This matches Fabric's group rebasing during Select All.
  * - Hidden for single selection (single selection uses transformer UI).
  *
  * Dependencies:
@@ -85,81 +86,67 @@ function expandRect(rect, padding) {
   };
 }
 
-/**
- * Axis-aligned rect from Fabric aCoords (robust even when grouped/rotated).
- * IMPORTANT: For members of an ActiveSelection on some platforms, these values are
- * relative to the group's origin (can be negative). We'll add a group offset if present.
- */
-function rectFromACoords(a) {
-  if (!a) return null;
-  const xs = [a.tl?.x, a.tr?.x, a.bl?.x, a.br?.x].filter(n => typeof n === 'number');
-  const ys = [a.tl?.y, a.tr?.y, a.bl?.y, a.br?.y].filter(n => typeof n === 'number');
-  if (xs.length < 4 || ys.length < 4) return null;
-  const minX = Math.min(...xs);
-  const minY = Math.min(...ys);
-  const maxX = Math.max(...xs);
-  const maxY = Math.max(...ys);
-  return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+// Safe wrapper around getBoundingRect
+function safeBBox(obj, absolute, calc) {
+  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
+  try {
+    return obj.getBoundingRect(absolute, calc);
+  } catch (e) {
+    log("WARN", "[selection-outlines] getBoundingRect failed", { absolute, calc, e });
+    return null;
+  }
 }
 
 /**
  * Build absolute rects for members.
  * - If ActiveSelection is present:
- *    - Anchor to active.aCoords.tl (absolute)
- *    - Member aCoords are treated as relative; we add the group's tl to get absolute.
+ *    - activeAbs = active.getBoundingRect(true, true)
+ *    - memberRel = member.getBoundingRect(false, true)
+ *    - memberAbs = activeAbs + memberRel (left/top only; width/height from memberRel)
  * - Otherwise:
- *    - Use member aCoords directly (already absolute for single objects).
+ *    - memberAbs = member.getBoundingRect(true, true)
  */
 function collectMemberAbsoluteRects(canvas, members) {
   const rects = [];
-
-  // Determine if ActiveSelection exists and get its absolute top-left
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
-  const isActiveSel = active && active.type === 'activeSelection';
-  let groupTLx = 0, groupTLy = 0;
+  const isActiveSel = !!(active && active.type === 'activeSelection');
 
+  let activeAbs = null;
   if (isActiveSel) {
-    try {
-      if (typeof active.setCoords === 'function') active.setCoords();
-    } catch {}
-    // Prefer active.aCoords.tl (absolute)
-    const aAC = active.aCoords;
-    if (aAC && aAC.tl && typeof aAC.tl.x === 'number' && typeof aAC.tl.y === 'number') {
-      groupTLx = aAC.tl.x;
-      groupTLy = aAC.tl.y;
-    } else {
-      // Fallback: active.getBoundingRect(true, true)
-      try {
-        const b = active.getBoundingRect(true, true);
-        groupTLx = b.left || 0;
-        groupTLy = b.top || 0;
-      } catch {}
+    activeAbs = safeBBox(active, true, true);
+    if (!activeAbs) {
+      // Fallback: synthesize from member absolutes
+      const absRects = members.map(m => safeBBox(m, true, true)).filter(Boolean);
+      if (absRects.length) {
+        const minLeft = Math.min(...absRects.map(r => r.left));
+        const minTop = Math.min(...absRects.map(r => r.top));
+        const maxRight = Math.max(...absRects.map(r => r.left + r.width));
+        const maxBottom = Math.max(...absRects.map(r => r.top + r.height));
+        activeAbs = { left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop };
+      } else {
+        activeAbs = { left: 0, top: 0, width: 0, height: 0 };
+      }
     }
   }
 
   for (const s of members) {
     if (!s) continue;
-    try {
-      if (typeof s.setCoords === 'function') s.setCoords();
-    } catch {}
-    const r = rectFromACoords(s.aCoords);
-    if (!r) continue;
-
-    if (isActiveSel) {
-      // Member rect is relative to group; convert to absolute by adding group's absolute TL
-      const abs = {
-        left: r.left + groupTLx,
-        top: r.top + groupTLy,
-        width: r.width,
-        height: r.height
-      };
-      rects.push(abs);
+    try { if (typeof s.setCoords === 'function') s.setCoords(); } catch {}
+    if (isActiveSel && activeAbs) {
+      const rel = safeBBox(s, false, true);
+      if (rel) {
+        rects.push({
+          left: activeAbs.left + rel.left,
+          top: activeAbs.top + rel.top,
+          width: rel.width,
+          height: rel.height
+        });
+      }
     } else {
-      // No active selection: aCoords are absolute
-      rects.push(r);
+      const abs = safeBBox(s, true, true);
+      if (abs) rects.push(abs);
     }
   }
-
   return rects;
 }
 
@@ -189,8 +176,8 @@ function paintSelectionOutlines(canvas) {
   const showHull = state.settings?.multiDragBox !== false;
 
   ctx.save();
-  // We deliberately do not override ctx transform here; Fabric draws upper canvas with its own transform.
-  // The logs show identity VPT/DPR on your device; keeping as-is avoids double transforms.
+  // Do not override transform; Fabric uses identity top-context for selection UI
+  // in our current setup (DPR handled in clear).
 
   const rects = collectMemberAbsoluteRects(canvas, members);
 
@@ -312,4 +299,3 @@ export function installSelectionOutlines(canvas) {
     }
   };
 }
-
