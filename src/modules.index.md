@@ -335,11 +335,37 @@ Acceptance
 - Toolbar renders:
   - Stroke/Fill “Pick” buttons present; opening shows Pickr popover.
   - Buttons auto-size; toolbar scales via settings.toolbarUIScale.
+  - Two-row toolbar layout is active: Row 1 (Image + Shape + primary actions), Row 2 (edit actions + color), with no horizontal scrolling at ~1280px width; wraps gracefully below that.
 - Actions: Add/Delete/Duplicate/Reset Rotation/Select All/Lock/Unlock work and enable/disable correctly.
 - Color behavior:
   - Live updates when selection exists; defaults updated when none selected.
   - Point halo-only fill changes when applicable; hit target and cutout holes remain untouched.
 - Build/dev has no Vite syntax errors.
+
+---
+
+## 19. Two-row Toolbar Layout (2025-09-22)
+
+Goal
+- Reduce horizontal scrolling by restructuring the toolbar into two rows of grouped controls.
+
+Changes
+- src/toolbar-dom.js
+  - Introduced two logical rows:
+    - Row 1: Image controls (upload/server select), Shape type + Add, primary selection actions (Delete, Select All).
+    - Row 2: Edit actions (Duplicate, Reset Rotation, Lock, Unlock) and Color controls (Pickr Stroke/Fill).
+- src/toolbar-styles.js
+  - Root container now flex-column to stack rows, with responsive wrapping of groups on narrow widths.
+  - Preserved auto-sizing buttons; scale via font-size/CSS var so widths reflow with scale.
+  - Pickr host buttons styled to match toolbar look and feel; hit-area preserved.
+
+Notes
+- No public API changes. Facade path remains import { buildCanvasToolbarPanel } from './toolbar.js'.
+- State sync and handlers remain unchanged; only DOM layout and CSS updated.
+
+Acceptance
+- At typical desktop widths (~1280px), toolbar shows two rows without horizontal scrolling.
+- Below ~1100px, groups wrap gracefully within each row; interaction targets remain comfortable.
 
 ---
 
