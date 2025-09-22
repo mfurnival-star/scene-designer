@@ -15,8 +15,10 @@
  * Behavior:
  * - Clears overlay in 'before:render' (device pixels, identity transform).
  * - Paints overlays in 'after:render'.
- * - When an ActiveSelection exists, member getBoundingRect(false, true) can be
- *   relative to the selection’s CENTER. We compose absolute rects as:
+ * - Only paints when a Fabric ActiveSelection exists. This guarantees the overlay
+ *   disappears as soon as Fabric clears the selection (e.g., background click).
+ * - When ActiveSelection exists, some Fabric builds report member bounding boxes
+ *   relative to the group CENTER. We compose absolute rects as:
  *     activeAbs = active.getBoundingRect(true, true)
  *     center = { x: activeAbs.left + activeAbs.width/2, y: activeAbs.top + activeAbs.height/2 }
  *     memberRel = member.getBoundingRect(false, true)
@@ -24,12 +26,12 @@
  * - Hidden for single selection (single uses transformer UI).
  *
  * Dependencies:
- * - state.js (getState, sceneDesignerStore)
+ * - state.js (sceneDesignerStore)
  * - log.js (log)
  * -----------------------------------------------------------
  */
 
-import { getState, sceneDesignerStore } from './state.js';
+import { sceneDesignerStore } from './state.js';
 import { log } from './log.js';
 
 /**
@@ -76,7 +78,10 @@ function strokeDashedRect(ctx, x, y, w, h, { color = '#2176ff', lineWidth = 1.2,
   try { ctx.setLineDash(dash); } catch {}
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidth;
-  ctx.strokeRect(x, y, w, h);
+  // Pixel-align for crisp dashes when values are integers
+  const px = Math.round(x) === x ? 0.5 : 0;
+  const py = Math.round(y) === y ? 0.5 : 0;
+  ctx.strokeRect(x + px, y + py, w, h);
   ctx.restore();
 }
 
@@ -118,107 +123,61 @@ function norm(n) {
  *    - center = (activeAbs.left + activeAbs.width/2, activeAbs.top + activeAbs.height/2)
  *    - memberRel = member.getBoundingRect(false, true) // relative to group's CENTER on some builds
  *    - memberAbs = center + memberRel (left/top), width/height from memberRel
- * - Otherwise:
- *    - memberAbs = member.getBoundingRect(true, true)
  */
-function collectMemberAbsoluteRects(canvas, members) {
+function collectMemberAbsoluteRectsFromActive(active) {
   const rects = [];
-  const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
-  const isActiveSel = !!(active && active.type === 'activeSelection');
+  if (!active || active.type !== 'activeSelection' || !Array.isArray(active._objects)) return rects;
 
-  let centerX = 0;
-  let centerY = 0;
+  try { if (typeof active.setCoords === 'function') active.setCoords(); } catch {}
+  const activeAbs = safeBBox(active, true, true);
 
-  if (isActiveSel) {
-    try { if (typeof active.setCoords === 'function') active.setCoords(); } catch {}
-    const activeAbs = safeBBox(active, true, true);
-    if (activeAbs) {
-      centerX = (activeAbs.left || 0) + (activeAbs.width || 0) / 2;
-      centerY = (activeAbs.top || 0) + (activeAbs.height || 0) / 2;
-    } else {
-      // Fallback: synthesize center from members' absolute rects
-      const absRects = members.map(m => safeBBox(m, true, true)).filter(Boolean);
-      if (absRects.length) {
-        const minLeft = Math.min(...absRects.map(r => r.left));
-        const minTop = Math.min(...absRects.map(r => r.top));
-        const maxRight = Math.max(...absRects.map(r => r.left + r.width));
-        const maxBottom = Math.max(...absRects.map(r => r.top + r.height));
-        centerX = (minLeft + maxRight) / 2;
-        centerY = (minTop + maxBottom) / 2;
-      }
-    }
-  }
+  // No activeAbs means nothing to anchor; return empty (no overlay)
+  if (!activeAbs) return rects;
 
-  for (const s of members) {
+  const centerX = (activeAbs.left || 0) + (activeAbs.width || 0) / 2;
+  const centerY = (activeAbs.top || 0) + (activeAbs.height || 0) / 2;
+
+  for (const s of active._objects) {
     if (!s) continue;
     try { if (typeof s.setCoords === 'function') s.setCoords(); } catch {}
-
-    if (isActiveSel) {
-      // Use member rect relative to group; compose with group CENTER
-      const rel = safeBBox(s, false, true);
-      if (rel) {
-        rects.push({
-          left: norm(centerX + rel.left),
-          top: norm(centerY + rel.top),
-          width: norm(rel.width),
-          height: norm(rel.height)
-        });
-      } else {
-        // Fallback to absolute (if available)
-        const abs = safeBBox(s, true, true);
-        if (abs) {
-          rects.push({
-            left: norm(abs.left),
-            top: norm(abs.top),
-            width: norm(abs.width),
-            height: norm(abs.height)
-          });
-        }
-      }
-    } else {
-      const abs = safeBBox(s, true, true);
-      if (abs) {
-        rects.push({
-          left: norm(abs.left),
-          top: norm(abs.top),
-          width: norm(abs.width),
-          height: norm(abs.height)
-        });
-      }
-    }
+    const rel = safeBBox(s, false, true);
+    if (!rel) continue;
+    rects.push({
+      left: norm(centerX + rel.left),
+      top: norm(centerY + rel.top),
+      width: norm(rel.width),
+      height: norm(rel.height)
+    });
   }
   return rects;
 }
 
 /**
  * Draw per-shape boxes and a single outer hull on top context.
+ * IMPORTANT: Only draws when a Fabric ActiveSelection exists.
  */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
   if (!ctx) return;
 
-  const state = getState();
-  const selectedStore = state.selectedShapes || [];
-
-  // Prefer current Fabric members if an ActiveSelection exists (keeps sync while dragging group)
+  // Only honor Fabric's current ActiveSelection. If none → nothing to paint.
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
-  const members = (active && active.type === 'activeSelection' && Array.isArray(active._objects))
-    ? active._objects
-    : selectedStore;
-
-  if (!Array.isArray(members) || members.length <= 1) {
-    // Single or none: transformer handles single; nothing to overlay.
+  if (!active || active.type !== 'activeSelection' || !Array.isArray(active._objects) || active._objects.length <= 1) {
+    // Nothing to overlay (single selection or no selection)
     return;
   }
 
-  const anyLocked = members.some(s => s && s.locked);
+  const anyLocked = active._objects.some(s => s && s.locked);
   const color = anyLocked ? '#e53935' : '#2176ff';
-  const showHull = state.settings?.multiDragBox !== false;
 
   ctx.save();
   // Do not override ctx transform; keep as Fabric leaves it for the top context.
 
-  const rects = collectMemberAbsoluteRects(canvas, members);
+  const rects = collectMemberAbsoluteRectsFromActive(active);
+  if (rects.length === 0) {
+    ctx.restore();
+    return;
+  }
 
   // Draw per-member boxes
   for (const r of rects) {
@@ -226,17 +185,15 @@ function paintSelectionOutlines(canvas) {
   }
 
   // Draw outer hull
-  if (showHull && rects.length > 0) {
-    const minLeft = Math.min(...rects.map(r => r.left));
-    const minTop = Math.min(...rects.map(r => r.top));
-    const maxRight = Math.max(...rects.map(r => r.left + r.width));
-    const maxBottom = Math.max(...rects.map(r => r.top + r.height));
-    const hull = expandRect(
-      { left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop },
-      4
-    );
-    strokeDashedRect(ctx, hull.left, hull.top, hull.width, hull.height, { color, lineWidth: 2, dash: [8, 6] });
-  }
+  const minLeft = Math.min(...rects.map(r => r.left));
+  const minTop = Math.min(...rects.map(r => r.top));
+  const maxRight = Math.max(...rects.map(r => r.left + r.width));
+  const maxBottom = Math.max(...rects.map(r => r.top + r.height));
+  const hull = expandRect(
+    { left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop },
+    4
+  );
+  strokeDashedRect(ctx, hull.left, hull.top, hull.width, hull.height, { color, lineWidth: 2, dash: [8, 6] });
 
   ctx.restore();
 }
@@ -283,7 +240,7 @@ export function installSelectionOutlines(canvas) {
     }
   };
 
-  // Bind hooks (avoid broad canvas.off() to not stomp others)
+  // Bind hooks
   canvas.on('before:render', clearTop);
   canvas.on('after:render', painter);
 
@@ -300,11 +257,10 @@ export function installSelectionOutlines(canvas) {
   canvas.on('object:moving', onSelectionEvent);
   canvas.on('object:modified', onSelectionEvent);
 
-  // Also subscribe to store to pick up settings changes or store-driven selection
+  // Also subscribe to store-driven settings changes that affect visibility
   const unsub = sceneDesignerStore.subscribe((state, details) => {
     if (!details) return;
     if (
-      details.type === 'setSelectedShapes' ||
       details.type === 'setSettings' ||
       (details.type === 'setSetting' && details.key === 'multiDragBox')
     ) {
@@ -312,7 +268,7 @@ export function installSelectionOutlines(canvas) {
     }
   });
 
-  log("INFO", "[selection-outlines] Overlay selection outlines installed");
+  log("INFO", "[selection-outlines] Overlay selection outlines installed (ActiveSelection-only)");
   return function detach() {
     try {
       canvas.off('before:render', clearTop);
