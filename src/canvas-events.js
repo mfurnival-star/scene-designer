@@ -22,6 +22,7 @@
  * - Guards against no-op loops by comparing selected IDs before mutating store.
  * - Suppresses handling when changes are programmatic (to avoid event feedback loops).
  * - Ignores 'selection:cleared' if not triggered by a user event (opt.e is falsy).
+ * - NEW: Clears selection when clicking the background (mouse:down with no target).
  */
 
 import { log } from './log.js';
@@ -88,6 +89,8 @@ export function installFabricSelectionSync(canvas) {
   canvas.off('selection:created');
   canvas.off('selection:updated');
   canvas.off('selection:cleared');
+  // NEW: also normalize mouse:down listener
+  canvas.off('mouse:down');
 
   const onCreated = (opt) => {
     if (suppressHandlers) {
@@ -157,9 +160,39 @@ export function installFabricSelectionSync(canvas) {
     withSuppressedHandlers(() => deselectAll(), "cleared->deselectAll");
   };
 
+  /**
+   * NEW: Clear selection when clicking on background (blank area).
+   * Some environments with full-size background images and overlay UIs
+   * do not emit selection:cleared reliably on background clicks.
+   * We ensure UX by clearing selection on mouse:down with no target.
+   */
+  const onMouseDown = (opt) => {
+    try {
+      if (suppressHandlers) return;
+      const hadSelection = (getState().selectedShapes || []).length > 0;
+      const clickedBlank = !opt?.target;
+      if (hadSelection && clickedBlank) {
+        log("DEBUG", "[canvas-events] mouse:down on blank area → clearing selection");
+        withSuppressedHandlers(() => {
+          // Discard Fabric active object (hides hull) and clear store selection
+          if (typeof canvas.discardActiveObject === 'function') {
+            try { canvas.discardActiveObject(); } catch {}
+          }
+          deselectAll();
+        }, "mousedown-blank->deselectAll");
+        if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
+        else canvas.renderAll();
+      }
+    } catch (e) {
+      log("ERROR", "[canvas-events] mouse:down handler error", e);
+    }
+  };
+
   canvas.on('selection:created', onCreated);
   canvas.on('selection:updated', onUpdated);
   canvas.on('selection:cleared', onCleared);
+  canvas.on('mouse:down', onMouseDown);
 
-  log("INFO", "[canvas-events] Fabric selection sync installed (created/updated/cleared handlers + reentrancy guard)");
+  log("INFO", "[canvas-events] Fabric selection sync installed (created/updated/cleared handlers + blank-click clear + reentrancy guard)");
 }
+
