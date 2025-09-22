@@ -104,7 +104,7 @@ export function renderToolbar(element) {
         <span id="toolbar-fill-alpha-value" aria-hidden="true" style="min-width:2.5em;text-align:right;">0%</span>
       </div>
     </div>
-  ";
+  `;
 
   // Query refs scoped to the provided element
   const container = element.querySelector('#canvas-toolbar-container');
