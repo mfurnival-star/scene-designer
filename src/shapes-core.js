@@ -3,7 +3,7 @@
  * -----------------------------------------------------------
  * Scene Designer – Shape Core (Fabric.js, ESM ONLY)
  * Purpose:
- * - Core helpers used by shape factories (IDs, labels, stroke width).
+ * - Core helpers used by shape factories (IDs, labels, stroke/fill/width).
  * - Implements non-point shapes (rect, circle).
  * - Diagnostic label visibility management for all shapes.
  *
@@ -11,6 +11,8 @@
  * - Public:
  *    setStrokeWidthForSelectedShapes,
  *    fixStrokeWidthAfterTransform,
+ *    setStrokeColorForSelectedShapes,
+ *    setFillColorForSelectedShapes,
  *    makeRectShape,
  *    makeCircleShape,
  *    applyDiagnosticLabelsVisibility
@@ -47,13 +49,55 @@ export function getDefaultStrokeWidth() {
   return val > 0 ? val : 1;
 }
 export function getStrokeColor() {
+  // Stored format: #RRGGBB or #RRGGBBAA; we keep as-is for stroke
   return getState().settings?.defaultStrokeColor ?? '#2176ff';
 }
 export function getFillColor() {
+  // Stored format: #RRGGBB or #RRGGBBAA; factories convert to rgba() when needed
   return getState().settings?.defaultFillColor ?? '#00000000';
 }
 export function getShowDiagnosticLabels() {
   return !!getState().settings?.showDiagnosticLabels;
+}
+
+// ---------- Color helpers ----------
+function clamp01(n) {
+  n = Number(n);
+  if (!Number.isFinite(n)) return 0;
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
+}
+function hexToRGBA(hex) {
+  if (typeof hex !== 'string') return { r: 0, g: 0, b: 0, a: 1 };
+  let h = hex.trim().toLowerCase();
+  if (!h.startsWith('#')) return { r: 0, g: 0, b: 0, a: 1 };
+  h = h.slice(1);
+  if (h.length === 3) {
+    // #rgb → #rrggbb
+    h = h.split('').map(c => c + c).join('');
+  }
+  if (h.length === 6) {
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return { r, g, b, a: 1 };
+  }
+  if (h.length === 8) {
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    const a = parseInt(h.slice(6, 8), 16) / 255;
+    return { r, g, b, a: clamp01(a) };
+  }
+  return { r: 0, g: 0, b: 0, a: 1 };
+}
+function rgbaStringFromHex(hex, alphaOverridePct = null) {
+  const { r, g, b, a } = hexToRGBA(hex);
+  const aOut = alphaOverridePct === null || alphaOverridePct === undefined
+    ? a
+    : clamp01(Number(alphaOverridePct) / 100);
+  return `rgba(${r},${g},${b},${aOut})`;
 }
 
 // ---------- Stroke width control ----------
@@ -112,11 +156,89 @@ export function setShapeStrokeWidth(shape, width = 1) {
   if (shape._objects && Array.isArray(shape._objects)) {
     shape._objects.forEach(obj => {
       if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'line') {
+        // Skip diagnostic labels
+        if (obj._isDiagnosticLabel) return;
         applyToObj(obj);
       }
     });
   }
   log("DEBUG", "[shapes] setShapeStrokeWidth EXIT", { id: shape?._id, type: shape?._type, width: w });
+}
+
+// ---------- New: stroke/fill color application ----------
+/**
+ * Apply stroke color to all unlocked selected shapes.
+ * - Rect/Circle: stroke on main primitive; strokeUniform true.
+ * - Point: updates line and circle strokes (rings); skips label/hit/holes.
+ */
+export function setStrokeColorForSelectedShapes(hexColor) {
+  const color = typeof hexColor === "string" ? hexColor : "#000000";
+  const selected = (getState().selectedShapes || []).filter(s => s && !s.locked);
+  log("DEBUG", "[shapes] setStrokeColorForSelectedShapes ENTRY", {
+    color, selectedIds: selected.map(s => s._id)
+  });
+
+  selected.forEach(shape => {
+    if (!Array.isArray(shape._objects)) return;
+    shape._objects.forEach(obj => {
+      if (!obj || obj._isDiagnosticLabel) return;
+      if (obj.type === 'line' || obj.type === 'rect' || obj.type === 'circle') {
+        if ('stroke' in obj) obj.set({ stroke: color });
+        if ('strokeUniform' in obj) obj.set({ strokeUniform: true });
+      }
+    });
+  });
+
+  const canvas = getState().fabricCanvas;
+  if (canvas) (typeof canvas.requestRenderAll === "function" ? canvas.requestRenderAll() : canvas.renderAll());
+  log("INFO", "[shapes] Stroke color applied to selection", {
+    color, count: selected.length
+  });
+}
+
+/**
+ * Apply fill color (with alpha) to all unlocked selected shapes.
+ * - Rect/Circle: set fill to rgba(...) computed from hex + alpha slider value.
+ * - Point: only update halo-like circles (opacity between 0 and 1). Skips hitCircle (opacity 0),
+ *          skips 'dot' filled center (opacity 1), skips label and hole rects.
+ */
+export function setFillColorForSelectedShapes(hexColor, alphaPercent = null) {
+  const rgba = rgbaStringFromHex(hexColor || "#000000", alphaPercent);
+  const selected = (getState().selectedShapes || []).filter(s => s && !s.locked);
+  log("DEBUG", "[shapes] setFillColorForSelectedShapes ENTRY", {
+    hexColor, alphaPercent, rgba, selectedIds: selected.map(s => s._id)
+  });
+
+  selected.forEach(shape => {
+    if (!Array.isArray(shape._objects)) return;
+    const isPoint = shape._type === 'point';
+
+    shape._objects.forEach(obj => {
+      if (!obj || obj._isDiagnosticLabel) return;
+
+      if (!isPoint) {
+        // Rect/Circle shapes: set fill on main primitive(s)
+        if ((obj.type === 'rect' || obj.type === 'circle') && 'fill' in obj) {
+          obj.set({ fill: rgba });
+        }
+      } else {
+        // Point: only update halo-like circles (semi-transparent overlays)
+        if (obj.type === 'circle' && 'fill' in obj) {
+          const op = (typeof obj.opacity === "number") ? obj.opacity : 1;
+          if (op > 0 && op < 1) {
+            obj.set({ fill: rgba });
+          }
+        }
+        // Never touch hole rects (destination-out) or hitCircle (opacity 0)
+      }
+    });
+  });
+
+  const canvas = getState().fabricCanvas;
+  if (canvas) (typeof canvas.requestRenderAll === "function" ? canvas.requestRenderAll() : canvas.renderAll());
+  log("INFO", "[shapes] Fill color applied to selection", {
+    rgba, count: selected.length
+  });
 }
 
 // ---------- Diagnostic label helpers ----------
@@ -227,7 +349,8 @@ export function makeRectShape(x, y, w, h) {
     height: h,
     stroke: strokeColor,
     strokeWidth: strokeW,
-    fill: fillColor
+    // Convert stored hex (maybe #RRGGBBAA) to rgba() for Fabric safety
+    fill: rgbaStringFromHex(fillColor)
   });
   rect.selectable = false;
   rect.evented = false;
@@ -284,7 +407,8 @@ export function makeCircleShape(x, y, r) {
     radius: r,
     stroke: strokeColor,
     strokeWidth: strokeW,
-    fill: fillColor
+    // Convert stored hex (maybe #RRGGBBAA) to rgba() for Fabric safety
+    fill: rgbaStringFromHex(fillColor)
   });
   circle.selectable = false;
   circle.evented = false;

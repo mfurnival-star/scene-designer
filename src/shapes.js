@@ -6,12 +6,14 @@
  * - Keep the public import path stable for all modules that import './shapes.js'.
  * - Re-export the public API from the split modules:
  *    - shapes-core.js → core helpers + non-point shapes (rect, circle),
- *      stroke-width helpers, diagnostic label visibility.
+ *      stroke/fill/stroke-width helpers, diagnostic label visibility.
  *    - shapes-point.js → point-only logic (reticle styles and factory).
  *
- * Public Exports (unchanged):
+ * Public Exports (updated):
  * - setStrokeWidthForSelectedShapes
  * - fixStrokeWidthAfterTransform
+ * - setStrokeColorForSelectedShapes
+ * - setFillColorForSelectedShapes
  * - makePointShape
  * - makeRectShape
  * - makeCircleShape
@@ -27,6 +29,8 @@ export {
   // Core helpers and non-point shapes
   setStrokeWidthForSelectedShapes,
   fixStrokeWidthAfterTransform,
+  setStrokeColorForSelectedShapes,
+  setFillColorForSelectedShapes,
   makeRectShape,
   makeCircleShape,
   applyDiagnosticLabelsVisibility

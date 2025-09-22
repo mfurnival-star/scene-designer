@@ -24,6 +24,9 @@
  * - selectAllBtn
  * - lockBtn
  * - unlockBtn
+ * - strokeColorInput
+ * - fillColorInput
+ * - fillAlphaSlider
  *
  * Dependencies:
  * - log.js (logging)
@@ -60,6 +63,7 @@ export function renderToolbar(element) {
           <option value="sample2.png">sample2.png</option>
         </select>
       </div>
+
       <div class="toolbar-group">
         <span class="toolbar-label">Shape:</span>
         <select id="toolbar-shape-type-select" title="Select a shape type">
@@ -79,8 +83,28 @@ export function renderToolbar(element) {
         <button id="toolbar-lock-btn" class="toolbar-btn" title="Lock selected shape(s)">Lock</button>
         <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
       </div>
+
+      <div class="toolbar-group" id="toolbar-color-group">
+        <span class="toolbar-label">Color:</span>
+        <label class="toolbar-label" for="toolbar-stroke-color-input" title="Stroke color">Stroke</label>
+        <input type="color" id="toolbar-stroke-color-input" title="Stroke color (#RRGGBB)">
+
+        <label class="toolbar-label" for="toolbar-fill-color-input" title="Fill color">Fill</label>
+        <input type="color" id="toolbar-fill-color-input" title="Fill color (#RRGGBB)">
+        <input
+          type="range"
+          id="toolbar-fill-alpha-input"
+          min="0"
+          max="100"
+          step="1"
+          value="0"
+          title="Fill Alpha (0–100%)"
+          style="width:120px;"
+        >
+        <span id="toolbar-fill-alpha-value" aria-hidden="true" style="min-width:2.5em;text-align:right;">0%</span>
+      </div>
     </div>
-  `;
+  ";
 
   // Query refs scoped to the provided element
   const container = element.querySelector('#canvas-toolbar-container');
@@ -99,6 +123,21 @@ export function renderToolbar(element) {
   const lockBtn = element.querySelector('#toolbar-lock-btn');
   const unlockBtn = element.querySelector('#toolbar-unlock-btn');
 
+  // New color controls
+  const strokeColorInput = element.querySelector('#toolbar-stroke-color-input');
+  const fillColorInput = element.querySelector('#toolbar-fill-color-input');
+  const fillAlphaSlider = element.querySelector('#toolbar-fill-alpha-input');
+  const fillAlphaValue = element.querySelector('#toolbar-fill-alpha-value');
+
+  // Initialize simple alpha value readout (no state coupling here)
+  if (fillAlphaSlider && fillAlphaValue) {
+    fillAlphaValue.textContent = `${fillAlphaSlider.value}%`;
+    // Lightweight UI update; event wiring to business logic happens in toolbar-handlers.js
+    fillAlphaSlider.addEventListener('input', () => {
+      fillAlphaValue.textContent = `${fillAlphaSlider.value}%`;
+    });
+  }
+
   const refs = {
     container,
     imageUploadInput,
@@ -111,7 +150,10 @@ export function renderToolbar(element) {
     resetRotationBtn,
     selectAllBtn,
     lockBtn,
-    unlockBtn
+    unlockBtn,
+    strokeColorInput,
+    fillColorInput,
+    fillAlphaSlider
   };
 
   // Basic sanity check
@@ -127,3 +169,4 @@ export function renderToolbar(element) {
 
   return refs;
 }
+
