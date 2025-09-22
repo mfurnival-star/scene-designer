@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@simonwep/pickr": "^1.9.1",
     "console-remote-client": "^2.1.18",
     "fabric": "^5.3.0",
     "golden-layout": "^2.5.0",

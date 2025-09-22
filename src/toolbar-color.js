@@ -40,7 +40,8 @@ import {
 // Ensure string starts with '#'
 function ensureHash(hex) {
   if (typeof hex !== "string") return "#000000";
-  return hex.startsWith("#") ? hex : ("#" + hex);
+  const s = hex.trim();
+  return s.startsWith("#") ? s : ("#" + s);
 }
 
 // Get #RRGGBB from #RRGGBB or #RRGGBBAA (fallback #000000)
@@ -85,6 +86,25 @@ function makeHex8(hex6, alphaPercent) {
 function hasSelection() {
   const sel = getState().selectedShapes || [];
   return Array.isArray(sel) && sel.length > 0;
+}
+
+// Convert Pickr color to #RRGGBB
+function pickrColorToHex6(color) {
+  // toHEXA() returns array of hex strings ['rr','gg','bb','aa']
+  const arr = color.toHEXA();
+  const hex6 = '#' + arr.slice(0, 3).map(h => (typeof h === 'string' ? h.padStart(2, '0') : String(h).padStart(2, '0'))).join('').toLowerCase();
+  return hex6;
+}
+
+// Convert Pickr color to alpha percent (0–100)
+function pickrColorToAlphaPct(color) {
+  const rgba = color.toRGBA(); // [r,g,b,a]
+  const a = Array.isArray(rgba) ? (rgba[3] ?? 1) : 1;
+  let pct = Math.round(Number(a) * 100);
+  if (!Number.isFinite(pct)) pct = 100;
+  if (pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+  return pct;
 }
 
 /**
@@ -157,7 +177,7 @@ export function installColorPickers(refs) {
   const onStrokeChange = (color /*, instance */) => {
     try {
       if (!color) return;
-      const hex6 = '#' + color.toHEXA().slice(0, 3).map(b => b.toString(16).padStart(2, '0')).join('');
+      const hex6 = pickrColorToHex6(color);
       if (hasSelection()) {
         setStrokeColorForSelectedShapes(hex6);
         log("INFO", "[toolbar-color] Applied stroke to selection", { hex6 });
@@ -176,11 +196,8 @@ export function installColorPickers(refs) {
   const onFillChange = (color /*, instance */) => {
     try {
       if (!color) return;
-      // hex + separate alpha percent
-      const hexaArr = color.toHEXA();
-      const hex6 = '#' + hexaArr.slice(0, 3).map(b => b.toString(16).padStart(2, '0')).join('');
-      const rgba = color.toRGBA();
-      const alphaPct = Math.round((rgba[3] ?? 1) * 100);
+      const hex6 = pickrColorToHex6(color);
+      const alphaPct = pickrColorToAlphaPct(color);
 
       if (hasSelection()) {
         setFillColorForSelectedShapes(hex6, alphaPct);
