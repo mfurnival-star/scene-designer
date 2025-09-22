@@ -15,8 +15,10 @@
  * Behavior:
  * - Clears overlay in 'before:render' (device pixels, identity transform).
  * - Paints overlays in 'after:render'.
- * - When an ActiveSelection exists, compute each member's rect using the group's
- *   canvas-space origin (active.left/top) plus the member's own left/top and scaled size.
+ * - When an ActiveSelection exists:
+ *   - Anchor to active.aCoords.tl (absolute canvas-space top-left of the hull).
+ *   - For each member, take member.getBoundingRect(false, true) (relative), then
+ *     compose: abs = anchor + relative. This matches Fabric’s rebasing reliably.
  * - Hidden for single selection (single uses transformer UI).
  *
  * Dependencies:
@@ -85,62 +87,88 @@ function expandRect(rect, padding) {
   };
 }
 
-/**
- * Safe scaled width/height helpers.
- */
-function scaledWidth(obj) {
+// Safe wrapper around getBoundingRect
+function safeBBox(obj, absolute, calc) {
+  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
   try {
-    if (typeof obj.getScaledWidth === 'function') return obj.getScaledWidth();
-    if (obj.scaleX && obj.width) return obj.scaleX * obj.width;
-    return obj.width || 0;
-  } catch { return obj?.width || 0; }
+    return obj.getBoundingRect(absolute, calc);
+  } catch (e) {
+    log("WARN", "[selection-outlines] getBoundingRect failed", { absolute, calc, e });
+    return null;
+  }
 }
-function scaledHeight(obj) {
-  try {
-    if (typeof obj.getScaledHeight === 'function') return obj.getScaledHeight();
-    if (obj.scaleY && obj.height) return obj.scaleY * obj.height;
-    return obj.height || 0;
-  } catch { return obj?.height || 0; }
+
+/**
+ * Normalize tiny fractional drift (Safari often returns 0.5px deltas).
+ */
+function norm(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return 0;
+  const r = Math.round(n * 100) / 100; // keep to 0.01 precision
+  // snap near-integers to integer to stabilize dashes
+  const near = Math.round(r);
+  return Math.abs(r - near) < 0.01 ? near : r;
 }
 
 /**
  * Build absolute rects for members.
- * Robust mapping observed to match Fabric’s visual positions across platforms:
- * - If ActiveSelection exists:
- *    anchor = { left: active.left, top: active.top }  // canvas-space origin of group
- *    memberAbs.left  = anchor.left + member.left
- *    memberAbs.top   = anchor.top  + member.top
- *    memberAbs.width  = member.getScaledWidth()
- *    memberAbs.height = member.getScaledHeight()
- * - Else (no ActiveSelection):
- *    memberAbs from member.left/top + scaled size directly.
- *
- * Notes:
- * - We avoid getBoundingRect()/aCoords here because some Fabric builds report
- *   member rects in group space during ActiveSelection; anchoring to
- *   active.left/top consistently reprojects into canvas space.
+ * Strategy that tracks Fabric’s visual hull on ActiveSelection:
+ * - If ActiveSelection is present:
+ *    - anchor = active.aCoords.tl (absolute canvas-space TL of the selection)
+ *    - memberRel = member.getBoundingRect(false, true)  // relative to group's origin
+ *    - memberAbs = anchor + memberRel
+ * - Otherwise:
+ *    - memberAbs = member.getBoundingRect(true, true)
  */
 function collectMemberAbsoluteRects(canvas, members) {
   const rects = [];
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   const isActiveSel = !!(active && active.type === 'activeSelection');
 
-  const anchorLeft = isActiveSel ? (active.left ?? 0) : 0;
-  const anchorTop  = isActiveSel ? (active.top  ?? 0) : 0;
+  // Determine anchor for ActiveSelection
+  let anchorLeft = 0;
+  let anchorTop = 0;
+
+  if (isActiveSel) {
+    try { if (typeof active.setCoords === 'function') active.setCoords(); } catch {}
+    const aAC = active.aCoords;
+    if (aAC && aAC.tl && typeof aAC.tl.x === 'number' && typeof aAC.tl.y === 'number') {
+      anchorLeft = aAC.tl.x;
+      anchorTop = aAC.tl.y;
+    } else {
+      // Fallback to active absolute bbox (should be equivalent for TL)
+      const aAbs = safeBBox(active, true, true);
+      if (aAbs) {
+        anchorLeft = aAbs.left || 0;
+        anchorTop = aAbs.top || 0;
+      }
+    }
+  }
 
   for (const s of members) {
     if (!s) continue;
     try { if (typeof s.setCoords === 'function') s.setCoords(); } catch {}
 
-    const w = scaledWidth(s);
-    const h = scaledHeight(s);
-
-    // In ActiveSelection: member.left/top are relative to group origin
-    // Otherwise: member.left/top are already canvas-space
-    const L = (s.left ?? 0) + (isActiveSel ? anchorLeft : 0);
-    const T = (s.top  ?? 0) + (isActiveSel ? anchorTop  : 0);
-
-    rects.push({ left: L, top: T, width: w, height: h });
+    if (isActiveSel) {
+      const rel = safeBBox(s, false, true);
+      if (rel) {
+        rects.push({
+          left: norm(anchorLeft + rel.left),
+          top: norm(anchorTop + rel.top),
+          width: norm(rel.width),
+          height: norm(rel.height)
+        });
+      }
+    } else {
+      const abs = safeBBox(s, true, true);
+      if (abs) {
+        rects.push({
+          left: norm(abs.left),
+          top: norm(abs.top),
+          width: norm(abs.width),
+          height: norm(abs.height)
+        });
+      }
+    }
   }
   return rects;
 }
