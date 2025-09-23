@@ -8,6 +8,7 @@
  * - Handle image upload/server image selection via state.setImage().
  * - Color controls use Pickr via toolbar-color.js (no native <input type="color"> here).
  * - Alignment controls dispatch actions.alignSelected(mode) relative to the selection hull.
+ * - Debug button (optional) triggers a diagnostic snapshot via debug.js and copies it to clipboard.
  *
  * Phase-1 Hardening:
  * - Server image selection now performs a fetch() preflight to surface 404/NETWORK errors
@@ -23,7 +24,8 @@
  *       selectAllBtn, lockBtn, unlockBtn,
  *       strokePickrEl?, fillPickrEl?,
  *       alignLeftBtn?, alignCenterXBtn?, alignRightBtn?,
- *       alignTopBtn?, alignMiddleYBtn?, alignBottomBtn?
+ *       alignTopBtn?, alignMiddleYBtn?, alignBottomBtn?,
+ *       debugBtn? // NEW: optional Debug snapshot button
  *     }
  *
  * Dependencies:
@@ -32,6 +34,7 @@
  * - actions.js (add/delete/duplicate/lock/unlock/resetRotation/alignSelected)
  * - selection.js (selectAllShapes)
  * - toolbar-color.js (installColorPickers)
+ * - debug.js (runDebugCapture)  // NEW
  * -----------------------------------------------------------
  */
 
@@ -48,13 +51,13 @@ import {
 } from './actions.js';
 import { selectAllShapes } from './selection.js';
 import { installColorPickers } from './toolbar-color.js';
+import { runDebugCapture } from './debug.js';
 
 /**
  * Resolve an absolute URL for a server image under ./images/
  * Ensures paths remain correct when hosted under /scene-designer/.
  */
 function resolveServerImageUrl(filename) {
-  // Accept raw filenames only (e.g., "sample1.png")
   const base = (typeof window !== 'undefined' ? window.location.href : '');
   const url = new URL(`./images/${filename}`, base).href;
   return url;
@@ -69,15 +72,11 @@ function loadImageFromBlob(blob, cb, canonicalUrl) {
     const objectUrl = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      try {
-        URL.revokeObjectURL(objectUrl);
-      } catch {}
+      try { URL.revokeObjectURL(objectUrl); } catch {}
       cb(img, canonicalUrl);
     };
     img.onerror = (e) => {
-      try {
-        URL.revokeObjectURL(objectUrl);
-      } catch {}
+      try { URL.revokeObjectURL(objectUrl); } catch {}
       log("ERROR", "[toolbar-handlers] Image element failed to load from Blob URL", { canonicalUrl, error: e });
     };
     img.src = objectUrl;
@@ -118,7 +117,9 @@ export function attachToolbarHandlers(refs) {
     alignBottomBtn,
     // Pickr hosts
     strokePickrEl,
-    fillPickrEl
+    fillPickrEl,
+    // Debug button (optional)
+    debugBtn
   } = refs;
 
   // Keep references to handlers and detach fns for clean removal on detach()
@@ -185,7 +186,7 @@ export function attachToolbarHandlers(refs) {
   };
   on(imageUploadInput, 'change', onUploadInputChange);
 
-  // --- SERVER IMAGE SELECT (now with fetch preflight → Blob → Image element) ---
+  // --- SERVER IMAGE SELECT (fetch preflight → Blob → Image element) ---
   const onServerImageChange = async (e) => {
     try {
       const filename = e?.target?.value || "";
@@ -217,9 +218,7 @@ export function attachToolbarHandlers(refs) {
       }
 
       const blob = await resp.blob();
-      // Load an HTMLImageElement from the fetched Blob (no additional network hit)
       loadImageFromBlob(blob, (imgEl, canonicalUrl) => {
-        // Store canonical absolute URL in state, but image element is from Blob to avoid double fetch
         setImage(canonicalUrl, imgEl);
         log("INFO", "[toolbar-handlers] Server image loaded and set", {
           canonicalUrl,
@@ -388,6 +387,49 @@ export function attachToolbarHandlers(refs) {
     }
   } catch (e) {
     log("ERROR", "[toolbar-handlers] Failed to install Pickr color pickers", e);
+  }
+
+  // --- Debug button (optional) ---
+  const onDebugClick = async (ev) => {
+    try {
+      if (!debugBtn) return;
+      debugBtn.disabled = true;
+      const origText = debugBtn.textContent;
+      debugBtn.textContent = "Collecting…";
+
+      const { text, snapshot } = await runDebugCapture({ format: 'json', copy: true, log: true });
+
+      // Simple visual feedback
+      debugBtn.textContent = "Copied ✓";
+      setTimeout(() => {
+        debugBtn.textContent = origText || "Debug";
+        debugBtn.disabled = false;
+      }, 1200);
+
+      log("INFO", "[toolbar-handlers] Debug snapshot captured", {
+        copiedToClipboard: true,
+        shapeCount: snapshot?.scene?.shapeCount,
+        selectedCount: snapshot?.scene?.selectedCount,
+        fabricActiveType: snapshot?.fabricSelection?.activeType,
+        fabricMemberCount: snapshot?.fabricSelection?.memberCount
+      });
+      // Full text already logged at DEBUG inside runDebugCapture
+    } catch (e) {
+      if (debugBtn) {
+        debugBtn.textContent = "Failed";
+        setTimeout(() => {
+          debugBtn.textContent = "Debug";
+          debugBtn.disabled = false;
+        }, 1200);
+      }
+      log("ERROR", "[toolbar-handlers] Debug snapshot failed", e);
+    }
+  };
+  if (debugBtn) {
+    on(debugBtn, 'click', onDebugClick);
+    log("INFO", "[toolbar-handlers] Debug button handler attached");
+  } else {
+    log("DEBUG", "[toolbar-handlers] Debug button not present (skipping handler)");
   }
 
   log("INFO", "[toolbar-handlers] Toolbar handlers attached");

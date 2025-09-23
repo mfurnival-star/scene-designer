@@ -33,6 +33,7 @@
  * - alignTopBtn
  * - alignMiddleYBtn
  * - alignBottomBtn
+ * - debugBtn               // NEW: Collects a debug snapshot (see debug.js)
  *
  * Dependencies:
  * - log.js (logging)
@@ -92,7 +93,7 @@ export function renderToolbar(element) {
         </div>
       </div>
 
-      <!-- Row 2: Edit actions + Alignment + Color controls -->
+      <!-- Row 2: Edit actions + Alignment + Color controls + Debug -->
       <div class="toolbar-row" id="toolbar-row-2">
         <div class="toolbar-group">
           <button id="toolbar-duplicate-shape-btn" class="toolbar-btn" title="Duplicate selected shape(s)">Duplicate</button>
@@ -123,6 +124,14 @@ export function renderToolbar(element) {
           <button id="toolbar-fill-pickr" class="toolbar-btn pickr-btn" type="button" title="Fill color + Alpha">
             Pick
           </button>
+        </div>
+
+        <div class="toolbar-group" id="toolbar-debug-group">
+          <button
+            id="toolbar-debug-btn"
+            class="toolbar-btn"
+            title="Collect debug snapshot and copy to clipboard"
+          >Debug</button>
         </div>
       </div>
     </div>
@@ -157,6 +166,9 @@ export function renderToolbar(element) {
   const strokePickrEl = element.querySelector('#toolbar-stroke-pickr');
   const fillPickrEl = element.querySelector('#toolbar-fill-pickr');
 
+  // Debug
+  const debugBtn = element.querySelector('#toolbar-debug-btn');
+
   const refs = {
     container,
     imageUploadInput,
@@ -177,7 +189,8 @@ export function renderToolbar(element) {
     alignRightBtn,
     alignTopBtn,
     alignMiddleYBtn,
-    alignBottomBtn
+    alignBottomBtn,
+    debugBtn
   };
 
   // Basic sanity check
@@ -188,8 +201,9 @@ export function renderToolbar(element) {
     log("WARN", "[toolbar-dom] Some toolbar refs are missing", { missing });
   }
 
-  log("INFO", "[toolbar-dom] Toolbar DOM rendered (two-row layout, alignment controls added)");
+  log("INFO", "[toolbar-dom] Toolbar DOM rendered (two-row layout, alignment controls added, debug button added)");
   log("DEBUG", "[toolbar-dom] renderToolbar EXIT");
 
   return refs;
 }
+
