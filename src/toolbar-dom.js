@@ -131,7 +131,7 @@ export function renderToolbar(element) {
         </div>
       </div>
     </div>
-  ";
+  `;
 
   // Query refs scoped to the provided element
   const container = element.querySelector('#canvas-toolbar-container');
