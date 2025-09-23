@@ -6,7 +6,7 @@
  * - Build and manage Fabric canvas panel, sync with store, and dynamically resize
  *   the parent MiniLayout panel/container to fit the image.
  * - Uses MiniLayout API to ensure the panel always matches canvas size.
- * - No snippets, full file, Manifesto-compliant.
+ * - Clip host: wraps Fabric wrapper to guarantee clipping within the Canvas panel body.
  *
  * Exports:
  *    buildCanvasPanel({ element, title, componentName })
@@ -26,7 +26,6 @@ import {
   sceneDesignerStore,
   setFabricCanvas,
   setBgFabricImage,
-  setSettings,
   setSetting
 } from './state.js';
 import { installFabricSelectionSync } from './canvas-events.js';
@@ -34,9 +33,32 @@ import { installCanvasConstraints } from './canvas-constraints.js';
 import { installSelectionOutlines } from './selection-outlines.js';
 import { MiniLayout } from './minilayout.js';
 
+/**
+ * Create a dedicated clipping host to contain Fabric's wrapper and canvases.
+ * Ensures the canvas visuals cannot bleed into sibling panels (iOS Safari-safe).
+ */
+function createClipHost(parent, width, height) {
+  const div = document.createElement('div');
+  div.className = 'canvas-clip-host';
+  div.style.position = 'relative';
+  div.style.overflow = 'hidden';
+  div.style.width = `${Math.max(1, Number(width) || 600)}px`;
+  div.style.height = `${Math.max(1, Number(height) || 400)}px`;
+  div.style.maxWidth = '100%';
+  div.style.maxHeight = '100%';
+  div.style.contain = 'paint';
+  div.style.isolation = 'isolate';
+  div.style.zIndex = '10';
+  parent.appendChild(div);
+  return div;
+}
+
+/**
+ * Create the initial <canvas> that Fabric will wrap.
+ * Append to the provided host (clip host).
+ */
 function createCanvasElement(host, width, height) {
   const c = document.createElement('canvas');
-  // Initial size; Fabric will manage retina/backing store after it takes over.
   c.width = Math.max(1, Number(width) || 600);
   c.height = Math.max(1, Number(height) || 400);
   c.style.display = 'block';
@@ -94,7 +116,7 @@ function fitImageToMax(imageW, imageH, maxW, maxH) {
 
 /**
  * Resize MiniLayout panel and .canvas-container to match the canvas.
- * Uses the new API if available.
+ * Uses the new API if available; also adjusts our clip host if present.
  */
 function resizeMiniLayoutPanel(canvas, width, height) {
   try {
@@ -106,19 +128,26 @@ function resizeMiniLayoutPanel(canvas, width, height) {
       layoutInstance.resizePanelBody('CanvasPanel', width, height);
       log("INFO", "[canvas-core] resizePanelBody(CanvasPanel)", { width, height });
     } else {
-      // Fallback: resize the container and panel body directly
+      // Fallback: resize the wrapper, clip host, and panel body directly
       if (canvas && canvas.lowerCanvasEl) {
-        const container = canvas.lowerCanvasEl.parentElement;
-        if (container) {
-          container.style.width = `${width}px`;
-          container.style.height = `${height}px`;
+        const wrapper = canvas.lowerCanvasEl.parentElement; // Fabric wrapper (.canvas-container)
+        if (wrapper) {
+          wrapper.style.width = `${width}px`;
+          wrapper.style.height = `${height}px`;
         }
-        const panelBody = container?.closest('.minilayout-panel-body');
+        const clipHost = wrapper?.parentElement && wrapper.parentElement.classList.contains('canvas-clip-host')
+          ? wrapper.parentElement
+          : null;
+        if (clipHost) {
+          clipHost.style.width = `${width}px`;
+          clipHost.style.height = `${height}px`;
+        }
+        const panelBody = wrapper?.closest('.minilayout-panel-body');
         if (panelBody) {
           panelBody.style.width = `${width}px`;
           panelBody.style.height = `${height}px`;
         }
-        const panel = container?.closest('.minilayout-panel');
+        const panel = wrapper?.closest('.minilayout-panel');
         if (panel) {
           panel.style.width = `${width}px`;
           panel.style.height = `${height}px`;
@@ -129,6 +158,69 @@ function resizeMiniLayoutPanel(canvas, width, height) {
     }
   } catch (e) {
     log("ERROR", "[canvas-core] resizeMiniLayoutPanel failed", e);
+  }
+}
+
+/**
+ * Keep Fabric wrapper and clip host CSS in sync with canvas size.
+ */
+function syncWrapperAndHostSizes(canvas) {
+  try {
+    const w = canvas.getWidth();
+    const h = canvas.getHeight();
+    const wrapper = canvas.lowerCanvasEl?.parentElement || null;
+    if (wrapper) {
+      wrapper.style.width = `${w}px`;
+      wrapper.style.height = `${h}px`;
+      // Enforce clipping and stacking
+      wrapper.style.position = 'relative';
+      wrapper.style.overflow = 'hidden';
+      wrapper.style.zIndex = '10';
+      wrapper.style.maxWidth = '100%';
+      wrapper.style.maxHeight = '100%';
+      wrapper.style.contain = 'paint';
+      wrapper.style.isolation = 'isolate';
+    }
+    const clipHost = wrapper?.parentElement && wrapper.parentElement.classList.contains('canvas-clip-host')
+      ? wrapper.parentElement
+      : null;
+    if (clipHost) {
+      clipHost.style.width = `${w}px`;
+      clipHost.style.height = `${h}px`;
+      clipHost.style.overflow = 'hidden';
+      clipHost.style.zIndex = '10';
+    }
+  } catch (e) {
+    log("WARN", "[canvas-core] syncWrapperAndHostSizes failed", e);
+  }
+}
+
+/**
+ * Set upper/lower canvas visual layering to avoid bleeding.
+ */
+function enforceLayerZOrder(canvas) {
+  try {
+    if (canvas.lowerCanvasEl) {
+      canvas.lowerCanvasEl.style.position = 'absolute';
+      canvas.lowerCanvasEl.style.left = '0';
+      canvas.lowerCanvasEl.style.top = '0';
+      canvas.lowerCanvasEl.style.zIndex = '0';
+    }
+    if (canvas.upperCanvasEl) {
+      canvas.upperCanvasEl.style.position = 'absolute';
+      canvas.upperCanvasEl.style.left = '0';
+      canvas.upperCanvasEl.style.top = '0';
+      canvas.upperCanvasEl.style.zIndex = '1';
+      canvas.upperCanvasEl.style.background = 'transparent';
+    }
+    const wrapper = canvas.lowerCanvasEl?.parentElement || null;
+    if (wrapper) {
+      wrapper.style.position = 'relative';
+      wrapper.style.overflow = 'hidden';
+      wrapper.style.zIndex = '10';
+    }
+  } catch (e) {
+    log("WARN", "[canvas-core] enforceLayerZOrder failed", e);
   }
 }
 
@@ -189,10 +281,9 @@ function applyBackgroundImage(canvas, url, imgObj) {
   canvas.setWidth(newCanvasW);
   canvas.setHeight(newCanvasH);
 
-  // Ensure upper canvas remains transparent (don’t touch sizes)
-  if (canvas.upperCanvasEl) {
-    canvas.upperCanvasEl.style.background = "transparent";
-  }
+  // Keep layers properly stacked and clipped
+  enforceLayerZOrder(canvas);
+  syncWrapperAndHostSizes(canvas);
 
   // Resize the panel and container to fit
   resizeMiniLayoutPanel(canvas, newCanvasW, newCanvasH);
@@ -261,10 +352,9 @@ function applyCanvasSizeFromSettings(canvas) {
     canvas.setWidth(w);
     canvas.setHeight(h);
 
-    // Keep upper canvas transparent; do not change sizes directly
-    if (canvas.upperCanvasEl) {
-      canvas.upperCanvasEl.style.background = "transparent";
-    }
+    // Keep layers properly stacked and clipped
+    enforceLayerZOrder(canvas);
+    syncWrapperAndHostSizes(canvas);
 
     // Resize the panel/container to fit new canvas size
     resizeMiniLayoutPanel(canvas, w, h);
@@ -300,6 +390,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
     return;
   }
 
+  // Root of this panel body
   element.innerHTML = "";
   element.style.background = "#eaf2fc";
   element.style.overflow = "hidden";
@@ -307,19 +398,24 @@ export function buildCanvasPanel({ element, title, componentName }) {
 
   const initialW = getState().settings?.canvasMaxWidth ?? 600;
   const initialH = getState().settings?.canvasMaxHeight ?? 400;
-  const domCanvas = createCanvasElement(element, initialW, initialH);
 
+  // Create a clip host that will contain the Fabric wrapper and clip any overflow
+  const clipHost = createClipHost(element, initialW, initialH);
+
+  // Create initial DOM canvas inside the clip host
+  const domCanvas = createCanvasElement(clipHost, initialW, initialH);
+
+  // Instantiate Fabric
   const canvas = new Canvas(domCanvas, {
     preserveObjectStacking: true,
     selection: true,
     backgroundColor: 'transparent'
   });
 
-  // Ensure transparent top layer
+  // Ensure transparent and correctly layered top
   setTimeout(() => {
-    if (canvas.upperCanvasEl) {
-      canvas.upperCanvasEl.style.background = "transparent";
-    }
+    enforceLayerZOrder(canvas);
+    syncWrapperAndHostSizes(canvas);
   }, 0);
 
   setFabricCanvas(canvas);
@@ -328,6 +424,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
   const detachConstraints = installCanvasConstraints(canvas);
   const detachOutlines = installSelectionOutlines(canvas);
 
+  // Apply initial sizing from settings (and enforce clipping/stacking)
   applyCanvasSizeFromSettings(canvas);
 
   const s0 = getState();

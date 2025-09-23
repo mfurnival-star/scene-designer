@@ -11,6 +11,9 @@
  * - Contain paints and enforce clipping at each panel/body.
  * - Establish explicit stacking order so toolbar/settings sit above canvas visuals.
  * - Ensure Fabric wrapper (.canvas-container) is clipped by its panel body.
+ *
+ * 2025-09-23 (clip host):
+ * - Add .canvas-clip-host container used by canvas-core.js to hard-clip all Fabric layers.
  * -----------------------------------------------------------
  */
 
@@ -134,8 +137,22 @@ html, body, #ml-root {
   z-index: 20; /* above canvas */
 }
 
-/* Fabric wrapper created by fabric.Canvas – ensure it clips within Canvas panel body */
-.minilayout-panel-body--canvaspanel .canvas-container {
+/* NEW: Dedicated clip host used by canvas-core.js to contain Fabric wrapper + layers */
+.canvas-clip-host {
+  position: relative;
+  overflow: hidden !important;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  contain: layout paint; /* stronger containment on Safari/iOS */
+  isolation: isolate;
+  z-index: 10;
+}
+
+/* Fabric wrapper created by fabric.Canvas – ensure it clips within Canvas panel body/clip host */
+.minilayout-panel-body--canvaspanel .canvas-container,
+.canvas-clip-host > .canvas-container {
   position: relative !important;  /* keep Fabric’s relative positioning */
   overflow: hidden !important;    /* clip upper/lower/context canvases */
   width: 100%;
@@ -149,7 +166,10 @@ html, body, #ml-root {
 /* Guard common Fabric canvas layers inside the Canvas panel */
 .minilayout-panel-body--canvaspanel .upper-canvas,
 .minilayout-panel-body--canvaspanel .lower-canvas,
-.minilayout-panel-body--canvaspanel .cache-canvas {
+.minilayout-panel-body--canvaspanel .cache-canvas,
+.canvas-clip-host .upper-canvas,
+.canvas-clip-host .lower-canvas,
+.canvas-clip-host .cache-canvas {
   display: block;
   max-width: 100%;
   max-height: 100%;
