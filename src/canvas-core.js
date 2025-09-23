@@ -1,7 +1,7 @@
 /**
  * canvas-core.js
  * -----------------------------------------------------------
- * Scene Designer – Fabric Canvas Core (ESM ONLY, Phase 1 – Image render fix, upper canvas transparency)
+ * Scene Designer – Fabric Canvas Core (ESM ONLY, Phase 1 – Image render fix, auto-resize to image aspect ratio)
  * Purpose:
  * - Build the Canvas panel and keep it fully functional while we refactor.
  * - Creates Fabric canvas, installs selection sync, constraints, and overlays.
@@ -12,15 +12,15 @@
  *    - buildCanvasPanel({ element, title, componentName })
  *
  * Key change (fix):
- * - Render the background as canvas.backgroundImage via canvas.setBackgroundImage(...)
- *   using a Fabric.Image built from the already-loaded HTMLImageElement from state.
- *   This avoids any ambiguity with objects list and has been the most reliable path.
- * - Set upper canvas background to transparent to ensure overlays do not block the image.
+ * - When a background image is set, resize the canvas to the image's native aspect ratio,
+ *   up to max width/height from settings.
+ * - Do not scale the image to fit the canvas; instead, change the canvas size to fit the image.
+ * - If no image, use settings for default canvas size.
  *
  * Dependencies:
  * - log.js (logging)
  * - fabric-wrapper.js ({ Canvas, Image })
- * - state.js (getState, sceneDesignerStore, setFabricCanvas, setBgFabricImage)
+ * - state.js (getState, sceneDesignerStore, setFabricCanvas, setBgFabricImage, setSettings, setSetting)
  * - canvas-events.js (installFabricSelectionSync)
  * - canvas-constraints.js (installCanvasConstraints)
  * - selection-outlines.js (installSelectionOutlines)
@@ -32,7 +32,9 @@ import {
   getState,
   sceneDesignerStore,
   setFabricCanvas,
-  setBgFabricImage
+  setBgFabricImage,
+  setSettings,
+  setSetting
 } from './state.js';
 import { installFabricSelectionSync } from './canvas-events.js';
 import { installCanvasConstraints } from './canvas-constraints.js';
@@ -74,6 +76,27 @@ function addAllStoreShapesToCanvas(canvas) {
   else canvas.renderAll();
 }
 
+/**
+ * Compute canvas size for an image, preserving aspect ratio, within max settings.
+ * Returns {width, height, scale}
+ */
+function fitImageToMax(imageW, imageH, maxW, maxH) {
+  let scale = 1;
+  let w = imageW;
+  let h = imageH;
+  if (w > maxW) {
+    scale = maxW / w;
+    w = maxW;
+    h = Math.round(imageH * scale);
+  }
+  if (h > maxH) {
+    scale = maxH / h;
+    h = maxH;
+    w = Math.round(imageW * scale);
+  }
+  return { width: w, height: h, scale };
+}
+
 function computeScaleForCanvas(canvas, naturalW, naturalH) {
   const cw = canvas.getWidth();
   const ch = canvas.getHeight();
@@ -82,6 +105,11 @@ function computeScaleForCanvas(canvas, naturalW, naturalH) {
   return { scaleX: cw / iw, scaleY: ch / ih };
 }
 
+/**
+ * Set or clear the background image via canvas.backgroundImage.
+ * - When image is set, resize canvas to image's native aspect ratio (within max).
+ * - Image is rendered at 1:1 scale; canvas is resized to match.
+ */
 function applyBackgroundImage(canvas, url, imgObj) {
   if (!canvas) return;
 
@@ -91,6 +119,9 @@ function applyBackgroundImage(canvas, url, imgObj) {
     imgComplete: !!(imgObj && imgObj.complete),
     imgNatural: imgObj ? { w: imgObj.naturalWidth, h: imgObj.naturalHeight } : null
   });
+
+  const maxW = getState().settings?.canvasMaxWidth ?? 600;
+  const maxH = getState().settings?.canvasMaxHeight ?? 400;
 
   if (!url || !imgObj) {
     try {
@@ -116,6 +147,34 @@ function applyBackgroundImage(canvas, url, imgObj) {
     return;
   }
 
+  // Compute new canvas size for this image
+  const { width: newCanvasW, height: newCanvasH } = fitImageToMax(
+    imgObj.naturalWidth,
+    imgObj.naturalHeight,
+    maxW,
+    maxH
+  );
+  // Resize both the Fabric canvas and DOM canvas element
+  canvas.setWidth(newCanvasW);
+  canvas.setHeight(newCanvasH);
+  if (canvas.lowerCanvasEl) {
+    canvas.lowerCanvasEl.width = newCanvasW;
+    canvas.lowerCanvasEl.height = newCanvasH;
+    canvas.lowerCanvasEl.style.width = `${newCanvasW}px`;
+    canvas.lowerCanvasEl.style.height = `${newCanvasH}px`;
+  }
+  if (canvas.upperCanvasEl) {
+    canvas.upperCanvasEl.width = newCanvasW;
+    canvas.upperCanvasEl.height = newCanvasH;
+    canvas.upperCanvasEl.style.width = `${newCanvasW}px`;
+    canvas.upperCanvasEl.style.height = `${newCanvasH}px`;
+    canvas.upperCanvasEl.style.background = "transparent";
+  }
+
+  // Optionally update state settings so UI reflects the new size (optional, comment out if undesired)
+  setSetting("canvasMaxWidth", newCanvasW);
+  setSetting("canvasMaxHeight", newCanvasH);
+
   try {
     const bg = new FabricImage(imgObj, {
       originX: 'left',
@@ -124,8 +183,8 @@ function applyBackgroundImage(canvas, url, imgObj) {
       evented: false
     });
 
-    const { scaleX, scaleY } = computeScaleForCanvas(canvas, imgObj.naturalWidth, imgObj.naturalHeight);
-    bg.set({ left: 0, top: 0, scaleX, scaleY });
+    // Render at 1:1 scale (no scaling to fit canvas, since canvas matches image size)
+    bg.set({ left: 0, top: 0, scaleX: 1, scaleY: 1 });
 
     canvas.setBackgroundImage(bg, () => {
       const applied = canvas.backgroundImage || bg;
@@ -154,28 +213,43 @@ function applyBackgroundImage(canvas, url, imgObj) {
   log("DEBUG", "[canvas-core] applyBackgroundImage EXIT");
 }
 
+/**
+ * Update canvas dimension from settings and re-scale background image.
+ * If an image is present, canvas should keep image's aspect ratio.
+ */
 function applyCanvasSizeFromSettings(canvas) {
   try {
-    const w = getState().settings?.canvasMaxWidth ?? 600;
-    const h = getState().settings?.canvasMaxHeight ?? 400;
+    const imgObj = getState().imageObj;
+    let w = getState().settings?.canvasMaxWidth ?? 600;
+    let h = getState().settings?.canvasMaxHeight ?? 400;
+
+    // If image is present, resize canvas to image's aspect ratio within max
+    if (imgObj && imgObj.naturalWidth > 0 && imgObj.naturalHeight > 0) {
+      const fit = fitImageToMax(imgObj.naturalWidth, imgObj.naturalHeight, w, h);
+      w = fit.width;
+      h = fit.height;
+    }
+
     canvas.setWidth(w);
     canvas.setHeight(h);
     if (canvas.lowerCanvasEl) {
+      canvas.lowerCanvasEl.width = w;
+      canvas.lowerCanvasEl.height = h;
       canvas.lowerCanvasEl.style.width = `${w}px`;
       canvas.lowerCanvasEl.style.height = `${h}px`;
     }
     if (canvas.upperCanvasEl) {
+      canvas.upperCanvasEl.width = w;
+      canvas.upperCanvasEl.height = h;
       canvas.upperCanvasEl.style.width = `${w}px`;
       canvas.upperCanvasEl.style.height = `${h}px`;
-      // *** FIX: Make upper canvas transparent ***
       canvas.upperCanvasEl.style.background = "transparent";
     }
 
+    // Scale background image (if present) to 1:1
     const bg = canvas.backgroundImage || getState().bgFabricImage;
-    const imgObj = getState().imageObj;
     if (bg && imgObj && imgObj.naturalWidth > 0 && imgObj.naturalHeight > 0) {
-      const { scaleX, scaleY } = computeScaleForCanvas(canvas, imgObj.naturalWidth, imgObj.naturalHeight);
-      bg.set({ left: 0, top: 0, scaleX, scaleY });
+      bg.set({ left: 0, top: 0, scaleX: 1, scaleY: 1 });
       try { if (typeof bg.setCoords === "function") bg.setCoords(); } catch {}
     }
 
@@ -214,10 +288,9 @@ export function buildCanvasPanel({ element, title, componentName }) {
   const canvas = new Canvas(domCanvas, {
     preserveObjectStacking: true,
     selection: true,
-    backgroundColor: 'transparent' // *** FIX: upperCanvasEl gets transparent background ***
+    backgroundColor: 'transparent'
   });
 
-  // Also force upper canvas transparent after construction
   setTimeout(() => {
     if (canvas.upperCanvasEl) {
       canvas.upperCanvasEl.style.background = "transparent";
@@ -317,4 +390,3 @@ export function buildCanvasPanel({ element, title, componentName }) {
   log("INFO", "[canvas-core] Canvas panel built and initialized");
   log("DEBUG", "[canvas-core] buildCanvasPanel EXIT");
 }
-
