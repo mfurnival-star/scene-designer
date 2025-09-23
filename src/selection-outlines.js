@@ -1,7 +1,7 @@
 /**
  * selection-outlines.js
  * -----------------------------------------------------------
- * Scene Designer – Multi-select Outlines Overlay (ESM ONLY, Phase 1 Geometry Refactor)
+ * Scene Designer – Multi-select Outlines Overlay (ESM ONLY, Responsive/Zoom-Aware)
  * Purpose:
  * - Draw dashed selection outlines as an overlay on Fabric's top canvas (no Fabric objects).
  * - Shows per-shape dashed boxes for multi-select and a single outer hull box.
@@ -18,7 +18,9 @@
  * - Only paints when:
  *    - Settings: Show Multi-Drag Box is enabled (settings.multiDragBox !== false), AND
  *    - A Fabric ActiveSelection exists with 2+ members.
- * - Geometry for outlines is now sourced from geometry/selection-rects.js.
+ * - Geometry for outlines is sourced from geometry/selection-rects.js (canvas coordinate space).
+ * - Responsive/zoom-aware: outlines respect Fabric viewportTransform and retina scaling.
+ *   Line widths and dash lengths stay visually consistent across zoom levels and DPRs.
  *
  * Dependencies:
  * - state.js (getState, sceneDesignerStore)
@@ -57,6 +59,31 @@ function getDpr(canvas) {
 }
 
 /**
+ * Current Fabric zoom (scale) from viewportTransform.
+ */
+function getScale(canvas) {
+  try {
+    if (typeof canvas.getZoom === 'function') {
+      const z = canvas.getZoom();
+      return Number.isFinite(z) && z > 0 ? z : 1;
+    }
+    const vt = Array.isArray(canvas.viewportTransform) ? canvas.viewportTransform : null;
+    const sx = vt && Number.isFinite(vt[0]) ? vt[0] : 1;
+    return sx || 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * Viewport transform array [a, b, c, d, e, f] or identity.
+ */
+function getViewportTransform(canvas) {
+  const vt = Array.isArray(canvas?.viewportTransform) ? canvas.viewportTransform : null;
+  return vt && vt.length >= 6 ? vt : [1, 0, 0, 1, 0, 0];
+}
+
+/**
  * Remove any legacy Fabric objects that were used for outlines previously.
  */
 function removeLegacyOutlineObjects(canvas) {
@@ -72,31 +99,61 @@ function removeLegacyOutlineObjects(canvas) {
   }
 }
 
-function strokeDashedRect(ctx, x, y, w, h, { color = '#2176ff', lineWidth = 1.2, dash = [6, 4] } = {}) {
+/**
+ * Stroke a dashed rectangle with screen-px-consistent styling regardless of zoom/DPR.
+ * - ctx is expected to be set to the combined transform already (DPR * viewportTransform).
+ * - To keep a 1px screen line: lineWidthCanvas = 1 / (DPR * scale).
+ */
+function strokeDashedRect(ctx, x, y, w, h, {
+  color = '#2176ff',
+  screenLinePx = 1.4,
+  screenDashPx = [6, 4],
+  dpr = 1,
+  scale = 1
+} = {}) {
   if (!ctx) return;
+
+  // Convert desired screen pixels to canvas units under the current transform (DPR * scale)
+  const pxToCanvas = 1 / Math.max(0.0001, dpr * scale);
+  const lineWidth = Math.max(0.75, screenLinePx) * pxToCanvas;
+  const dash = (Array.isArray(screenDashPx) ? screenDashPx : [6, 4]).map(v => Math.max(0, Number(v) || 0) * pxToCanvas);
+
   ctx.save();
-  try { ctx.setLineDash(dash); } catch {}
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  // Pixel-align for crisp dashes when values are integers
-  const px = Math.round(x) === x ? 0.5 : 0;
-  const py = Math.round(y) === y ? 0.5 : 0;
-  ctx.strokeRect(x + px, y + py, w, h);
-  ctx.restore();
+  try {
+    if (typeof ctx.setLineDash === 'function') ctx.setLineDash(dash);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+
+    // Pixel-align for crispness when possible (in canvas units)
+    const xAligned = Math.round(x) === x ? x + (0.5 * pxToCanvas) : x;
+    const yAligned = Math.round(y) === y ? y + (0.5 * pxToCanvas) : y;
+
+    ctx.strokeRect(xAligned, yAligned, w, h);
+  } finally {
+    ctx.restore();
+  }
 }
 
-function expandRect(rect, padding) {
+/**
+ * Expand rect by padding expressed in screen pixels → converted to canvas units.
+ */
+function expandRectForScreenPadding(rect, screenPaddingPx, dpr, scale) {
+  const pad = Number(screenPaddingPx) || 0;
+  if (!rect || pad <= 0) return rect;
+  const pxToCanvas = 1 / Math.max(0.0001, dpr * scale);
+  const p = pad * pxToCanvas;
   return {
-    left: rect.left - padding,
-    top: rect.top - padding,
-    width: rect.width + padding * 2,
-    height: rect.height + padding * 2
+    left: rect.left - p,
+    top: rect.top - p,
+    width: rect.width + p * 2,
+    height: rect.height + p * 2
   };
 }
 
 /**
  * Draw per-shape boxes and a single outer hull on top context.
- * Geometry from geometry/selection-rects.js.
+ * Geometry from geometry/selection-rects.js (canvas coordinate space).
+ * Applies combined transform (DPR * viewportTransform) so outlines follow zoom.
  */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
@@ -109,41 +166,67 @@ function paintSelectionOutlines(canvas) {
   // Only honor Fabric's current ActiveSelection. If none → nothing to paint.
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   if (!active || active.type !== 'activeSelection' || !Array.isArray(active._objects) || active._objects.length <= 1) {
-    // Nothing to overlay (single selection or no selection)
-    return;
+    return; // Nothing to overlay (single selection or no selection)
   }
 
   const anyLocked = active._objects.some(s => s && s.locked);
   const color = anyLocked ? '#e53935' : '#2176ff';
 
+  const dpr = getDpr(canvas);
+  const scale = getScale(canvas);
+  const vt = getViewportTransform(canvas); // [a, b, c, d, e, f]
+
   ctx.save();
+  try {
+    // Reset to identity and apply combined transform explicitly to be deterministic.
+    // This ensures we always know the units when computing line widths/dashes.
+    // Combined = DPR * viewportTransform
+    const a = (vt[0] || 1) * dpr;
+    const b = (vt[1] || 0) * dpr;
+    const c = (vt[2] || 0) * dpr;
+    const d = (vt[3] || 1) * dpr;
+    const e = (vt[4] || 0) * dpr;
+    const f = (vt[5] || 0) * dpr;
+    ctx.setTransform(a, b, c, d, e, f);
 
-  // Use centralized geometry utility
-  const rects = getActiveSelectionMemberRects(canvas);
-  if (rects.length === 0) {
+    // Use centralized geometry utility (canvas-space rects)
+    const rects = getActiveSelectionMemberRects(canvas);
+    if (!Array.isArray(rects) || rects.length === 0) return;
+
+    // Draw per-member boxes (keep dashes/line widths visually consistent)
+    for (const r of rects) {
+      strokeDashedRect(ctx, r.left, r.top, r.width, r.height, {
+        color,
+        screenLinePx: 1.4,
+        screenDashPx: [6, 4],
+        dpr,
+        scale
+      });
+    }
+
+    // Draw outer hull with a slightly thicker stroke and padded by 4 screen px
+    const hull = getActiveSelectionHullRect(canvas);
+    if (hull) {
+      const paddedHull = expandRectForScreenPadding(hull, 4, dpr, scale);
+      strokeDashedRect(ctx, paddedHull.left, paddedHull.top, paddedHull.width, paddedHull.height, {
+        color,
+        screenLinePx: 2,
+        screenDashPx: [8, 6],
+        dpr,
+        scale
+      });
+    }
+  } catch (e) {
+    log("ERROR", "[selection-outlines] Painter error in after:render", e);
+  } finally {
     ctx.restore();
-    return;
   }
-
-  // Draw per-member boxes
-  for (const r of rects) {
-    strokeDashedRect(ctx, r.left, r.top, r.width, r.height, { color, lineWidth: 1.4, dash: [6, 4] });
-  }
-
-  // Draw outer hull
-  const hull = getActiveSelectionHullRect(canvas);
-  if (hull) {
-    const paddedHull = expandRect(hull, 4);
-    strokeDashedRect(ctx, paddedHull.left, paddedHull.top, paddedHull.width, paddedHull.height, { color, lineWidth: 2, dash: [8, 6] });
-  }
-
-  ctx.restore();
 }
 
 /**
  * Install overlay painter and selection change triggers.
  * - Clears in before:render at identity in device pixels.
- * - Paints in after:render.
+ * - Paints in after:render with DPR*viewportTransform applied.
  * Returns detach function.
  */
 export function installSelectionOutlines(canvas) {
@@ -175,11 +258,7 @@ export function installSelectionOutlines(canvas) {
 
   // Draw our overlays after Fabric renders objects and marquee/controls
   const painter = () => {
-    try {
-      paintSelectionOutlines(canvas);
-    } catch (e) {
-      log("ERROR", "[selection-outlines] Painter error in after:render", e);
-    }
+    paintSelectionOutlines(canvas);
   };
 
   // Bind hooks
@@ -210,7 +289,7 @@ export function installSelectionOutlines(canvas) {
     }
   });
 
-  log("INFO", "[selection-outlines] Overlay selection outlines installed (ActiveSelection-only, honors multiDragBox, centralized geometry)");
+  log("INFO", "[selection-outlines] Overlay selection outlines installed (zoom/DPR-aware)");
   return function detach() {
     try {
       canvas.off('before:render', clearTop);

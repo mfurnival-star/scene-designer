@@ -7,6 +7,8 @@
  *   the parent MiniLayout panel/container to fit the image.
  * - Uses MiniLayout API to ensure the panel always matches canvas size.
  * - Clip host: wraps Fabric wrapper to guarantee clipping within the Canvas panel body.
+ * - Responsive mode: optionally scales the canvas content (Fabric zoom) to fit the
+ *   available panel width on small screens, without breaking input coordinates.
  *
  * Exports:
  *    buildCanvasPanel({ element, title, componentName })
@@ -115,6 +117,21 @@ function fitImageToMax(imageW, imageH, maxW, maxH) {
 }
 
 /**
+ * Helpers to locate important DOM nodes relative to the Fabric canvas.
+ */
+function getWrapper(canvas) {
+  return canvas?.lowerCanvasEl?.parentElement || null; // .canvas-container
+}
+function getClipHost(canvas) {
+  const w = getWrapper(canvas);
+  return w?.parentElement?.classList?.contains('canvas-clip-host') ? w.parentElement : null;
+}
+function getCanvasPanelBody(canvas) {
+  const w = getWrapper(canvas);
+  return w?.closest('.minilayout-panel-body') || null;
+}
+
+/**
  * Resize MiniLayout panel and .canvas-container to match the canvas.
  * Uses the new API if available; also adjusts our clip host if present.
  */
@@ -130,24 +147,22 @@ function resizeMiniLayoutPanel(canvas, width, height) {
     } else {
       // Fallback: resize the wrapper, clip host, and panel body directly
       if (canvas && canvas.lowerCanvasEl) {
-        const wrapper = canvas.lowerCanvasEl.parentElement; // Fabric wrapper (.canvas-container)
+        const wrapper = getWrapper(canvas);
         if (wrapper) {
           wrapper.style.width = `${width}px`;
           wrapper.style.height = `${height}px`;
         }
-        const clipHost = wrapper?.parentElement && wrapper.parentElement.classList.contains('canvas-clip-host')
-          ? wrapper.parentElement
-          : null;
+        const clipHost = getClipHost(canvas);
         if (clipHost) {
           clipHost.style.width = `${width}px`;
           clipHost.style.height = `${height}px`;
         }
-        const panelBody = wrapper?.closest('.minilayout-panel-body');
+        const panelBody = getCanvasPanelBody(canvas);
         if (panelBody) {
           panelBody.style.width = `${width}px`;
           panelBody.style.height = `${height}px`;
         }
-        const panel = wrapper?.closest('.minilayout-panel');
+        const panel = panelBody?.closest('.minilayout-panel');
         if (panel) {
           panel.style.width = `${width}px`;
           panel.style.height = `${height}px`;
@@ -168,7 +183,7 @@ function syncWrapperAndHostSizes(canvas) {
   try {
     const w = canvas.getWidth();
     const h = canvas.getHeight();
-    const wrapper = canvas.lowerCanvasEl?.parentElement || null;
+    const wrapper = getWrapper(canvas);
     if (wrapper) {
       wrapper.style.width = `${w}px`;
       wrapper.style.height = `${h}px`;
@@ -181,9 +196,7 @@ function syncWrapperAndHostSizes(canvas) {
       wrapper.style.contain = 'paint';
       wrapper.style.isolation = 'isolate';
     }
-    const clipHost = wrapper?.parentElement && wrapper.parentElement.classList.contains('canvas-clip-host')
-      ? wrapper.parentElement
-      : null;
+    const clipHost = getClipHost(canvas);
     if (clipHost) {
       clipHost.style.width = `${w}px`;
       clipHost.style.height = `${h}px`;
@@ -213,7 +226,7 @@ function enforceLayerZOrder(canvas) {
       canvas.upperCanvasEl.style.zIndex = '1';
       canvas.upperCanvasEl.style.background = 'transparent';
     }
-    const wrapper = canvas.lowerCanvasEl?.parentElement || null;
+    const wrapper = getWrapper(canvas);
     if (wrapper) {
       wrapper.style.position = 'relative';
       wrapper.style.overflow = 'hidden';
@@ -221,6 +234,74 @@ function enforceLayerZOrder(canvas) {
     }
   } catch (e) {
     log("WARN", "[canvas-core] enforceLayerZOrder failed", e);
+  }
+}
+
+/**
+ * Responsive: scale canvas content to fit panel body width (mobile).
+ * - Uses Fabric zoom so pointer math remains correct.
+ * - Does NOT change logical canvas width/height.
+ * - Adjusts wrapper/clipHost and panel body height to the scaled height.
+ */
+function applyResponsiveViewport(canvas, reason = "") {
+  try {
+    const settings = getState().settings || {};
+    const enabled = settings.canvasResponsive !== false; // default true
+    const body = getCanvasPanelBody(canvas);
+    const wrapper = getWrapper(canvas);
+    const clipHost = getClipHost(canvas);
+    if (!body || !wrapper || !clipHost) return;
+
+    const canvasW = canvas.getWidth();
+    const canvasH = canvas.getHeight();
+
+    // Available width is body clientWidth (respecting layout column)
+    const availableW = Math.max(0, body.clientWidth || body.offsetWidth || 0);
+    if (!availableW || !canvasW) return;
+
+    const scale = enabled ? Math.min(1, availableW / canvasW) : 1;
+
+    // Apply Fabric zoom (around origin). Keep translation zero; wrapper clips excess.
+    if (typeof canvas.setZoom === "function") {
+      const prev = canvas.__responsiveScale || 1;
+      if (Math.abs(prev - scale) > 0.0001) {
+        canvas.setZoom(scale);
+        // Normalize viewportTransform to pure scale (0,0 origin)
+        if (Array.isArray(canvas.viewportTransform) && canvas.viewportTransform.length >= 6) {
+          canvas.viewportTransform[0] = scale; // a
+          canvas.viewportTransform[3] = scale; // d
+          canvas.viewportTransform[4] = 0;     // e (x)
+          canvas.viewportTransform[5] = 0;     // f (y)
+        }
+        canvas.__responsiveScale = scale;
+        log("INFO", "[canvas-core] Responsive zoom applied", { reason, scale, availableW, canvasW });
+      }
+    }
+
+    // Size the visual host to the scaled height; width follows panel body (100%)
+    const scaledW = Math.round(canvasW * scale);
+    const scaledH = Math.round(canvasH * scale);
+
+    // Let the panel/body be fluid in width; hard-set heights to scaledH to avoid overflow
+    body.style.width = "100%";
+    body.style.height = `${scaledH}px`;
+
+    // Clip host and wrapper follow the body width and scaled height
+    clipHost.style.width = "100%";
+    clipHost.style.height = `${scaledH}px`;
+
+    wrapper.style.width = "100%";
+    wrapper.style.height = `${scaledH}px`;
+    wrapper.style.overflow = "hidden";
+
+    // Upper canvas must remain transparent; request a render to honor new zoom
+    if (canvas.upperCanvasEl) {
+      canvas.upperCanvasEl.style.background = "transparent";
+    }
+    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+    else canvas.renderAll();
+  } catch (e) {
+    log("ERROR", "[canvas-core] applyResponsiveViewport failed", e);
   }
 }
 
@@ -285,7 +366,7 @@ function applyBackgroundImage(canvas, url, imgObj) {
   enforceLayerZOrder(canvas);
   syncWrapperAndHostSizes(canvas);
 
-  // Resize the panel and container to fit
+  // Resize the panel and container to fit (non-responsive baseline)
   resizeMiniLayoutPanel(canvas, newCanvasW, newCanvasH);
 
   // Reflect the applied size back into settings (so a rebuild uses the same size)
@@ -326,6 +407,9 @@ function applyBackgroundImage(canvas, url, imgObj) {
     log("ERROR", "[canvas-core] Failed to set background via canvas.setBackgroundImage", e);
   }
 
+  // Finally, apply responsive zoom to fit current panel width (if enabled)
+  applyResponsiveViewport(canvas, "applyBackgroundImage");
+
   log("DEBUG", "[canvas-core] applyBackgroundImage EXIT");
 }
 
@@ -356,7 +440,7 @@ function applyCanvasSizeFromSettings(canvas) {
     enforceLayerZOrder(canvas);
     syncWrapperAndHostSizes(canvas);
 
-    // Resize the panel/container to fit new canvas size
+    // Resize the panel/container to fit new canvas size (baseline)
     resizeMiniLayoutPanel(canvas, w, h);
 
     // Scale background image (if present) to 1:1
@@ -368,6 +452,9 @@ function applyCanvasSizeFromSettings(canvas) {
 
     if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
     else canvas.renderAll();
+
+    // Responsive pass (after baseline sizes are set)
+    applyResponsiveViewport(canvas, "applyCanvasSizeFromSettings");
 
     log("INFO", "[canvas-core] Canvas size applied", {
       width: canvas.getWidth(),
@@ -441,6 +528,21 @@ export function buildCanvasPanel({ element, title, componentName }) {
     addAllStoreShapesToCanvas(canvas);
   }
 
+  // Responsive: re-apply on window resize and on setting change
+  const onWindowResize = () => applyResponsiveViewport(canvas, "window-resize");
+  window.addEventListener('resize', onWindowResize);
+  window.addEventListener('orientationchange', onWindowResize);
+
+  let ro = null;
+  try {
+    // If supported, observe the panel body for width changes
+    const body = getCanvasPanelBody(canvas);
+    if (body && 'ResizeObserver' in window) {
+      ro = new ResizeObserver(() => applyResponsiveViewport(canvas, "ResizeObserver"));
+      ro.observe(body);
+    }
+  } catch {}
+
   const unsub = sceneDesignerStore.subscribe((state, details) => {
     if (!details) return;
     try {
@@ -482,11 +584,15 @@ export function buildCanvasPanel({ element, title, componentName }) {
         }
         case "setSettings": {
           applyCanvasSizeFromSettings(canvas);
+          // Also re-apply responsive (in case canvasResponsive changed)
+          applyResponsiveViewport(canvas, "store-setSettings");
           break;
         }
         case "setSetting": {
           if (details.key === "canvasMaxWidth" || details.key === "canvasMaxHeight") {
             applyCanvasSizeFromSettings(canvas);
+          } else if (details.key === "canvasResponsive") {
+            applyResponsiveViewport(canvas, "store-setSetting");
           }
           break;
         }
@@ -502,6 +608,11 @@ export function buildCanvasPanel({ element, title, componentName }) {
     try { unsub && unsub(); } catch {}
     try { detachConstraints && detachConstraints(); } catch {}
     try { detachOutlines && detachOutlines(); } catch {}
+    try {
+      window.removeEventListener('resize', onWindowResize);
+      window.removeEventListener('orientationchange', onWindowResize);
+      if (ro) ro.disconnect();
+    } catch {}
     log("INFO", "[canvas-core] Panel cleanup complete");
   };
   if (typeof element.on === "function") {
