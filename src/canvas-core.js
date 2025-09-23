@@ -20,10 +20,9 @@
  * - selection-outlines.js (installSelectionOutlines)
  *
  * Notes:
- * - This version hardens background image loading for Safari/iOS by preferring
- *   FabricImage.fromURL(url, cb) and falling back to an HTMLImageElement when
- *   it is fully loaded (complete + naturalWidth > 0).
- * - Extra DEBUG logs added to trace image lifecycle end-to-end.
+ * - IMPORTANT: Do not re-fetch the image URL here. We use the already-loaded HTMLImageElement
+ *   provided by state.setImage(.., imageObj) to avoid a second network request.
+ *   This fixes the "no network request, no error" symptom when FabricImage.fromURL silently fails.
  */
 
 import { log } from './log.js';
@@ -86,24 +85,30 @@ function addAllStoreShapesToCanvas(canvas) {
 /**
  * Scale a Fabric image to fill the current canvas size (axis-independent scale).
  */
-function scaleImageToCanvas(canvas, img) {
+function scaleImageToCanvas(canvas, img, naturalW, naturalH) {
   try {
     const cw = canvas.getWidth();
     const ch = canvas.getHeight();
-    const iw = img?.width || img?._element?.naturalWidth || 1;
-    const ih = img?.height || img?._element?.naturalHeight || 1;
+    const iw = Number(naturalW) || img?.width || img?._element?.naturalWidth || 1;
+    const ih = Number(naturalH) || img?.height || img?._element?.naturalHeight || 1;
     const scaleX = cw / iw;
     const scaleY = ch / ih;
-    img.set({ scaleX, scaleY, originX: 'left', originY: 'top', selectable: false, evented: false });
+    img.set({
+      scaleX,
+      scaleY,
+      originX: 'left',
+      originY: 'top',
+      selectable: false,
+      evented: false
+    });
   } catch (e) {
     log("WARN", "[canvas-core] scaleImageToCanvas failed", e);
   }
 }
 
 /**
- * Set or clear background image (robust path for Safari/iOS).
- * - Prefers FabricImage.fromURL(url, cb) to ensure Fabric tracks dimensions.
- * - Falls back to constructing from a loaded HTMLImageElement when viable.
+ * Set or clear the background image using the already-loaded HTMLImageElement from state.
+ * - No additional network fetch is performed here.
  */
 function applyBackgroundImage(canvas, url, imgObj) {
   if (!canvas) return;
@@ -115,6 +120,7 @@ function applyBackgroundImage(canvas, url, imgObj) {
     imgNatural: imgObj ? { w: imgObj.naturalWidth, h: imgObj.naturalHeight } : null
   });
 
+  // Clear background image
   if (!url || !imgObj) {
     try {
       canvas.setBackgroundImage(null, () => {
@@ -130,63 +136,46 @@ function applyBackgroundImage(canvas, url, imgObj) {
     return;
   }
 
-  // Helper to finalize: scale, set on canvas, store, render
-  function finalize(bg) {
-    try {
-      scaleImageToCanvas(canvas, bg);
-      canvas.setBackgroundImage(bg, () => {
-        setBgFabricImage(bg);
-        if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-        else canvas.renderAll();
-        const iw = bg?.width ?? bg?._element?.naturalWidth;
-        const ih = bg?.height ?? bg?._element?.naturalHeight;
-        log("INFO", "[canvas-core] Background image set", {
-          url,
-          imgW: iw,
-          imgH: ih,
-          canvasW: canvas.getWidth(),
-          canvasH: canvas.getHeight()
-        });
-      });
-    } catch (e) {
-      log("ERROR", "[canvas-core] finalize background image failed", e);
-    }
+  // Ensure the provided image element is fully loaded
+  if (!imgObj.complete || imgObj.naturalWidth <= 0 || imgObj.naturalHeight <= 0) {
+    log("WARN", "[canvas-core] Provided HTMLImageElement is not ready; skipping", {
+      complete: imgObj?.complete,
+      naturalWidth: imgObj?.naturalWidth,
+      naturalHeight: imgObj?.naturalHeight
+    });
+    return;
   }
 
-  // Prefer Fabric-managed async load
   try {
-    FabricImage.fromURL(
-      url,
-      (bg) => {
-        if (!bg) {
-          log("ERROR", "[canvas-core] FabricImage.fromURL returned null/undefined", { url });
-          return;
-        }
-        finalize(bg);
-      },
-      { crossOrigin: undefined, selectable: false, evented: false }
-    );
-    log("DEBUG", "[canvas-core] FabricImage.fromURL issued", { url });
+    // Build a Fabric image directly from the provided HTMLImageElement (no re-fetch)
+    const bg = new FabricImage(imgObj, {
+      originX: 'left',
+      originY: 'top',
+      selectable: false,
+      evented: false
+    });
+
+    // Scale to canvas
+    scaleImageToCanvas(canvas, bg, imgObj.naturalWidth, imgObj.naturalHeight);
+
+    // Apply to Fabric canvas as background
+    canvas.setBackgroundImage(bg, () => {
+      setBgFabricImage(bg);
+      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+      else canvas.renderAll();
+      log("INFO", "[canvas-core] Background image set (from HTMLImageElement, no extra fetch)", {
+        url,
+        imgW: imgObj.naturalWidth,
+        imgH: imgObj.naturalHeight,
+        canvasW: canvas.getWidth(),
+        canvasH: canvas.getHeight()
+      });
+    });
   } catch (e) {
-    log("WARN", "[canvas-core] fromURL failed; trying HTMLImageElement path", e);
-    // Fallback: construct from provided HTMLImageElement if fully loaded
-    try {
-      if (imgObj && imgObj.complete && (imgObj.naturalWidth > 0) && (imgObj.naturalHeight > 0)) {
-        const bg = new FabricImage(imgObj, { selectable: false, evented: false, originX: 'left', originY: 'top' });
-        finalize(bg);
-      } else {
-        log("ERROR", "[canvas-core] HTMLImageElement not ready; cannot set background", {
-          complete: imgObj?.complete,
-          naturalWidth: imgObj?.naturalWidth,
-          naturalHeight: imgObj?.naturalHeight
-        });
-      }
-    } catch (e2) {
-      log("ERROR", "[canvas-core] Fallback HTMLImageElement path failed", e2);
-    }
+    log("ERROR", "[canvas-core] Failed to set background image from HTMLImageElement", e);
   }
 
-  log("DEBUG", "[canvas-core] applyBackgroundImage EXIT (async path)");
+  log("DEBUG", "[canvas-core] applyBackgroundImage EXIT");
 }
 
 /**
@@ -201,8 +190,9 @@ function applyCanvasSizeFromSettings(canvas) {
 
     // Re-scale current bg image (if any) to new size
     const bg = getState().bgFabricImage;
-    if (bg) {
-      scaleImageToCanvas(canvas, bg);
+    const imgObj = getState().imageObj;
+    if (bg && imgObj && imgObj.naturalWidth > 0 && imgObj.naturalHeight > 0) {
+      scaleImageToCanvas(canvas, bg, imgObj.naturalWidth, imgObj.naturalHeight);
     }
 
     if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
@@ -348,3 +338,4 @@ export function buildCanvasPanel({ element, title, componentName }) {
   log("INFO", "[canvas-core] Canvas panel built and initialized");
   log("DEBUG", "[canvas-core] buildCanvasPanel EXIT");
 }
+
