@@ -5,14 +5,14 @@
  * Exports:
  *  - Error Log panel helpers:
  *      isErrorLogPanelOpen, showErrorLogPanel, hideErrorLogPanel, setErrorLogPanelVisible
- *  - Scenario Runner panel helpers:
+ *  - Scenario Runner panel helpers (DISABLED/NO-OP):
  *      isScenarioPanelOpen, showScenarioPanel, hideScenarioPanel, setScenarioRunnerPanelVisible
- * Dependencies: minilayout.js, log.js, state.js, settings.js, errorlog.js, canvas.js, toolbar.js, scenario-panel.js
+ * Dependencies: minilayout.js, log.js, state.js, settings.js, errorlog.js, canvas.js, toolbar.js
  *
  * MiniLayout Compliance:
  * - All panel/component factories registered expect a single object argument:
  *   { element, title, componentName }
- * - No legacy Golden Layout patterns or multi-argument panel factories.
+ * - Scenario Runner is intentionally disabled: no imports, no registration, no layout usage.
  */
 
 import { MiniLayout } from './minilayout.js';
@@ -20,7 +20,6 @@ import { buildCanvasPanel } from './canvas.js';
 import { buildSettingsPanel, loadSettings } from './settings.js';
 import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
 import { buildCanvasToolbarPanel } from './toolbar.js';
-import { buildScenarioPanel } from './scenario-panel.js';
 import { getSetting, subscribe } from './state.js';
 import { log } from './log.js';
 
@@ -36,11 +35,11 @@ export function isErrorLogPanelOpen() {
 }
 
 /**
- * Returns true if Scenario Runner panel is present in layout.
+ * Scenario Runner – DISABLED:
+ * Always returns false and never opens a panel.
  */
 export function isScenarioPanelOpen() {
-  if (!layout || !layout._panelRefs) return false;
-  return layout._panelRefs.some(ref => ref.node?.componentName === "ScenarioPanel");
+  return false;
 }
 
 /**
@@ -56,8 +55,8 @@ export function showErrorLogPanel() {
     log("INFO", "[layout] showErrorLogPanel: already open, skipping");
     return;
   }
-  const includeScenario = getSetting("showScenarioRunner") === true;
-  rebuildLayout(true, includeScenario);
+  // Scenario panel is disabled; ignore that flag
+  rebuildLayout(true, false);
   log("INFO", "[layout] ErrorLogPanel added to layout (showErrorLogPanel)");
 }
 
@@ -74,8 +73,8 @@ export function hideErrorLogPanel() {
     log("INFO", "[layout] hideErrorLogPanel: already hidden, skipping");
     return;
   }
-  const includeScenario = getSetting("showScenarioRunner") === true;
-  rebuildLayout(false, includeScenario);
+  // Scenario panel is disabled; ignore that flag
+  rebuildLayout(false, false);
   log("INFO", "[layout] ErrorLogPanel removed from layout (hideErrorLogPanel)");
 }
 
@@ -88,47 +87,24 @@ export function setErrorLogPanelVisible(visible) {
 }
 
 /**
- * Show Scenario Runner Panel.
+ * Scenario Runner – DISABLED (no-op).
  */
 export function showScenarioPanel() {
-  log("DEBUG", "[layout] showScenarioPanel entry");
-  if (!layout) {
-    log("ERROR", "[layout] showScenarioPanel: layout not initialized");
-    return;
-  }
-  if (isScenarioPanelOpen()) {
-    log("INFO", "[layout] showScenarioPanel: already open, skipping");
-    return;
-  }
-  const includeError = getSetting("showErrorLogPanel") !== false;
-  rebuildLayout(includeError, true);
-  log("INFO", "[layout] ScenarioPanel added to layout (showScenarioPanel)");
+  log("INFO", "[layout] showScenarioPanel requested, but Scenario Runner is disabled (no-op)");
 }
 
 /**
- * Hide Scenario Runner Panel.
+ * Scenario Runner – DISABLED (no-op).
  */
 export function hideScenarioPanel() {
-  log("DEBUG", "[layout] hideScenarioPanel entry");
-  if (!layout) {
-    log("ERROR", "[layout] hideScenarioPanel: layout not initialized");
-    return;
-  }
-  if (!isScenarioPanelOpen()) {
-    log("INFO", "[layout] hideScenarioPanel: already hidden, skipping");
-    return;
-  }
-  const includeError = getSetting("showErrorLogPanel") !== false;
-  rebuildLayout(includeError, false);
-  log("INFO", "[layout] ScenarioPanel removed from layout (hideScenarioPanel)");
+  log("INFO", "[layout] hideScenarioPanel requested, but Scenario Runner is disabled (no-op)");
 }
 
 /**
- * Expose for settings.js to use
+ * Expose for settings.js to use (no-op).
  */
 export function setScenarioRunnerPanelVisible(visible) {
-  if (visible) showScenarioPanel();
-  else hideScenarioPanel();
+  log("INFO", "[layout] Scenario Runner visibility set to", { visible, note: "disabled/no-op" });
 }
 
 // Listen for changes to panel visibility settings
@@ -139,17 +115,19 @@ subscribe((state, details) => {
     setErrorLogPanelVisible(details.value);
   }
   if (details.key === "showScenarioRunner") {
+    // Intentionally do nothing (disabled)
     setScenarioRunnerPanelVisible(details.value);
   }
 });
 
 /**
- * Rebuild the layout with conditional Scenario Runner and/or Error Log panels.
+ * Rebuild the layout with conditional Error Log panel.
+ * Scenario Runner panel is intentionally ignored (disabled).
  * @param {boolean} includeErrorLogPanel
- * @param {boolean} includeScenarioPanel
+ * @param {boolean} _includeScenarioPanel (ignored)
  */
-function rebuildLayout(includeErrorLogPanel, includeScenarioPanel) {
-  log("DEBUG", "[layout] rebuildLayout entry", { includeErrorLogPanel, includeScenarioPanel });
+function rebuildLayout(includeErrorLogPanel, _includeScenarioPanel) {
+  log("DEBUG", "[layout] rebuildLayout entry", { includeErrorLogPanel, scenarioPanelDisabled: true });
   if (!mlRoot) {
     mlRoot = document.getElementById("ml-root");
     if (!mlRoot) {
@@ -162,7 +140,7 @@ function rebuildLayout(includeErrorLogPanel, includeScenarioPanel) {
     layout.destroy();
   }
 
-  // Base column: Toolbar (fixed 14%) + Canvas (flex fill)
+  // Base column: Toolbar (fixed ~14%) + Canvas (flex fill)
   const mainColumn = {
     type: 'column',
     width: 70,
@@ -178,7 +156,6 @@ function rebuildLayout(includeErrorLogPanel, includeScenarioPanel) {
         type: 'component',
         componentName: 'CanvasPanel',
         title: 'Canvas',
-        // IMPORTANT: no height here → Canvas flexes to fill all remaining space
         scrollbars: 'both',
         scrollbarStyle: {
           width: '28px',
@@ -191,19 +168,6 @@ function rebuildLayout(includeErrorLogPanel, includeScenarioPanel) {
       }
     ]
   };
-
-  if (includeScenarioPanel) {
-    // Scenario takes a fixed 30%; Canvas above will automatically shrink to fit
-    mainColumn.content.push({
-      type: 'component',
-      componentName: 'ScenarioPanel',
-      title: 'Scenario Runner',
-      height: 30,
-      scrollbars: 'auto',
-      // Keep non-closable for now to avoid desync with settings checkbox
-      closable: false
-    });
-  }
 
   // Full root with Settings on the right
   let panelLayout = {
@@ -247,11 +211,11 @@ function rebuildLayout(includeErrorLogPanel, includeScenarioPanel) {
   layout.registerComponent('CanvasPanel', buildCanvasPanel);
   layout.registerComponent('SettingsPanel', buildSettingsPanel);
   layout.registerComponent('ErrorLogPanel', buildErrorLogPanel);
-  layout.registerComponent('ScenarioPanel', buildScenarioPanel);
+  // ScenarioPanel intentionally NOT registered (disabled)
 
   registerErrorLogSink();
 
-  log("INFO", "[layout] All panel factories registered, log sink registered");
+  log("INFO", "[layout] All panel factories registered (Scenario Runner disabled), log sink registered");
 
   layout.init();
 
@@ -268,20 +232,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   let showErrorLog = true;
-  let showScenario = false;
+  // Scenario Runner disabled; ignore setting but still load settings to honor others
   try {
     await loadSettings();
     showErrorLog = getSetting("showErrorLogPanel") !== false;
-    showScenario = getSetting("showScenarioRunner") === true;
-    log("DEBUG", "[layout] Loaded settings", { showErrorLog, showScenario });
+    log("DEBUG", "[layout] Loaded settings", { showErrorLog, scenarioPanelDisabled: true });
     log("INFO", "[layout] DOMContentLoaded fired");
   } catch (e) {
     log("ERROR", "[layout] Error loading settings, using defaults", e);
     showErrorLog = true;
-    showScenario = false;
   }
 
-  // Initial layout build honoring both settings
-  rebuildLayout(showErrorLog, showScenario);
+  // Initial layout build honoring error log setting only
+  rebuildLayout(showErrorLog, false);
 });
-
