@@ -9,6 +9,12 @@
  * - Color controls use Pickr via toolbar-color.js (no native <input type="color"> here).
  * - Alignment controls dispatch actions.alignSelected(mode) relative to the selection hull.
  *
+ * Phase-1 Hardening:
+ * - Server image selection now performs a fetch() preflight to surface 404/NETWORK errors
+ *   and guarantee a visible network request (Eruda Network panel).
+ * - On success, the image element is loaded from a Blob URL (no 2nd network hit),
+ *   while state.imageURL stores the canonical absolute URL for reference.
+ *
  * Public Exports:
  * - attachToolbarHandlers(refs) -> detachFn
  *   - refs: {
@@ -42,6 +48,43 @@ import {
 } from './actions.js';
 import { selectAllShapes } from './selection.js';
 import { installColorPickers } from './toolbar-color.js';
+
+/**
+ * Resolve an absolute URL for a server image under ./images/
+ * Ensures paths remain correct when hosted under /scene-designer/.
+ */
+function resolveServerImageUrl(filename) {
+  // Accept raw filenames only (e.g., "sample1.png")
+  const base = (typeof window !== 'undefined' ? window.location.href : '');
+  const url = new URL(`./images/${filename}`, base).href;
+  return url;
+}
+
+/**
+ * Load an HTMLImageElement from a Blob (fetch response) and invoke cb(imageEl).
+ * Pass canonicalUrl through for logging/state.
+ */
+function loadImageFromBlob(blob, cb, canonicalUrl) {
+  try {
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        URL.revokeObjectURL(objectUrl);
+      } catch {}
+      cb(img, canonicalUrl);
+    };
+    img.onerror = (e) => {
+      try {
+        URL.revokeObjectURL(objectUrl);
+      } catch {}
+      log("ERROR", "[toolbar-handlers] Image element failed to load from Blob URL", { canonicalUrl, error: e });
+    };
+    img.src = objectUrl;
+  } catch (e) {
+    log("ERROR", "[toolbar-handlers] Failed to create Blob URL for image", { canonicalUrl, error: e });
+  }
+}
 
 /**
  * Attach all toolbar handlers. Returns a detach() function for cleanup.
@@ -89,7 +132,7 @@ export function attachToolbarHandlers(refs) {
     handlers.push(() => el.removeEventListener(evt, fn, opts || false));
   }
 
-  // --- IMAGE UPLOAD ---
+  // --- IMAGE UPLOAD (local file → data URL) ---
   const onUploadLabelClick = () => {
     try {
       if (!imageUploadInput) return;
@@ -107,13 +150,31 @@ export function attachToolbarHandlers(refs) {
       const file = e?.target?.files && e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
+      reader.onloadstart = () => {
+        log("DEBUG", "[toolbar-handlers] FileReader onloadstart (upload)");
+      };
+      reader.onerror = (ev) => {
+        log("ERROR", "[toolbar-handlers] FileReader error (upload)", ev?.target?.error || ev);
+      };
       reader.onload = function (ev) {
-        const imgObj = new Image();
-        imgObj.onload = function () {
-          setImage(ev.target.result, imgObj);
-          log("INFO", "[toolbar-handlers] Image set from upload", { size: file.size, name: file.name });
-        };
-        imgObj.src = ev.target.result;
+        try {
+          const dataUrl = ev?.target?.result;
+          if (!dataUrl) {
+            log("ERROR", "[toolbar-handlers] FileReader produced empty result");
+            return;
+          }
+          const imgObj = new Image();
+          imgObj.onload = function () {
+            setImage(dataUrl, imgObj);
+            log("INFO", "[toolbar-handlers] Image set from upload", { size: file.size, name: file.name });
+          };
+          imgObj.onerror = (err) => {
+            log("ERROR", "[toolbar-handlers] HTMLImageElement error (upload data URL)", err);
+          };
+          imgObj.src = dataUrl;
+        } catch (e2) {
+          log("ERROR", "[toolbar-handlers] Upload onload handler failed", e2);
+        }
       };
       reader.readAsDataURL(file);
       // Clear server select to avoid ambiguity
@@ -124,8 +185,8 @@ export function attachToolbarHandlers(refs) {
   };
   on(imageUploadInput, 'change', onUploadInputChange);
 
-  // --- SERVER IMAGE SELECT ---
-  const onServerImageChange = (e) => {
+  // --- SERVER IMAGE SELECT (now with fetch preflight → Blob → Image element) ---
+  const onServerImageChange = async (e) => {
     try {
       const filename = e?.target?.value || "";
       if (!filename) {
@@ -133,13 +194,40 @@ export function attachToolbarHandlers(refs) {
         log("INFO", "[toolbar-handlers] Server image cleared");
         return;
       }
-      const imgObj = new Image();
-      imgObj.onload = function () {
-        const url = `./images/${filename}`;
-        setImage(url, imgObj);
-        log("INFO", "[toolbar-handlers] Server image set", { url });
-      };
-      imgObj.src = `./images/${filename}`;
+
+      const absoluteUrl = resolveServerImageUrl(filename);
+      log("INFO", "[toolbar-handlers] Server image selection", {
+        filename,
+        absoluteUrl,
+        location: { href: window.location.href, pathname: window.location.pathname }
+      });
+
+      // Preflight fetch so that Network tab shows the request and we can surface errors
+      log("DEBUG", "[toolbar-handlers] Fetching server image (preflight)", { absoluteUrl });
+      let resp;
+      try {
+        resp = await fetch(absoluteUrl, { method: 'GET', cache: 'no-cache' });
+      } catch (fetchErr) {
+        log("ERROR", "[toolbar-handlers] Network error fetching server image", { absoluteUrl, error: fetchErr });
+        return;
+      }
+      if (!resp.ok) {
+        log("ERROR", "[toolbar-handlers] Server image fetch failed", { absoluteUrl, status: resp.status, statusText: resp.statusText });
+        return;
+      }
+
+      const blob = await resp.blob();
+      // Load an HTMLImageElement from the fetched Blob (no additional network hit)
+      loadImageFromBlob(blob, (imgEl, canonicalUrl) => {
+        // Store canonical absolute URL in state, but image element is from Blob to avoid double fetch
+        setImage(canonicalUrl, imgEl);
+        log("INFO", "[toolbar-handlers] Server image loaded and set", {
+          canonicalUrl,
+          naturalWidth: imgEl.naturalWidth,
+          naturalHeight: imgEl.naturalHeight
+        });
+      }, absoluteUrl);
+
       // Clear any chosen file upload
       if (imageUploadInput) imageUploadInput.value = "";
     } catch (err) {
@@ -317,4 +405,3 @@ export function attachToolbarHandlers(refs) {
     }
   };
 }
-
