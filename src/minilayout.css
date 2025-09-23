@@ -7,11 +7,10 @@
  * - Splitter bars: vertical and horizontal, with hover and drag feedback.
  * - Root container: fullscreen sizing, no scrollbars.
  *
- * Mobile/iOS Safari fix (2025-09-23):
- * - Prevent Fabric upper canvas/overlays from painting over adjacent panels by:
- *   - Making panels clipping containers (position: relative; overflow: hidden;)
- *   - Giving panel bodies their own stacking/paint context (position: relative; isolation: isolate; contain: paint;)
- *   - For CanvasPanel body specifically: overflow: hidden to avoid bleed while keeping Settings scrollable.
+ * Mobile/iOS Safari fixes:
+ * - Contain paints and enforce clipping at each panel/body.
+ * - Establish explicit stacking order so toolbar/settings sit above canvas visuals.
+ * - Ensure Fabric wrapper (.canvas-container) is clipped by its panel body.
  * -----------------------------------------------------------
  */
 
@@ -38,11 +37,12 @@ html, body, #ml-root {
   box-shadow: 0 2px 9px -6px #aaa;
   transition: border 0.16s, box-shadow 0.14s;
 
-  /* NEW: contain children and clip any absolute overlays to this panel */
+  /* Contain and clip everything inside a panel */
   position: relative;
   overflow: hidden;
-  contain: paint;          /* helps Safari clip paints within panel bounds */
-  isolation: isolate;      /* separate stacking context so z-index does not bleed */
+  contain: paint;
+  isolation: isolate;
+  z-index: 0; /* base; bodies will stack above as needed */
 }
 
 .minilayout-panel-header {
@@ -62,6 +62,7 @@ html, body, #ml-root {
   gap: 10px;
   font-weight: bold;
   user-select: none;
+  z-index: 2; /* header above its body content */
 }
 
 .minilayout-panel-title {
@@ -94,16 +95,17 @@ html, body, #ml-root {
 .minilayout-panel-body {
   background: #f3f3f3;
   flex: 1 1 0;
-  overflow: auto;            /* keep scrollable bodies scrolling */
+  overflow: auto;
   padding: 0;
   border-radius: 0 0 8px 8px;
   transition: background 0.12s;
 
-  /* NEW: ensure absolute children (e.g., Fabric wrappers) are positioned/clipped by body */
+  /* Ensure absolute children (Fabric canvases) are positioned/clipped by body */
   position: relative;
-  isolation: isolate;        /* separate stacking context inside the panel */
-  contain: paint;            /* clip paints to this element */
-  -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
+  isolation: isolate;
+  contain: paint;
+  -webkit-overflow-scrolling: touch;
+  z-index: 1; /* above panel base, below header */
 }
 
 .minilayout-panel-component {
@@ -112,12 +114,48 @@ html, body, #ml-root {
   flex: 1 1 0;
 }
 
-/* Specific body class names are generated as: .minilayout-panel-body--{componentName} (sanitized, lowercase) */
-/* Lock the Canvas panel body to overflow hidden to contain Fabric upper canvas/overlays */
+/* Specific body class names are generated as: .minilayout-panel-body--{componentNameLower} */
+
+/* Ensure Canvas panel clips all Fabric layers and sits below toolbar/settings in stacking order */
 .minilayout-panel-body--canvaspanel {
   overflow: hidden !important;
+  z-index: 10; /* canvas visuals */
 }
 
+/* Toolbar body sits above canvas to avoid any bleed-over */
+.minilayout-panel-body--canvastoolbarpanel {
+  position: relative;
+  z-index: 20; /* above canvas */
+}
+
+/* Settings panel above canvas as well */
+.minilayout-panel-body--settingspanel {
+  position: relative;
+  z-index: 20; /* above canvas */
+}
+
+/* Fabric wrapper created by fabric.Canvas – ensure it clips within Canvas panel body */
+.minilayout-panel-body--canvaspanel .canvas-container {
+  position: relative !important;  /* keep Fabric’s relative positioning */
+  overflow: hidden !important;    /* clip upper/lower/context canvases */
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  contain: layout paint;          /* stronger containment on Safari/iOS */
+  isolation: isolate;
+}
+
+/* Guard common Fabric canvas layers inside the Canvas panel */
+.minilayout-panel-body--canvaspanel .upper-canvas,
+.minilayout-panel-body--canvaspanel .lower-canvas,
+.minilayout-panel-body--canvaspanel .cache-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Stack container (tabs) */
 .minilayout-panel-stack {
   box-shadow: 0 3px 10px -6px #aaa;
   border-radius: 6px;
@@ -164,7 +202,7 @@ html, body, #ml-root {
 /* --- Splitter styles for drag-resize --- */
 .minilayout-splitter {
   background: #d2d2d2;
-  z-index: 10;
+  z-index: 5;
   user-select: none;
   transition: background 0.13s;
 }
@@ -195,3 +233,4 @@ html, body, #ml-root {
     padding: 2px 9px;
   }
 }
+
