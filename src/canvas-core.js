@@ -36,6 +36,7 @@ import { MiniLayout } from './minilayout.js';
 
 function createCanvasElement(host, width, height) {
   const c = document.createElement('canvas');
+  // Initial size; Fabric will manage retina/backing store after it takes over.
   c.width = Math.max(1, Number(width) || 600);
   c.height = Math.max(1, Number(height) || 400);
   c.style.display = 'block';
@@ -96,8 +97,6 @@ function fitImageToMax(imageW, imageH, maxW, maxH) {
  * Uses the new API if available.
  */
 function resizeMiniLayoutPanel(canvas, width, height) {
-  // Find CanvasPanel in MiniLayout and resize it.
-  // Use window.layout if available, else try to find parent .minilayout-panel-body.
   try {
     let layoutInstance = null;
     if (typeof window !== "undefined" && window.layout instanceof MiniLayout) {
@@ -107,7 +106,7 @@ function resizeMiniLayoutPanel(canvas, width, height) {
       layoutInstance.resizePanelBody('CanvasPanel', width, height);
       log("INFO", "[canvas-core] resizePanelBody(CanvasPanel)", { width, height });
     } else {
-      // Fallback: resize .canvas-container and parent panel body directly
+      // Fallback: resize the container and panel body directly
       if (canvas && canvas.lowerCanvasEl) {
         const container = canvas.lowerCanvasEl.parentElement;
         if (container) {
@@ -136,6 +135,10 @@ function resizeMiniLayoutPanel(canvas, width, height) {
 /**
  * Set or clear the background image via canvas.backgroundImage.
  * When image is set, resize canvas AND panel to image's aspect ratio.
+ *
+ * IMPORTANT: Do NOT manually set lowerCanvasEl/upperCanvasEl width/height attributes.
+ * Fabric handles backing store size (retinaScaling) internally; overriding those values
+ * causes input/pointer and selection offsets on high-DPI displays (iOS Safari).
  */
 function applyBackgroundImage(canvas, url, imgObj) {
   if (!canvas) return;
@@ -181,26 +184,20 @@ function applyBackgroundImage(canvas, url, imgObj) {
     maxW,
     maxH
   );
-  // Resize both the Fabric canvas and DOM canvas element
+
+  // Let Fabric manage backstore/CSS + retinaScaling via its API
   canvas.setWidth(newCanvasW);
   canvas.setHeight(newCanvasH);
-  if (canvas.lowerCanvasEl) {
-    canvas.lowerCanvasEl.width = newCanvasW;
-    canvas.lowerCanvasEl.height = newCanvasH;
-    canvas.lowerCanvasEl.style.width = `${newCanvasW}px`;
-    canvas.lowerCanvasEl.style.height = `${newCanvasH}px`;
-  }
+
+  // Ensure upper canvas remains transparent (don’t touch sizes)
   if (canvas.upperCanvasEl) {
-    canvas.upperCanvasEl.width = newCanvasW;
-    canvas.upperCanvasEl.height = newCanvasH;
-    canvas.upperCanvasEl.style.width = `${newCanvasW}px`;
-    canvas.upperCanvasEl.style.height = `${newCanvasH}px`;
     canvas.upperCanvasEl.style.background = "transparent";
   }
 
   // Resize the panel and container to fit
   resizeMiniLayoutPanel(canvas, newCanvasW, newCanvasH);
 
+  // Reflect the applied size back into settings (so a rebuild uses the same size)
   setSetting("canvasMaxWidth", newCanvasW);
   setSetting("canvasMaxHeight", newCanvasH);
 
@@ -245,6 +242,9 @@ function applyBackgroundImage(canvas, url, imgObj) {
  * Update canvas dimension from settings and re-scale background image.
  * If an image is present, canvas should keep image's aspect ratio.
  * Also resize MiniLayout panel/container.
+ *
+ * IMPORTANT: We only use Fabric's setWidth/setHeight. We do NOT write to
+ * lowerCanvasEl/upperCanvasEl width/height attributes to preserve retina scaling.
  */
 function applyCanvasSizeFromSettings(canvas) {
   try {
@@ -260,17 +260,9 @@ function applyCanvasSizeFromSettings(canvas) {
 
     canvas.setWidth(w);
     canvas.setHeight(h);
-    if (canvas.lowerCanvasEl) {
-      canvas.lowerCanvasEl.width = w;
-      canvas.lowerCanvasEl.height = h;
-      canvas.lowerCanvasEl.style.width = `${w}px`;
-      canvas.lowerCanvasEl.style.height = `${h}px`;
-    }
+
+    // Keep upper canvas transparent; do not change sizes directly
     if (canvas.upperCanvasEl) {
-      canvas.upperCanvasEl.width = w;
-      canvas.upperCanvasEl.height = h;
-      canvas.upperCanvasEl.style.width = `${w}px`;
-      canvas.upperCanvasEl.style.height = `${h}px`;
       canvas.upperCanvasEl.style.background = "transparent";
     }
 
@@ -290,6 +282,7 @@ function applyCanvasSizeFromSettings(canvas) {
     log("INFO", "[canvas-core] Canvas size applied", {
       width: canvas.getWidth(),
       height: canvas.getHeight(),
+      retinaScaling: (typeof canvas.getRetinaScaling === 'function') ? canvas.getRetinaScaling() : undefined,
       objectsCount: canvas.getObjects().length
     });
   } catch (e) {
@@ -322,6 +315,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
     backgroundColor: 'transparent'
   });
 
+  // Ensure transparent top layer
   setTimeout(() => {
     if (canvas.upperCanvasEl) {
       canvas.upperCanvasEl.style.background = "transparent";
