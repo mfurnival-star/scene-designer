@@ -1,12 +1,13 @@
 /**
  * canvas-events.js
  * -----------------------------------------------------------
- * Scene Designer – Fabric.js Selection Event Sync (ESM ONLY)
+ * Scene Designer – Fabric.js Selection Event Sync (ESM ONLY, PHASED ARCHITECTURE v1)
  * Purpose:
  * - Listen to Fabric canvas selection lifecycle events and keep the app store
  *   (selection.js) in sync with what the user visually selected.
+ * - Transactional (tokenized) selection sync: eliminates reentrancy bugs.
  * - Fix for defect1: ensures Delete operates on the shape that is visibly selected.
- * - Prevent re-entrant loops with programmatic selection changes.
+ * - Prevent re-entrant loops with programmatic selection changes (token, not boolean).
  *
  * Exports:
  * - installFabricSelectionSync(canvas)
@@ -20,10 +21,10 @@
  * - Uses Fabric events: 'selection:created', 'selection:updated', 'selection:cleared'.
  * - Avoids namespaced event names (not supported by Fabric).
  * - Guards against no-op loops by comparing selected IDs before mutating store.
- * - Suppresses handling when changes are programmatic (to avoid event feedback loops).
- * - Ignores 'selection:cleared' if not triggered by a user event (opt.e is falsy).
- * - NEW: Clears selection when clicking the background (mouse:down with no target).
- * - NEW (2025-09-23): Robustly unwrap ActiveSelection so marquee multi-select enables toolbar buttons.
+ * - Suppresses handling when changes are programmatic (by token).
+ * - Ignores 'selection:cleared' if not triggered by a user event (opt.e is falsy), unless token matches.
+ * - Clears selection when clicking the background (mouse:down with no target).
+ * - Robustly unwraps ActiveSelection so marquee multi-select enables toolbar buttons.
  */
 
 import { log } from './log.js';
@@ -31,24 +32,24 @@ import { getState } from './state.js';
 import { setSelectedShapes as selectionSetSelectedShapes, deselectAll } from './selection.js';
 
 /**
- * Internal re-entrancy guard: when we mutate selection programmatically,
- * Fabric can emit selection events. We suppress handling while the mutation runs.
+ * Transactional selection sync token (phase 1): increment for every programmatic selection change.
+ * - Each event handler receives the current token at the time of invocation.
+ * - If the event was triggered by a programmatic change, it is stamped with the token, and handlers only act if tokens mismatch.
  */
-let suppressHandlers = false;
+let selectionSyncToken = 0;
+
 function withSuppressedHandlers(fn, tag = "") {
-  suppressHandlers = true;
+  const token = ++selectionSyncToken;
   try {
-    fn();
+    fn(token);
   } finally {
-    suppressHandlers = false;
-    if (tag) log("DEBUG", "[canvas-events] Exited suppressed section", { tag });
+    if (tag) log("DEBUG", "[canvas-events] Exited suppressed section", { tag, token });
   }
 }
 
 /**
  * Utility: Convert Fabric selection state to an array of selected member objects.
  * - Always unwrap ActiveSelection to its _objects (members) when present.
- * - Falls back to options.selected / options.target.
  */
 function getSelectedObjectsFromFabric(canvas, options) {
   try {
@@ -121,12 +122,16 @@ export function installFabricSelectionSync(canvas) {
   canvas.off('selection:created');
   canvas.off('selection:updated');
   canvas.off('selection:cleared');
-  // NEW: also normalize mouse:down listener
   canvas.off('mouse:down');
 
+  // Store the token at which the last programmatic selection change was made
+  let lastProgrammaticToken = 0;
+
   const onCreated = (opt) => {
-    if (suppressHandlers) {
-      log("DEBUG", "[canvas-events] selection:created suppressed");
+    const eventToken = selectionSyncToken;
+    // Suppress if this event is echoing a programmatic change (token unchanged since last set)
+    if (eventToken === lastProgrammaticToken) {
+      log("DEBUG", "[canvas-events] selection:created suppressed (token match)", { eventToken, lastProgrammaticToken });
       return;
     }
     const selObjs = getSelectedObjectsFromFabric(canvas, opt);
@@ -136,19 +141,25 @@ export function installFabricSelectionSync(canvas) {
     log("DEBUG", "[canvas-events] selection:created", {
       fabricSelectedCount: selObjs.length,
       nextIds,
-      prevIds
+      prevIds,
+      eventToken,
+      lastProgrammaticToken
     });
 
     if (sameIdSet(nextIds, prevIds)) {
       log("DEBUG", "[canvas-events] selection:created no-op (ids match)");
       return;
     }
-    withSuppressedHandlers(() => selectionSetSelectedShapes(selObjs), "created->setSelectedShapes");
+    withSuppressedHandlers((token) => {
+      selectionSetSelectedShapes(selObjs);
+      lastProgrammaticToken = token;
+    }, "created->setSelectedShapes");
   };
 
   const onUpdated = (opt) => {
-    if (suppressHandlers) {
-      log("DEBUG", "[canvas-events] selection:updated suppressed");
+    const eventToken = selectionSyncToken;
+    if (eventToken === lastProgrammaticToken) {
+      log("DEBUG", "[canvas-events] selection:updated suppressed (token match)", { eventToken, lastProgrammaticToken });
       return;
     }
     const selObjs = getSelectedObjectsFromFabric(canvas, opt);
@@ -158,37 +169,47 @@ export function installFabricSelectionSync(canvas) {
     log("DEBUG", "[canvas-events] selection:updated", {
       fabricSelectedCount: selObjs.length,
       nextIds,
-      prevIds
+      prevIds,
+      eventToken,
+      lastProgrammaticToken
     });
 
     if (sameIdSet(nextIds, prevIds)) {
       log("DEBUG", "[canvas-events] selection:updated no-op (ids match)");
       return;
     }
-    withSuppressedHandlers(() => selectionSetSelectedShapes(selObjs), "updated->setSelectedShapes");
+    withSuppressedHandlers((token) => {
+      selectionSetSelectedShapes(selObjs);
+      lastProgrammaticToken = token;
+    }, "updated->setSelectedShapes");
   };
 
   const onCleared = (opt) => {
-    if (suppressHandlers) {
-      log("DEBUG", "[canvas-events] selection:cleared suppressed");
+    const eventToken = selectionSyncToken;
+    // Suppress if programmatic clear just happened (token match)
+    if (eventToken === lastProgrammaticToken) {
+      log("DEBUG", "[canvas-events] selection:cleared suppressed (token match)", { eventToken, lastProgrammaticToken });
       return;
     }
     // Heuristic: If 'cleared' originated from programmatic discardActiveObject(),
-    // Fabric does not include an original pointer event (opt.e). Ignore in that case.
+    // Fabric does not include an original pointer event (opt.e). Ignore in that case unless token changed.
     const isUserEvent = !!(opt && opt.e);
     const hadSelection = (getState().selectedShapes || []).length > 0;
 
-    log("DEBUG", "[canvas-events] selection:cleared", { isUserEvent, hadSelection });
+    log("DEBUG", "[canvas-events] selection:cleared", { isUserEvent, hadSelection, eventToken, lastProgrammaticToken });
 
-    if (!isUserEvent) {
-      log("DEBUG", "[canvas-events] selection:cleared ignored (programmatic)");
+    if (!isUserEvent && eventToken === lastProgrammaticToken) {
+      log("DEBUG", "[canvas-events] selection:cleared ignored (programmatic, token match)");
       return;
     }
     if (!hadSelection) {
       log("DEBUG", "[canvas-events] selection:cleared no-op (already none selected)");
       return;
     }
-    withSuppressedHandlers(() => deselectAll(), "cleared->deselectAll");
+    withSuppressedHandlers((token) => {
+      deselectAll();
+      lastProgrammaticToken = token;
+    }, "cleared->deselectAll");
   };
 
   /**
@@ -196,16 +217,18 @@ export function installFabricSelectionSync(canvas) {
    */
   const onMouseDown = (opt) => {
     try {
-      if (suppressHandlers) return;
+      const eventToken = selectionSyncToken;
+      if (eventToken === lastProgrammaticToken) return;
       const hadSelection = (getState().selectedShapes || []).length > 0;
       const clickedBlank = !opt?.target;
       if (hadSelection && clickedBlank) {
-        log("DEBUG", "[canvas-events] mouse:down on blank area → clearing selection");
-        withSuppressedHandlers(() => {
+        log("DEBUG", "[canvas-events] mouse:down on blank area → clearing selection", { eventToken });
+        withSuppressedHandlers((token) => {
           if (typeof canvas.discardActiveObject === 'function') {
             try { canvas.discardActiveObject(); } catch {}
           }
           deselectAll();
+          lastProgrammaticToken = token;
         }, "mousedown-blank->deselectAll");
         if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
         else canvas.renderAll();
@@ -220,6 +243,5 @@ export function installFabricSelectionSync(canvas) {
   canvas.on('selection:cleared', onCleared);
   canvas.on('mouse:down', onMouseDown);
 
-  log("INFO", "[canvas-events] Fabric selection sync installed (created/updated/cleared handlers + blank-click clear + reentrancy guard + ActiveSelection unwrap)");
+  log("INFO", "[canvas-events] Fabric selection sync installed (created/updated/cleared handlers + blank-click clear + tokenized sync + ActiveSelection unwrap)");
 }
-
