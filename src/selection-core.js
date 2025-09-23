@@ -47,7 +47,7 @@ function getCanonicalShapeById(shapeLike) {
   if (!shapeLike || !shapeLike._id) return null;
   const shapes = getState().shapes || [];
   const result = shapes.find(s => s._id === shapeLike._id) || null;
-  log("TRACE", "[selection-core] getCanonicalShapeById", {
+  log("DEBUG", "[selection-core] getCanonicalShapeById", {
     inputId: shapeLike?._id,
     found: !!result,
     ids: shapes.map(s => s._id)

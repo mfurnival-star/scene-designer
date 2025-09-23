@@ -21,7 +21,7 @@ import {
  * MiniLayout-compliant: accepts { element, title, componentName }
  */
 export function buildScenarioPanel({ element, title, componentName }) {
-  log("TRACE", "[scenario-panel] buildScenarioPanel entry", {
+  log("DEBUG", "[scenario-panel] buildScenarioPanel entry", {
     elementType: element?.tagName,
     title,
     componentName
@@ -182,10 +182,9 @@ export function buildScenarioPanel({ element, title, componentName }) {
   });
 
   log("INFO", "[scenario-panel] Scenario Runner panel initialized");
-  log("TRACE", "[scenario-panel] buildScenarioPanel exit", {
+  log("DEBUG", "[scenario-panel] buildScenarioPanel exit", {
     elementType: element?.tagName,
     title,
     componentName
   });
 }
-

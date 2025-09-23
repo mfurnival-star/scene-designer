@@ -16,7 +16,7 @@ import { log } from "./log.js";
  * MiniLayout-compliant: accepts { element, title, componentName }
  */
 export function buildErrorLogPanel({ element, title, componentName }) {
-  log("TRACE", "[errorlog] buildErrorLogPanel entry", {
+  log("DEBUG", "[errorlog] buildErrorLogPanel entry", {
     elementType: element?.tagName,
     title,
     componentName
@@ -35,7 +35,7 @@ export function buildErrorLogPanel({ element, title, componentName }) {
 
   log("INFO", "[errorlog] Error Log panel is present but not active (Console.Re streaming only)");
 
-  log("TRACE", "[errorlog] buildErrorLogPanel exit", {
+  log("DEBUG", "[errorlog] buildErrorLogPanel exit", {
     elementType: element?.tagName,
     title,
     componentName
@@ -47,8 +47,7 @@ export function buildErrorLogPanel({ element, title, componentName }) {
  * (No-op; not used when Console.Re streaming is active.)
  */
 export function registerErrorLogSink() {
-  log("TRACE", "[errorlog] registerErrorLogSink entry");
+  log("DEBUG", "[errorlog] registerErrorLogSink entry");
   // No-op: panel is passive when streaming is in use.
-  log("TRACE", "[errorlog] registerErrorLogSink exit");
+  log("DEBUG", "[errorlog] registerErrorLogSink exit");
 }
-

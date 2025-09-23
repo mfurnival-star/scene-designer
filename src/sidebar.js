@@ -8,7 +8,7 @@
  * - Clicking a row selects the corresponding shape (single selection for now).
  * - All state via Zustand store.
  * - Logging via log.js.
- * - TRACE-level logging for all key entry/exit, table update, selection, and row events.
+ * - DEBUG-level logging for all key entry/exit, table update, selection, and row events.
  * - Refactored for Tabulator v6.x (Full build), with proper row selection API.
  * - MiniLayout API: panel factory accepts single object argument ({ element, title, componentName }).
  * -----------------------------------------------------------
@@ -27,7 +27,7 @@ import { TabulatorFull as Tabulator } from 'tabulator-tables';
  */
 function dumpShapeStore(tag = "") {
   const shapes = getState().shapes;
-  log("TRACE", `[sidebar][${tag}] store.shapes:`,
+  log("DEBUG", `[sidebar][${tag}] store.shapes:`,
     Array.isArray(shapes)
       ? shapes.map((s, i) => ({
           idx: i,
@@ -45,7 +45,7 @@ function dumpShapeStore(tag = "") {
  * MiniLayout-compliant: accepts { element, title, componentName }.
  */
 export function buildSidebarPanel({ element, title, componentName }) {
-  log("TRACE", "[sidebar] buildSidebarPanel ENTRY", {
+  log("DEBUG", "[sidebar] buildSidebarPanel ENTRY", {
     elementType: element?.tagName,
     title,
     componentName
@@ -125,7 +125,7 @@ export function buildSidebarPanel({ element, title, componentName }) {
       selectable: 1,
       // Use rowClick to select shape
       rowClick: function (e, row) {
-        log("TRACE", "[sidebar] rowClick handler FIRED", {
+        log("DEBUG", "[sidebar] rowClick handler FIRED", {
           eventType: e.type,
           idx: row.getData().idx,
           id: row.getData().id,
@@ -149,7 +149,7 @@ export function buildSidebarPanel({ element, title, componentName }) {
 
     // --- Robust updateTable: syncs selection and shape rows ---
     const updateTable = () => {
-      log("TRACE", "[sidebar] updateTable ENTRY");
+      log("DEBUG", "[sidebar] updateTable ENTRY");
       dumpShapeStore("updateTable-top");
       const data = (getState().shapes || []).map((s, i) => shapeToRow(s, i));
       log("DEBUG", "[sidebar] updateTable: computed table data", { data });
@@ -190,16 +190,16 @@ export function buildSidebarPanel({ element, title, componentName }) {
         log("DEBUG", "[sidebar] updateTable: All rows deselected");
       }
       dumpShapeStore("updateTable-bottom");
-      log("TRACE", "[sidebar] updateTable EXIT");
+      log("DEBUG", "[sidebar] updateTable EXIT");
     };
 
     tabulator.on("tableBuilt", () => {
-      log("TRACE", "[sidebar] Tabulator tableBuilt event");
+      log("DEBUG", "[sidebar] Tabulator tableBuilt event");
       dumpShapeStore("tableBuilt");
       updateTable();
       // Subscribe after built to avoid early calls
       var unsub = sceneDesignerStore.subscribe(updateTable);
-      log("TRACE", "[sidebar] subscribe() after tableBuilt", { unsub });
+      log("DEBUG", "[sidebar] subscribe() after tableBuilt", { unsub });
       // Clean up on destroy
       // MiniLayout: container may provide an on("destroy") API for panel cleanup.
       if (typeof element.on === "function") {
@@ -218,10 +218,9 @@ export function buildSidebarPanel({ element, title, componentName }) {
     throw e;
   }
 
-  log("TRACE", "[sidebar] buildSidebarPanel EXIT", {
+  log("DEBUG", "[sidebar] buildSidebarPanel EXIT", {
     elementType: element?.tagName,
     title,
     componentName
   });
 }
-

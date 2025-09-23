@@ -22,7 +22,7 @@ import { log } from './log.js';
  * @param {string} channel - Your Console.Re channel name.
  */
 export function initConsoleRe(channel = "default") {
-  log("TRACE", "[console.re] initConsoleRe ENTRY", {
+  log("DEBUG", "[console.re] initConsoleRe ENTRY", {
     channel,
     hasInit: typeof consoleReInit === "function",
     hasGlobal: !!consoleReGlobal,
