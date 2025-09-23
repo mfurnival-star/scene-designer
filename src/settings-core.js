@@ -1,289 +1,189 @@
 /**
- * selection-core.js
- * -----------------------------------------------------------
- * Scene Designer – Centralized Shape Selection Logic (Core, ESM ONLY)
+ * settings-core.js
+ * -------------------------------------------------------------------
+ * Scene Designer – Settings Core Module (ESM ONLY)
  * Purpose:
- * - Manage single/multi-shape selection state for Fabric.js objects.
- * - Own the transformer lifecycle (attach/detach/update) using transformer.js.
- * - Integrate shape-state.js and shape-defs.js for per-shape behavior.
- * - Multi-select dashed outlines are rendered by the overlay painter installed in canvas-core.js.
+ * - Centralized settings registry, persistence, mutators, and side effects.
+ * - No UI logic; only registry, load/save, and mutator functions.
+ * - Used by settings.js (facade), settings-ui.js (panel), and toolbar-color.js.
  *
- * Exports (public API):
- * - setSelectedShape(shape|null)
- * - setSelectedShapes(arrayOfShapes)
- * - selectAllShapes()
- * - deselectAll()
- * - attachSelectionHandlers(shape)
- * - isShapeSelected(shape) : boolean
- * - getSelectedShapes() : array
- * - getSelectedShape() : shape|null
+ * Exports:
+ * - LOG_LEVELS, LOG_LEVEL_LABEL_TO_NUM, LOG_LEVEL_NUM_TO_LABEL
+ * - settingsRegistry
+ * - loadSettings, saveSettings
+ * - setSettingAndSave, setSettingsAndSave
  *
  * Dependencies:
- * - log.js (log)
- * - transformer.js (attachTransformerForShape, detachTransformer)
- * - shape-state.js (setShapeState, selectShape, deselectShape, setMultiSelected)
- * - shape-defs.js (getShapeDef)
- * - shapes.js (fixStrokeWidthAfterTransform)
- * - state.js (sceneDesignerStore, getState)
- * - fabric-wrapper.js (default fabric namespace for ActiveSelection)
- * -----------------------------------------------------------
+ * - state.js (getState, setSettings, setSetting)
+ * - log.js (log, reconfigureLoggingFromSettings)
+ * -------------------------------------------------------------------
  */
 
-import { log } from './log.js';
-import { attachTransformerForShape, detachTransformer } from './transformer.js';
-import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
-import { getShapeDef } from './shape-defs.js';
-import { fixStrokeWidthAfterTransform } from './shapes.js';
-import {
-  sceneDesignerStore,
-  getState
-} from './state.js';
-import fabric from './fabric-wrapper.js';
+import { getState, setSettings, setSetting } from './state.js';
+import { log, reconfigureLoggingFromSettings } from './log.js';
+
+// --- Log Level Constants ---
+export const LOG_LEVELS = {
+  Silent: 0,
+  Error: 1,
+  Warning: 2,
+  Info: 3,
+  Debug: 4
+};
+
+export const LOG_LEVEL_LABEL_TO_NUM = {
+  Silent: 0,
+  Error: 1,
+  Warning: 2,
+  Info: 3,
+  Debug: 4
+};
+
+export const LOG_LEVEL_NUM_TO_LABEL = {
+  0: "Silent",
+  1: "Error",
+  2: "Warning",
+  3: "Info",
+  4: "Debug"
+};
+
+// --- Settings Registry ---
+// Each entry: { key, label, type, default, [min, max, step, options] }
+export const settingsRegistry = [
+  { key: "defaultStrokeWidth", label: "Stroke Width", type: "number", default: 1, min: 1, max: 20, step: 1 },
+  { key: "defaultStrokeColor", label: "Stroke Color", type: "color", default: "#2176ff" },
+  { key: "defaultFillColor", label: "Fill Color", type: "color", default: "#00000000" },
+  { key: "canvasMaxWidth", label: "Canvas Max Width", type: "number", default: 600, min: 100, max: 2000, step: 1 },
+  { key: "canvasMaxHeight", label: "Canvas Max Height", type: "number", default: 400, min: 100, max: 2000, step: 1 },
+  { key: "defaultRectWidth", label: "Rect Width", type: "number", default: 50, min: 10, max: 500, step: 1 },
+  { key: "defaultRectHeight", label: "Rect Height", type: "number", default: 30, min: 10, max: 500, step: 1 },
+  { key: "defaultCircleRadius", label: "Circle Radius", type: "number", default: 15, min: 2, max: 200, step: 1 },
+  { key: "shapeStartXPercent", label: "Shape Start X (%)", type: "number", default: 50, min: 0, max: 100, step: 1 },
+  { key: "shapeStartYPercent", label: "Shape Start Y (%)", type: "number", default: 50, min: 0, max: 100, step: 1 },
+  { key: "toolbarUIScale", label: "Toolbar UI Scale", type: "number", default: 1, min: 0.5, max: 2, step: 0.1 },
+  { key: "showDiagnosticLabels", label: "Show Diagnostic Labels", type: "boolean", default: true },
+  { key: "multiDragBox", label: "Show Multi-Drag Box", type: "boolean", default: true },
+  { key: "reticleSize", label: "Point Reticle Size", type: "number", default: 14, min: 4, max: 60, step: 1 },
+  { key: "reticleStyle", label: "Point Reticle Style", type: "select", default: "crosshairHalo", options: [
+      { value: "crosshair", label: "Crosshair" },
+      { value: "crosshairHalo", label: "Crosshair + Halo" },
+      { value: "bullseye", label: "Bullseye" },
+      { value: "dot", label: "Dot (center cutout)" },
+      { value: "target", label: "Target (ring + cross)" }
+    ]
+  },
+  { key: "DEBUG_LOG_LEVEL", label: "Debug Log Level", type: "select", default: "Info", options: [
+      { value: "Silent", label: "Silent" },
+      { value: "Error", label: "Error" },
+      { value: "Warning", label: "Warning" },
+      { value: "Info", label: "Info" },
+      { value: "Debug", label: "Debug" }
+    ]
+  },
+  { key: "LOG_OUTPUT_DEST", label: "Log Output", type: "select", default: "console", options: [
+      { value: "console", label: "Console Only" },
+      { value: "both", label: "Console + Remote" }
+    ]
+  },
+  { key: "INTERCEPT_CONSOLE", label: "Intercept Console", type: "boolean", default: false },
+  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true },
+  { key: "showScenarioRunner", label: "Show Scenario Runner Panel", type: "boolean", default: false },
+  { key: "canvasResponsive", label: "Responsive Canvas", type: "boolean", default: true }
+  // Add more settings here as needed
+];
+
+// --- Persistence Helpers ---
+const STORAGE_KEY = "sceneDesignerSettings";
 
 /**
- * Resolve a canonical shape reference from the store by _id.
+ * Load settings from localStorage, apply defaults for missing keys,
+ * and update the store.
+ * Returns a Promise for async compatibility.
  */
-function getCanonicalShapeById(shapeLike) {
-  if (!shapeLike || !shapeLike._id) return null;
-  const shapes = getState().shapes || [];
-  const result = shapes.find(s => s._id === shapeLike._id) || null;
-  log("DEBUG", "[selection-core] getCanonicalShapeById", {
-    inputId: shapeLike?._id,
-    found: !!result,
-    ids: shapes.map(s => s._id)
-  });
-  return result;
-}
-
-/**
- * Ensure Fabric has an ActiveSelection for the given shapes when multi-selected.
- * Deterministic: discards prior active object, builds new ActiveSelection, and activates it.
- */
-function ensureFabricActiveSelection(shapes) {
-  const canvas = getState().fabricCanvas;
-  if (!canvas || !Array.isArray(shapes) || shapes.length <= 1) return;
-
-  // Quick id set compare to avoid churn
-  const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
-  const wantIds = shapes.map(s => s && s._id).filter(Boolean).sort();
-
-  if (active && active.type === 'activeSelection' && Array.isArray(active._objects)) {
-    const activeIds = active._objects.map(o => o && o._id).filter(Boolean).sort();
-    if (activeIds.length === wantIds.length && activeIds.every((v, i) => v === wantIds[i])) {
-      log("DEBUG", "[selection-core] ActiveSelection already matches; no-op");
-      return;
-    }
-  }
-
+export function loadSettings() {
+  log("DEBUG", "[settings-core] loadSettings ENTRY");
+  let stored = {};
   try {
-    // Discard anything currently active to avoid mixed states
-    if (typeof canvas.discardActiveObject === 'function') canvas.discardActiveObject();
-
-    // Build a fresh ActiveSelection with the exact members
-    const sel = new fabric.ActiveSelection(shapes, { canvas });
-
-    // UX: hull visible, but no transform controls for group drag
-    sel.set({
-      hasControls: false,
-      hasBorders: true,
-      selectable: true
-    });
-
-    canvas.setActiveObject(sel);
-
-    // Update coords to keep aCoords fresh for overlay
-    if (typeof sel.setCoords === 'function') sel.setCoords();
-    shapes.forEach(s => { if (typeof s.setCoords === 'function') s.setCoords(); });
-
-    if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
-    else canvas.renderAll();
-
-    log("DEBUG", "[selection-core] Fabric ActiveSelection set", { ids: wantIds });
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) stored = JSON.parse(raw);
   } catch (e) {
-    log("ERROR", "[selection-core] Failed to create/set ActiveSelection", e);
+    log("ERROR", "[settings-core] loadSettings: failed to parse", e);
   }
+
+  // Apply defaults for missing keys
+  const settingsOut = {};
+  for (const reg of settingsRegistry) {
+    const key = reg.key;
+    const val = (key in stored) ? stored[key] : reg.default;
+    settingsOut[key] = val;
+  }
+
+  setSettings(settingsOut);
+
+  // Side effect: reconfigure logging if relevant settings present
+  reconfigureLoggingFromSettings({
+    level: settingsOut.DEBUG_LOG_LEVEL,
+    dest: settingsOut.LOG_OUTPUT_DEST
+  });
+
+  log("INFO", "[settings-core] Settings loaded and applied", { settings: settingsOut });
+  log("DEBUG", "[settings-core] loadSettings EXIT");
+  return Promise.resolve(settingsOut);
 }
 
 /**
- * Set a single selected shape (or clear selection with null).
+ * Save current settings to localStorage.
  */
-export function setSelectedShape(shape) {
-  log("DEBUG", "[selection-core] setSelectedShape ENTRY", {
-    incomingId: shape?._id,
-    prevSelectedId: getState().selectedShape?._id
-  });
-
-  const canonicalShape = getCanonicalShapeById(shape);
-
-  // Deselect any previously selected single
-  if (getState().selectedShape) {
-    deselectShape(getState().selectedShape);
+export function saveSettings() {
+  log("DEBUG", "[settings-core] saveSettings ENTRY");
+  try {
+    const settings = getState().settings || {};
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    log("INFO", "[settings-core] Settings saved to localStorage", { settings });
+  } catch (e) {
+    log("ERROR", "[settings-core] saveSettings error", e);
   }
-
-  // Reset flags
-  (getState().shapes || []).forEach(s => { s._selected = false; });
-  if (canonicalShape) canonicalShape._selected = true;
-
-  // Commit to store
-  sceneDesignerStore.setState({
-    selectedShape: canonicalShape,
-    selectedShapes: canonicalShape ? [canonicalShape] : []
-  });
-
-  if (canonicalShape) {
-    selectShape(canonicalShape);
-    const def = getShapeDef(canonicalShape);
-    if (def && def.editable && !canonicalShape.locked) {
-      attachTransformerForShape(canonicalShape); // sets Fabric active object
-    } else {
-      detachTransformer();
-    }
-    fixStrokeWidthAfterTransform();
-  } else {
-    detachTransformer();
-  }
-
-  notifySelectionChanged();
-  log("DEBUG", "[selection-core] setSelectedShape EXIT", {
-    selectedShape: getState().selectedShape?._id,
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
-  });
+  log("DEBUG", "[settings-core] saveSettings EXIT");
 }
 
 /**
- * Set the current selection (array of shapes).
- * - Single selection: attach transformer and set Fabric active object.
- * - Multi selection: ensure Fabric ActiveSelection exists (so group drag works).
+ * Set a single setting and persist.
+ * Triggers relevant side effects.
  */
-export function setSelectedShapes(arr) {
-  log("DEBUG", "[selection-core] setSelectedShapes ENTRY", {
-    inputIds: Array.isArray(arr) ? arr.map(s => s?._id) : []
-  });
+export function setSettingAndSave(key, value) {
+  log("DEBUG", "[settings-core] setSettingAndSave ENTRY", { key, value });
+  setSetting(key, value);
 
-  const all = getState().shapes || [];
-  const newArr = Array.isArray(arr)
-    ? arr.map(shape => getCanonicalShapeById(shape)).filter(Boolean)
-    : [];
-
-  // Deselect shapes that are no longer selected
-  if (Array.isArray(getState().selectedShapes)) {
-    getState().selectedShapes.forEach(s => {
-      if (!newArr.includes(s)) deselectShape(s);
+  // Side effect: if log settings, update logger
+  if (key === "DEBUG_LOG_LEVEL" || key === "LOG_OUTPUT_DEST") {
+    reconfigureLoggingFromSettings({
+      level: key === "DEBUG_LOG_LEVEL" ? value : getState().settings.DEBUG_LOG_LEVEL,
+      dest: key === "LOG_OUTPUT_DEST" ? value : getState().settings.LOG_OUTPUT_DEST
     });
   }
 
-  // Refresh selected flags
-  all.forEach(s => { s._selected = false; });
-  newArr.forEach(s => { s._selected = true; });
+  saveSettings();
+  log("INFO", "[settings-core] Setting updated and saved", { key, value });
+  log("DEBUG", "[settings-core] setSettingAndSave EXIT");
+}
 
-  // Commit to store
-  sceneDesignerStore.setState({
-    selectedShapes: newArr,
-    selectedShape: newArr.length === 1 ? newArr[0] : null
-  });
-
-  // Update per-shape state machine flags
-  newArr.forEach(shape => {
-    setMultiSelected(shape, newArr.length > 1);
-    if (newArr.length === 1) selectShape(shape);
-  });
-
-  if (newArr.length === 1 && newArr[0] && !newArr[0].locked) {
-    // Single selection → attach transformer (sets Fabric active object)
-    const def = getShapeDef(newArr[0]);
-    if (def && def.editable) {
-      attachTransformerForShape(newArr[0]);
-    } else {
-      detachTransformer();
-    }
-    fixStrokeWidthAfterTransform();
-  } else if (newArr.length > 1) {
-    // Multi selection → ensure a Fabric ActiveSelection exists
-    ensureFabricActiveSelection(newArr);
-  } else {
-    // None selected
-    detachTransformer();
+/**
+ * Set multiple settings and persist.
+ * Accepts an object of key-value pairs.
+ */
+export function setSettingsAndSave(settingsObj) {
+  log("DEBUG", "[settings-core] setSettingsAndSave ENTRY", { settingsObj });
+  for (const [key, value] of Object.entries(settingsObj)) {
+    setSetting(key, value);
   }
 
-  notifySelectionChanged();
-  log("DEBUG", "[selection-core] setSelectedShapes EXIT", {
-    selectedShape: getState().selectedShape?._id,
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
-  });
-}
-
-/**
- * Select all shapes in the store (multi-select).
- */
-export function selectAllShapes() {
-  log("DEBUG", "[selection-core] selectAllShapes ENTRY");
-  setSelectedShapes((getState().shapes || []).slice());
-  log("DEBUG", "[selection-core] selectAllShapes EXIT");
-}
-
-/**
- * Deselect all shapes and detach transformer.
- */
-export function deselectAll() {
-  log("DEBUG", "[selection-core] deselectAll ENTRY");
-  if (Array.isArray(getState().selectedShapes)) {
-    getState().selectedShapes.forEach(s => deselectShape(s));
-  }
-
-  (getState().shapes || []).forEach(s => { s._selected = false; });
-
-  sceneDesignerStore.setState({
-    selectedShape: null,
-    selectedShapes: []
+  // Side effect: reconfigure logger if log settings present
+  reconfigureLoggingFromSettings({
+    level: settingsObj.DEBUG_LOG_LEVEL ?? getState().settings.DEBUG_LOG_LEVEL,
+    dest: settingsObj.LOG_OUTPUT_DEST ?? getState().settings.LOG_OUTPUT_DEST
   });
 
-  detachTransformer(); // discards any Fabric active/selection hull
-  notifySelectionChanged();
-  log("DEBUG", "[selection-core] deselectAll EXIT");
-}
-
-/**
- * Currently unused; kept for compatibility.
- */
-export function attachSelectionHandlers(shape) {
-  log("DEBUG", "[selection-core] attachSelectionHandlers NO-OP", {
-    shapeId: shape?._id, type: shape?._type
-  });
-}
-
-/** Utils */
-export function isShapeSelected(shape) {
-  const result = !!shape && !!shape._selected;
-  log("DEBUG", "[selection-core] isShapeSelected", { id: shape?._id, result });
-  return result;
-}
-export function getSelectedShapes() {
-  const arr = getState().selectedShapes || [];
-  log("DEBUG", "[selection-core] getSelectedShapes", { ids: arr.map(s => s?._id) });
-  return arr;
-}
-export function getSelectedShape() {
-  const s = getState().selectedShape || null;
-  log("DEBUG", "[selection-core] getSelectedShape", { id: s?._id });
-  return s;
-}
-
-function notifySelectionChanged() {
-  log("DEBUG", "[selection-core] notifySelectionChanged", {
-    selectedShape: getState().selectedShape?._id,
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
-  });
-}
-
-// Optional debugging helpers (dev only)
-if (typeof window !== "undefined") {
-  window.__sel = {
-    setSelectedShape,
-    setSelectedShapes,
-    selectAllShapes,
-    deselectAll,
-    isShapeSelected,
-    getSelectedShape,
-    getSelectedShapes
-  };
+  saveSettings();
+  log("INFO", "[settings-core] Multiple settings updated and saved", { settingsObj });
+  log("DEBUG", "[settings-core] setSettingsAndSave EXIT");
 }
