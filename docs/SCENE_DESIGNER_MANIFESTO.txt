@@ -49,4 +49,43 @@ Scene Designer – Engineering & Review Rules
 8. Manifest/Documentation
 - Update src/modules.index.md for all module changes.
 
-Refer to this file for the definitive engineering and delivery rules.
+--- NEW: Phased Architecture Path for Studio-Grade Flexibility ---
+To ensure Scene Designer remains scalable, maintainable, and professional-grade, we commit to the following phased architecture path. Each phase delivers incremental stability, extensibility, and testability, without requiring a disruptive rewrite.
+
+**Phase 1: Stabilize Selection and Geometry**
+- Use transactional (tokenized) selection sync between Fabric and store to eliminate reentrancy bugs.
+- Centralize geometry computations (absolute rects, bounds, hulls) in shared utilities, adopted by alignment, overlays, and selection logic.
+
+**Phase 2: Command Layer and History**
+- Introduce a minimal command bus: all core actions (select, align, move, lock, delete, duplicate) become commands with pure signatures.
+- Actions.js delegates to commands; history stack supports undo/redo.
+
+**Phase 3: Model-Driven Selection**
+- Treat the model (store) as the single source of truth for shapes and selection.
+- Fabric becomes a pure input/view adapter: input events dispatch intents, selection is mirrored from model to Fabric.
+- Eliminate double writes and handler suppression for selection.
+
+**Phase 4: Centralize Geometry and Hit-Testing**
+- All modules (alignment, overlays, constraints, marquee) use the shared geometry library, not Fabric's bounding APIs directly.
+- Marquee selection is computed in the model, making hit-testing and selection policies deterministic.
+
+**Phase 5: Full Domain Model for Shapes**
+- Shapes, transforms, selection set, and scene state are plain objects in the model.
+- The view adapter maps model state to Fabric objects; business logic never depends on Fabric's internal state.
+- Fabric's ActiveSelection used only for visuals.
+
+**Phase 6: History, Persistence, and Plugins**
+- All commands support undo/redo.
+- Scenes serialize/deserialize from model, not Fabric.
+- Tool/command registry allows clean plugin/extensibility.
+
+**Guiding Principle:**  
+At every phase, prioritize testability, separation of concerns, and extensibility.  
+No business logic or state lives in UI or Fabric handlers; all domain logic is centralized and pure.
+
+**Deviation from this path requires explicit engineering review and justification.**
+
+--- End Phased Architecture Section ---
+
+Refer to this file before making foundational changes.  
+Always update this section if the architectural path is revised.
