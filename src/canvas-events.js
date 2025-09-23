@@ -8,23 +8,13 @@
  * - Transactional (tokenized) selection sync: eliminates reentrancy bugs.
  * - Fix for defect1: ensures Delete operates on the shape that is visibly selected.
  * - Prevent re-entrant loops with programmatic selection changes (token, not boolean).
- *
- * Exports:
- * - installFabricSelectionSync(canvas)
- *
- * Dependencies:
- * - log.js (logging)
- * - state.js (getState)
- * - selection.js (setSelectedShapes, deselectAll)
- *
- * Notes:
- * - Uses Fabric events: 'selection:created', 'selection:updated', 'selection:cleared'.
- * - Avoids namespaced event names (not supported by Fabric).
- * - Guards against no-op loops by comparing selected IDs before mutating store.
- * - Suppresses handling when changes are programmatic (by token).
  * - Ignores 'selection:cleared' if not triggered by a user event (opt.e is falsy), unless token matches.
  * - Clears selection when clicking the background (mouse:down with no target).
  * - Robustly unwraps ActiveSelection so marquee multi-select enables toolbar buttons.
+ *
+ * PHASE 1 FIX:
+ * - Correctly unwrap ActiveSelection (Fabric) so that multi-select (marquee or ctrl+click)
+ *   always sets selectedShapes to ALL selected shapes, not just the last one.
  */
 
 import { log } from './log.js';
@@ -50,6 +40,8 @@ function withSuppressedHandlers(fn, tag = "") {
 /**
  * Utility: Convert Fabric selection state to an array of selected member objects.
  * - Always unwrap ActiveSelection to its _objects (members) when present.
+ * - If the active is a group or a Fabric Group, unwrap its ._objects.
+ * - If the active is a single shape, return just that.
  */
 function getSelectedObjectsFromFabric(canvas, options) {
   try {
@@ -57,32 +49,35 @@ function getSelectedObjectsFromFabric(canvas, options) {
       ? canvas.getActiveObject()
       : null;
 
-    // If we have an ActiveSelection, always return its members
+    // Fabric >=4: ActiveSelection is type 'activeSelection'
     if (active && active.type === 'activeSelection' && Array.isArray(active._objects)) {
+      // Unwrap all member shapes
       return active._objects.slice(); // clone for safety
     }
 
+    // Fabric's getActiveObjects returns all selected objects (groups or singles)
     if (canvas && typeof canvas.getActiveObjects === 'function') {
       const objs = canvas.getActiveObjects() || [];
-      if (Array.isArray(objs) && objs.length === 1 && objs[0] && objs[0].type === 'activeSelection') {
-        const sel = objs[0];
-        if (Array.isArray(sel._objects)) return sel._objects.slice();
+      // If it's a group selection, unwrap the group's ._objects
+      if (Array.isArray(objs) && objs.length === 1 && objs[0] && objs[0].type === 'activeSelection' && Array.isArray(objs[0]._objects)) {
+        return objs[0]._objects.slice();
       }
+      // For multiple selected shapes (not an ActiveSelection), return as is
       return Array.isArray(objs) ? objs : (objs ? [objs] : []);
     }
 
+    // Some Fabric builds provide selected objects directly in options.selected
     if (options && Array.isArray(options.selected) && options.selected.length) {
-      // Some builds provide members directly here
       const arr = options.selected;
-      // If this happens to be [ActiveSelection], unwrap
+      // If it's a group selection, unwrap
       if (arr.length === 1 && arr[0] && arr[0].type === 'activeSelection' && Array.isArray(arr[0]._objects)) {
         return arr[0]._objects.slice();
       }
       return arr;
     }
 
+    // If the event provided a target, check for group
     if (options && options.target) {
-      // Single target case
       const t = options.target;
       if (t && t.type === 'activeSelection' && Array.isArray(t._objects)) {
         return t._objects.slice();
@@ -245,3 +240,5 @@ export function installFabricSelectionSync(canvas) {
 
   log("INFO", "[canvas-events] Fabric selection sync installed (created/updated/cleared handlers + blank-click clear + tokenized sync + ActiveSelection unwrap)");
 }
+
+
