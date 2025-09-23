@@ -30,7 +30,7 @@ SETTINGS_FACADE_JS="$PROJECT_DIR/src/settings.js"
 DATESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
 
 MODE="${1:-prod}"
-if [[ $# -gt 0 ]]; then shift; fi
+if [[ $# > 0 ]]; then shift; fi
 
 INJECT_ERUDA="${INJECT_ERUDA:-0}"
 INJECT_CONSOLERE="${INJECT_CONSOLERE:-0}"
@@ -168,18 +168,20 @@ function inject_force_settings_block() {
   fi
 
   # Build associative map of key -> type using AWK (portable, no PCRE)
-  declare -A key_type
+  # Use local -A and initialize to avoid nounset errors under 'set -u'
+  local -A key_type=()
   while IFS=$'\t' read -r k t; do
     [[ -n "${k:-}" && -n "${t:-}" ]] && key_type["$k"]="$t"
-  done < <(_emit_settings_key_types)
+  done < <(_emit_settings_key_types || true)
 
   # Construct the FORCE block
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
 
-  if [[ ${#key_type[@]} -gt 0 ]]; then
+  if [[ ${#key_type[@]:-0} -gt 0 ]]; then
     for key in "${!key_type[@]}"; do
       local setting_type="${key_type[$key]}"
+      # Pull from environment; default empty to satisfy 'set -u'
       local value="${!key:-}"
       [[ -z "$value" ]] && continue
       if [[ "$setting_type" == "boolean" ]]; then
@@ -279,4 +281,3 @@ else
 fi
 
 exit 0
-
