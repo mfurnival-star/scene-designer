@@ -7,6 +7,7 @@
  * - Dispatch intents to actions.js and selection.js (no business logic here).
  * - Handle image upload/server image selection via state.setImage().
  * - Color controls use Pickr via toolbar-color.js (no native <input type="color"> here).
+ * - Alignment controls dispatch actions.alignSelected(mode, ref).
  *
  * Public Exports:
  * - attachToolbarHandlers(refs) -> detachFn
@@ -14,13 +15,15 @@
  *       container, imageUploadInput, imageUploadLabel, serverImageSelect,
  *       shapeTypeSelect, addShapeBtn, deleteBtn, duplicateBtn, resetRotationBtn,
  *       selectAllBtn, lockBtn, unlockBtn,
- *       strokePickrEl?, fillPickrEl?
+ *       strokePickrEl?, fillPickrEl?,
+ *       alignRefSelect?, alignLeftBtn?, alignCenterXBtn?, alignRightBtn?,
+ *       alignTopBtn?, alignMiddleYBtn?, alignBottomBtn?
  *     }
  *
  * Dependencies:
  * - log.js (log)
  * - state.js (setImage, getState)
- * - actions.js (add/delete/duplicate/lock/unlock/resetRotation)
+ * - actions.js (add/delete/duplicate/lock/unlock/resetRotation/alignSelected)
  * - selection.js (selectAllShapes)
  * - toolbar-color.js (installColorPickers)
  * -----------------------------------------------------------
@@ -34,7 +37,8 @@ import {
   duplicateSelectedShapes,
   lockSelectedShapes,
   unlockSelectedShapes,
-  resetRotationForSelectedShapes
+  resetRotationForSelectedShapes,
+  alignSelected
 } from './actions.js';
 import { selectAllShapes } from './selection.js';
 import { installColorPickers } from './toolbar-color.js';
@@ -62,7 +66,15 @@ export function attachToolbarHandlers(refs) {
     selectAllBtn,
     lockBtn,
     unlockBtn,
-    // Pickr hosts (optional if toolbar DOM is legacy)
+    // Alignment controls (optional if older DOM)
+    alignRefSelect,
+    alignLeftBtn,
+    alignCenterXBtn,
+    alignRightBtn,
+    alignTopBtn,
+    alignMiddleYBtn,
+    alignBottomBtn,
+    // Pickr hosts
     strokePickrEl,
     fillPickrEl
   } = refs;
@@ -243,6 +255,53 @@ export function attachToolbarHandlers(refs) {
     }
   };
   on(unlockBtn, 'click', onUnlockClick);
+
+  // --- ALIGNMENT ---
+  // Helper to resolve current reference mode from dropdown (defaults to 'selection')
+  const getAlignRef = () => {
+    const v = alignRefSelect?.value;
+    return v === 'canvas' ? 'canvas' : 'selection';
+  };
+  // Guard: Require 2+ selected (business logic also guards, but we avoid spam)
+  const hasTwoOrMoreSelected = () => {
+    const sel = getState().selectedShapes || [];
+    return Array.isArray(sel) && sel.length >= 2;
+  };
+  const handleAlignClick = (mode) => (ev) => {
+    try {
+      const btn = ev?.currentTarget;
+      if (btn && btn.disabled) {
+        ev && ev.preventDefault && ev.preventDefault();
+        log("WARN", `[toolbar-handlers] Align '${mode}' clicked while disabled`);
+        return;
+      }
+      if (!hasTwoOrMoreSelected()) {
+        log("INFO", "[toolbar-handlers] Align no-op (need 2+ selected)");
+        return;
+      }
+      const refMode = getAlignRef();
+      alignSelected(mode, refMode);
+      log("INFO", "[toolbar-handlers] Align intent dispatched", { mode, refMode });
+    } catch (err) {
+      log("ERROR", "[toolbar-handlers] Align failed", { mode, err });
+    }
+  };
+
+  on(alignLeftBtn, 'click', handleAlignClick('left'));
+  on(alignCenterXBtn, 'click', handleAlignClick('centerX'));
+  on(alignRightBtn, 'click', handleAlignClick('right'));
+  on(alignTopBtn, 'click', handleAlignClick('top'));
+  on(alignMiddleYBtn, 'click', handleAlignClick('middleY'));
+  on(alignBottomBtn, 'click', handleAlignClick('bottom'));
+
+  // Alignment ref select just logs for now; action reads its value at click time
+  if (alignRefSelect) {
+    const onAlignRefChange = () => {
+      const v = getAlignRef();
+      log("DEBUG", "[toolbar-handlers] Alignment reference changed", { ref: v });
+    };
+    on(alignRefSelect, 'change', onAlignRefChange);
+  }
 
   // --- Color pickers (Pickr) ---
   try {

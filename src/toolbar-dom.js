@@ -4,7 +4,7 @@
  * Scene Designer – Toolbar DOM Renderer (ESM ONLY)
  * Purpose:
  * - Render the toolbar HTML markup into the provided element.
- * - Structure now uses two rows to reduce horizontal scrolling.
+ * - Structure uses two rows to reduce horizontal scrolling.
  * - Query and return strongly-typed references to all interactive DOM nodes.
  * - No business logic, no event wiring here (handlers live in toolbar-handlers.js).
  * - Styles are injected by toolbar-styles.js.
@@ -27,6 +27,13 @@
  * - unlockBtn
  * - strokePickrEl
  * - fillPickrEl
+ * - alignRefSelect
+ * - alignLeftBtn
+ * - alignCenterXBtn
+ * - alignRightBtn
+ * - alignTopBtn
+ * - alignMiddleYBtn
+ * - alignBottomBtn
  *
  * Dependencies:
  * - log.js (logging)
@@ -86,13 +93,27 @@ export function renderToolbar(element) {
         </div>
       </div>
 
-      <!-- Row 2: Edit actions + Color controls -->
+      <!-- Row 2: Edit actions + Alignment + Color controls -->
       <div class="toolbar-row" id="toolbar-row-2">
         <div class="toolbar-group">
           <button id="toolbar-duplicate-shape-btn" class="toolbar-btn" title="Duplicate selected shape(s)">Duplicate</button>
           <button id="toolbar-reset-rotation-btn" class="toolbar-btn" title="Reset rotation to 0°">Reset Rotation</button>
           <button id="toolbar-lock-btn" class="toolbar-btn" title="Lock selected shape(s)">Lock</button>
           <button id="toolbar-unlock-btn" class="toolbar-btn" title="Unlock selected shape(s)">Unlock</button>
+        </div>
+
+        <div class="toolbar-group" id="toolbar-align-group">
+          <span class="toolbar-label">Align:</span>
+          <select id="toolbar-align-ref-select" title="Alignment reference">
+            <option value="selection" selected>Selection</option>
+            <option value="canvas">Canvas</option>
+          </select>
+          <button id="toolbar-align-left-btn" class="toolbar-btn" title="Align left (requires 2+ selected)">⟸ L</button>
+          <button id="toolbar-align-centerX-btn" class="toolbar-btn" title="Align horizontal center (requires 2+ selected)">↔ C</button>
+          <button id="toolbar-align-right-btn" class="toolbar-btn" title="Align right (requires 2+ selected)">R ⟹</button>
+          <button id="toolbar-align-top-btn" class="toolbar-btn" title="Align top (requires 2+ selected)">⇑ T</button>
+          <button id="toolbar-align-middleY-btn" class="toolbar-btn" title="Align vertical middle (requires 2+ selected)">↕ M</button>
+          <button id="toolbar-align-bottom-btn" class="toolbar-btn" title="Align bottom (requires 2+ selected)">B ⇓</button>
         </div>
 
         <div class="toolbar-group" id="toolbar-color-group">
@@ -110,7 +131,7 @@ export function renderToolbar(element) {
         </div>
       </div>
     </div>
-  `;
+  ";
 
   // Query refs scoped to the provided element
   const container = element.querySelector('#canvas-toolbar-container');
@@ -128,6 +149,15 @@ export function renderToolbar(element) {
   const selectAllBtn = element.querySelector('#toolbar-select-all-btn');
   const lockBtn = element.querySelector('#toolbar-lock-btn');
   const unlockBtn = element.querySelector('#toolbar-unlock-btn');
+
+  // Alignment refs
+  const alignRefSelect = element.querySelector('#toolbar-align-ref-select');
+  const alignLeftBtn = element.querySelector('#toolbar-align-left-btn');
+  const alignCenterXBtn = element.querySelector('#toolbar-align-centerX-btn');
+  const alignRightBtn = element.querySelector('#toolbar-align-right-btn');
+  const alignTopBtn = element.querySelector('#toolbar-align-top-btn');
+  const alignMiddleYBtn = element.querySelector('#toolbar-align-middleY-btn');
+  const alignBottomBtn = element.querySelector('#toolbar-align-bottom-btn');
 
   // Pickr hosts (replaces native color inputs/alpha slider)
   const strokePickrEl = element.querySelector('#toolbar-stroke-pickr');
@@ -147,7 +177,14 @@ export function renderToolbar(element) {
     lockBtn,
     unlockBtn,
     strokePickrEl,
-    fillPickrEl
+    fillPickrEl,
+    alignRefSelect,
+    alignLeftBtn,
+    alignCenterXBtn,
+    alignRightBtn,
+    alignTopBtn,
+    alignMiddleYBtn,
+    alignBottomBtn
   };
 
   // Basic sanity check
@@ -158,7 +195,7 @@ export function renderToolbar(element) {
     log("WARN", "[toolbar-dom] Some toolbar refs are missing", { missing });
   }
 
-  log("INFO", "[toolbar-dom] Toolbar DOM rendered (two-row layout)");
+  log("INFO", "[toolbar-dom] Toolbar DOM rendered (two-row layout, alignment controls added)");
   log("TRACE", "[toolbar-dom] renderToolbar EXIT");
 
   return refs;

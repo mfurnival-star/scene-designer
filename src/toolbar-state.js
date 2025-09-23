@@ -47,12 +47,21 @@ function setEnabled(el, enabled, disabledTitle, enabledTitle) {
  */
 export function installButtonsStateSync(refs) {
   const {
+    // Core actions
     deleteBtn,
     duplicateBtn,
     resetRotationBtn,
     selectAllBtn,
     lockBtn,
-    unlockBtn
+    unlockBtn,
+    // Alignment controls (optional if DOM is older)
+    alignRefSelect,
+    alignLeftBtn,
+    alignCenterXBtn,
+    alignRightBtn,
+    alignTopBtn,
+    alignMiddleYBtn,
+    alignBottomBtn
   } = refs || {};
 
   function updateButtonsState() {
@@ -71,6 +80,9 @@ export function installButtonsStateSync(refs) {
     const anyRotatableSelected = selected.some(s =>
       s && !s.locked && (s._type === 'rect' || s._type === 'circle')
     );
+
+    // Alignment eligibility: must have 2+ selected (locks are handled by the action)
+    const canAlign = selectedCount >= 2;
 
     // Delete
     setEnabled(
@@ -124,13 +136,59 @@ export function installButtonsStateSync(refs) {
       unlockEnabledTitle
     );
 
+    // Alignment buttons
+    setEnabled(
+      alignLeftBtn,
+      canAlign,
+      "Select 2 or more shapes to align",
+      "Align left (2+ selected)"
+    );
+    setEnabled(
+      alignCenterXBtn,
+      canAlign,
+      "Select 2 or more shapes to align",
+      "Align horizontal center (2+ selected)"
+    );
+    setEnabled(
+      alignRightBtn,
+      canAlign,
+      "Select 2 or more shapes to align",
+      "Align right (2+ selected)"
+    );
+    setEnabled(
+      alignTopBtn,
+      canAlign,
+      "Select 2 or more shapes to align",
+      "Align top (2+ selected)"
+    );
+    setEnabled(
+      alignMiddleYBtn,
+      canAlign,
+      "Select 2 or more shapes to align",
+      "Align vertical middle (2+ selected)"
+    );
+    setEnabled(
+      alignBottomBtn,
+      canAlign,
+      "Select 2 or more shapes to align",
+      "Align bottom (2+ selected)"
+    );
+
+    // Reference dropdown stays enabled; the action will treat missing canvas by falling back to selection hull
+    if (alignRefSelect) {
+      alignRefSelect.title = canAlign
+        ? "Alignment reference (Selection or Canvas)"
+        : "Select 2+ shapes; reference will be used when aligning";
+    }
+
     log("DEBUG", "[toolbar-state] updateButtonsState", {
       selectedCount,
       shapesCount,
       anyUnlockedSelected,
       anyLockedSelected,
       anyLockedInStore,
-      anyRotatableSelected
+      anyRotatableSelected,
+      canAlign
     });
   }
 
@@ -160,7 +218,7 @@ export function installToolbarScaleSync(containerEl) {
 
   const applyScale = () => {
     const scale = getState().settings?.toolbarUIScale ?? 1;
-    containerEl.style.setProperty('--toolbar-ui-scale', scale);
+    containerEl.style.setProperty('--toolbar-ui-scale', String(scale));
     log("DEBUG", "[toolbar-state] Applied toolbar scale", { scale });
   };
 
@@ -189,3 +247,4 @@ export function installToolbarScaleSync(containerEl) {
     log("INFO", "[toolbar-state] Toolbar scale sync detached");
   };
 }
+

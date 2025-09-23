@@ -11,7 +11,8 @@
  *    duplicateSelectedShapes,
  *    lockSelectedShapes,
  *    unlockSelectedShapes,
- *    resetRotationForSelectedShapes
+ *    resetRotationForSelectedShapes,
+ *    alignSelected
  * - All logging via log.js.
  * -----------------------------------------------------------
  */
@@ -439,3 +440,11 @@ export function resetRotationForSelectedShapes() {
     selectedAfter: getState().selectedShapes.map(s => ({ id: s?._id, angle: s?.angle }))
   });
 }
+
+/**
+ * Alignment (left/centerX/right/top/middleY/bottom) for selected shapes.
+ * - Reference: 'selection' (default) or 'canvas'
+ * - Implementation located in actions-alignment.js
+ */
+export { alignSelected } from './actions-alignment.js';
+

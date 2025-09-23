@@ -146,7 +146,6 @@ The following modules were added/split to comply with the file size policy and i
     - Delegates splitter sizing/persistence to dedicated module.
   - src/minilayout-splitter-persist.js
     - Splitter elements and panel size persistence (localStorage).
-    - Reusable for row/column containers; percent-based sizing.
   - src/minilayout.js
     - Facade re-export: export { MiniLayout } from './minilayout-core.js'.
     - Public imports should continue to use: import { MiniLayout } from './minilayout.js'.
@@ -210,7 +209,7 @@ To address a syntax error in the monolithic toolbar and comply with the file-siz
 
 Notes:
 - No public API change: layout.js continues to import buildCanvasToolbarPanel from './toolbar.js'.
-- exports.index.json remains correct, since toolbar.js still exports buildCanvasToolbarPanel; the generator can remain unchanged.
+- exports.index.json remains valid, since toolbar.js still exports buildCanvasToolbarPanel; the generator can remain unchanged.
 - The split resolves the Vite import-analysis syntax error originating from the previous monolithic file and keeps each module well under ~350 lines.
 
 PR summary guidance for this split:
@@ -368,4 +367,59 @@ Acceptance
 - Below ~1100px, groups wrap gracefully within each row; interaction targets remain comfortable.
 
 ---
+
+## 20. ALN-01 Alignment Tools (2025-09-23)
+
+Goal
+- Provide alignment operations for selected shapes relative to either the selection hull or the canvas (background image) bounds.
+
+New module
+- src/actions-alignment.js
+  - Export: alignSelected(mode, ref = 'selection')
+    - mode ∈ { 'left', 'centerX', 'right', 'top', 'middleY', 'bottom' }
+    - ref ∈ { 'selection', 'canvas' } (fallback to 'selection' when no bg image)
+  - Behavior:
+    - Requires 2+ selected shapes; no-op otherwise.
+    - Locked shapes are not moved but still contribute to the selection hull in 'selection' mode.
+    - Uses Fabric getBoundingRect(true, true) for absolute bboxes.
+    - Clamps resulting positions to image bounds when a background image exists.
+    - Applies translation via shape.left/top; preserves size/angle; updates coords and renders once.
+
+Updated modules
+- src/actions.js
+  - Re-exports alignSelected from actions-alignment.js to keep the public actions entrypoint stable.
+- src/toolbar-dom.js
+  - Adds an “Align” group to Row 2 with:
+    - Reference dropdown: Selection (default) | Canvas.
+    - Six buttons: Left, CenterX, Right, Top, MiddleY, Bottom.
+- src/toolbar-handlers.js
+  - Wires the six align buttons to actions.alignSelected(mode, refFromDropdown).
+  - Lightweight guards: avoid dispatch if <2 selected; logging on ref changes.
+- src/toolbar-state.js
+  - Enables alignment buttons only when 2+ shapes are selected.
+  - Reference dropdown remains enabled; action falls back to selection hull if no canvas image.
+
+Notes
+- Public import paths unchanged. UI continues to be built via buildCanvasToolbarPanel from './toolbar.js'.
+- exports.index.json is auto-generated; it will include alignSelected on the next generation run.
+
+Acceptance
+- With 2+ shapes selected:
+  - Left/Right/Top/Bottom align edges relative to ref.
+  - CenterX/MiddleY align centers relative to ref.
+  - Locked shapes do not move; unlocked shapes align.
+- With 'canvas' reference and a background image:
+  - Alignment edges/centers match image bounds, with clamping to keep shapes within the image.
+- With no background image while 'canvas' is selected:
+  - Falls back to selection-hull alignment; logs a WARN.
+- Single-selection: buttons disabled by state sync; action itself no-ops if called.
+
+Verification
+- Select three mixed shapes (rect/circle/point), align left/right/top/bottom, verify positions and no angle/size change.
+- Include a locked shape among selection; verify it stays in place while others align, and hull still considers its bbox for 'selection' reference.
+- Test 'canvas' reference with and without a loaded background image.
+- Confirm toolbar buttons enable only when 2+ shapes are selected.
+
+---
+
 
