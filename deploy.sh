@@ -178,7 +178,7 @@ function inject_force_settings_block() {
   local block="  <!-- BEGIN FORCE SETTINGS -->\n  <script>\n    window.SCENE_DESIGNER_FORCE = true;\n    window.SCENE_DESIGNER_FORCE_SETTINGS = window.SCENE_DESIGNER_FORCE_SETTINGS || {};\n"
   local injected=0
 
-  if [[ ${#key_type[@]:-0} -gt 0 ]]; then
+  if [[ ${#key_type[@]} -gt 0 ]]; then
     for key in "${!key_type[@]}"; do
       local setting_type="${key_type[$key]}"
       # Pull from environment; default empty to satisfy 'set -u'

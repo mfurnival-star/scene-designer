@@ -18,6 +18,7 @@ Scene Designer – Engineering & Review Rules
 
 3. File Delivery and Review
 - Deliver complete files only, one at a time, in numbered order.
+- Do not deliver code snippets, partial code blocks, or fragments. Only deliver the complete content of the requested file.
 - After each file, state the next file and wait for confirmation ("next"/"ready").
 - Keep a running list of remaining files.
 - After all files, state completion.

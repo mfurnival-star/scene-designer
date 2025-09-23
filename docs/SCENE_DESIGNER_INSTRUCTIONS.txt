@@ -9,6 +9,7 @@ Scene Designer – Engineering & Review Instructions (Short, for Copilot Space)
 
 3. File delivery and review:
    - Deliver complete files only, one at a time.
+   - Code snippets, partials, or fragments are strictly forbidden.
    - List all files up front, number them.
    - Wait for explicit confirmation ("next", "ready") between files.
    - Update src/modules.index.md when adding/removing/renaming modules.
