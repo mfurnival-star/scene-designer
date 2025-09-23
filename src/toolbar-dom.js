@@ -27,7 +27,6 @@
  * - unlockBtn
  * - strokePickrEl
  * - fillPickrEl
- * - alignRefSelect
  * - alignLeftBtn
  * - alignCenterXBtn
  * - alignRightBtn
@@ -104,10 +103,6 @@ export function renderToolbar(element) {
 
         <div class="toolbar-group" id="toolbar-align-group">
           <span class="toolbar-label">Align:</span>
-          <select id="toolbar-align-ref-select" title="Alignment reference">
-            <option value="selection" selected>Selection</option>
-            <option value="canvas">Canvas</option>
-          </select>
           <button id="toolbar-align-left-btn" class="toolbar-btn" title="Align left (requires 2+ selected)">⟸ L</button>
           <button id="toolbar-align-centerX-btn" class="toolbar-btn" title="Align horizontal center (requires 2+ selected)">↔ C</button>
           <button id="toolbar-align-right-btn" class="toolbar-btn" title="Align right (requires 2+ selected)">R ⟹</button>
@@ -150,8 +145,7 @@ export function renderToolbar(element) {
   const lockBtn = element.querySelector('#toolbar-lock-btn');
   const unlockBtn = element.querySelector('#toolbar-unlock-btn');
 
-  // Alignment refs
-  const alignRefSelect = element.querySelector('#toolbar-align-ref-select');
+  // Alignment refs (no reference dropdown)
   const alignLeftBtn = element.querySelector('#toolbar-align-left-btn');
   const alignCenterXBtn = element.querySelector('#toolbar-align-centerX-btn');
   const alignRightBtn = element.querySelector('#toolbar-align-right-btn');
@@ -178,7 +172,6 @@ export function renderToolbar(element) {
     unlockBtn,
     strokePickrEl,
     fillPickrEl,
-    alignRefSelect,
     alignLeftBtn,
     alignCenterXBtn,
     alignRightBtn,
@@ -200,4 +193,3 @@ export function renderToolbar(element) {
 
   return refs;
 }
-

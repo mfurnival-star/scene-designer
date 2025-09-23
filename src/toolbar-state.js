@@ -54,8 +54,7 @@ export function installButtonsStateSync(refs) {
     selectAllBtn,
     lockBtn,
     unlockBtn,
-    // Alignment controls (optional if DOM is older)
-    alignRefSelect,
+    // Alignment controls (no reference dropdown)
     alignLeftBtn,
     alignCenterXBtn,
     alignRightBtn,
@@ -125,10 +124,13 @@ export function installButtonsStateSync(refs) {
     );
 
     // Unlock (selected locked OR any locked in store)
-    const unlockEnabled = (selectedCount > 0 && anyLockedSelected) || (selectedCount === 0 && anyLockedInStore);
-    const unlockEnabledTitle = (selectedCount > 0 && anyLockedSelected)
-      ? "Unlock selected shape(s)"
-      : "Unlock all locked shapes";
+    const unlockEnabled =
+      (selectedCount > 0 && anyLockedSelected) ||
+      (selectedCount === 0 && anyLockedInStore);
+    const unlockEnabledTitle =
+      (selectedCount > 0 && anyLockedSelected)
+        ? "Unlock selected shape(s)"
+        : "Unlock all locked shapes";
     setEnabled(
       unlockBtn,
       unlockEnabled,
@@ -136,7 +138,7 @@ export function installButtonsStateSync(refs) {
       unlockEnabledTitle
     );
 
-    // Alignment buttons
+    // Alignment buttons (always relative to selection hull)
     setEnabled(
       alignLeftBtn,
       canAlign,
@@ -173,13 +175,6 @@ export function installButtonsStateSync(refs) {
       "Select 2 or more shapes to align",
       "Align bottom (2+ selected)"
     );
-
-    // Reference dropdown stays enabled; the action will treat missing canvas by falling back to selection hull
-    if (alignRefSelect) {
-      alignRefSelect.title = canAlign
-        ? "Alignment reference (Selection or Canvas)"
-        : "Select 2+ shapes; reference will be used when aligning";
-    }
 
     log("DEBUG", "[toolbar-state] updateButtonsState", {
       selectedCount,
@@ -228,9 +223,7 @@ export function installToolbarScaleSync(containerEl) {
   // Subscribe for setting changes
   const unsub = sceneDesignerStore.subscribe((state, details) => {
     if (!details) return;
-    if (
-      details.type === "setSetting" && details.key === "toolbarUIScale"
-    ) {
+    if (details.type === "setSetting" && details.key === "toolbarUIScale") {
       applyScale();
     } else if (
       details.type === "setSettings" &&

@@ -49,7 +49,7 @@ Shapes
 
 Actions
 - actions.js                  – centralized business logic (add/delete/dup/lock/etc)
-- actions-alignment.js        – alignSelected(mode, ref): left/centerX/right/top/middleY/bottom
+- actions-alignment.js        – alignSelected(mode) relative to selection hull only
 
 Settings
 - settings-core.js            – registry, persistence, side effects (logging, console)
@@ -71,7 +71,7 @@ Other Notes
 
 Recent Changes (brief)
 - 2025-09-23
-  - ALN-01: Added actions-alignment.js; wired 6 alignment buttons + reference dropdown in toolbar.
+  - ALN-01: Alignment wired with six buttons relative to selection hull only; removed reference dropdown from toolbar.
 - 2025-09-22
   - STY-01: Pickr color pickers added (toolbar-color.js); toolbar split into panel/styles/dom/handlers/state.
   - Selection overlays moved to top-context painter (selection-outlines.js).
@@ -81,5 +81,4 @@ Recent Changes (brief)
 How to add here
 - When you add/rename/remove a module: update the relevant section above and keep the line short.
 - If you add a new facade, list it in “Facades (public import paths)”.
-
 
