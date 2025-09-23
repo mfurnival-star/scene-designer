@@ -3,7 +3,7 @@
  * -----------------------------------------------------------
  * Scene Designer – Debug Snapshot Collector (ESM ONLY)
  * Purpose:
- * - Collect a comprehensive, safe-to-share diagnostic snapshot of the app state.
+ * - Collect a comprehensive, safe-to-share diagnostic snapshot of the app state and DOM layout.
  * - Provide helpers to format the snapshot and copy it to clipboard.
  * - Intended to be invoked from UI (e.g., a "Debug" toolbar button) or programmatically.
  *
@@ -20,6 +20,7 @@
  * - No external side effects beyond optional clipboard copy and logging.
  * - Does not mutate store or canvas; read-only diagnostics.
  * - Clipboard copy uses navigator.clipboard when available, with a safe fallback.
+ * - DOM Layout section added (2025-09-23) to diagnose overlay/bleed and stacking issues on iOS Safari.
  * -----------------------------------------------------------
  */
 
@@ -60,10 +61,14 @@ function safe(val) {
   }
 }
 
+function round(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return undefined;
+  return Math.round(n * 100) / 100;
+}
+
 function summarizeShape(shape) {
   if (!shape) return null;
   try {
-    // Fabric group used as our logical shape
     const kind = shape._type || shape.type || 'unknown';
     const dims = {
       left: round(shape.left),
@@ -87,11 +92,6 @@ function summarizeShape(shape) {
       type: shape?._type || shape?.type || 'unknown'
     };
   }
-}
-
-function round(n) {
-  if (typeof n !== 'number' || !Number.isFinite(n)) return undefined;
-  return Math.round(n * 100) / 100;
 }
 
 function summarizeFabricSelection(canvas) {
@@ -125,11 +125,14 @@ function summarizeCanvas(canvas) {
     if (!canvas) return { present: false };
     const w = typeof canvas.getWidth === 'function' ? canvas.getWidth() : undefined;
     const h = typeof canvas.getHeight === 'function' ? canvas.getHeight() : undefined;
+    const dpr = (typeof canvas.getRetinaScaling === 'function')
+      ? canvas.getRetinaScaling()
+      : (typeof window !== 'undefined' ? window.devicePixelRatio : 1);
     return {
       present: true,
       width: w,
       height: h,
-      devicePixelRatio: (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1
+      devicePixelRatio: dpr
     };
   } catch (e) {
     return { present: !!canvas, error: safe(e) };
@@ -180,6 +183,168 @@ function summarizeSettings(settings) {
   return out;
 }
 
+/** ---------- DOM layout helpers (added 2025-09-23) ---------- */
+
+function getEl(selOrEl) {
+  if (!selOrEl) return null;
+  if (typeof Element !== 'undefined' && selOrEl instanceof Element) return selOrEl;
+  if (typeof document === 'undefined') return null;
+  try {
+    return document.querySelector(String(selOrEl));
+  } catch {
+    return null;
+  }
+}
+
+function rectOf(el) {
+  try {
+    if (!el || typeof el.getBoundingClientRect !== 'function') return null;
+    const r = el.getBoundingClientRect();
+    return {
+      left: Math.round(r.left),
+      top: Math.round(r.top),
+      right: Math.round(r.right),
+      bottom: Math.round(r.bottom),
+      width: Math.round(r.width),
+      height: Math.round(r.height)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function styleSummary(el) {
+  try {
+    if (!el || typeof window === 'undefined' || !window.getComputedStyle) return null;
+    const cs = window.getComputedStyle(el);
+    return {
+      position: cs.position,
+      overflow: cs.overflow,
+      overflowX: cs.overflowX,
+      overflowY: cs.overflowY,
+      zIndex: cs.zIndex,
+      contain: cs.contain,
+      isolation: cs.isolation,
+      clipPath: cs.clipPath,
+      background: cs.backgroundColor || cs.background
+    };
+  } catch {
+    return null;
+  }
+}
+
+function canvasLayerMetrics(el) {
+  try {
+    if (!el) return null;
+    const cs = (typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(el) : null;
+    return {
+      present: true,
+      attrW: Number(el.width) || null,
+      attrH: Number(el.height) || null,
+      cssW: cs ? Number(parseFloat(cs.width)) : null,
+      cssH: cs ? Number(parseFloat(cs.height)) : null,
+      position: cs ? cs.position : null,
+      zIndex: cs ? cs.zIndex : null,
+      background: cs ? (cs.backgroundColor || cs.background) : null
+    };
+  } catch {
+    return { present: !!el };
+  }
+}
+
+function rectsIntersect(a, b) {
+  if (!a || !b) return false;
+  return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+}
+
+function rectContains(outer, inner) {
+  if (!outer || !inner) return false;
+  return inner.left >= outer.left &&
+         inner.top >= outer.top &&
+         inner.right <= outer.right &&
+         inner.bottom <= outer.bottom;
+}
+
+/**
+ * Collect DOM layout and stacking diagnostics for panels and Fabric layers.
+ */
+function collectDomLayout(canvas) {
+  try {
+    const dpr = (typeof window !== 'undefined') ? (window.devicePixelRatio || 1) : 1;
+
+    const upper = canvas?.upperCanvasEl || null;
+    const lower = canvas?.lowerCanvasEl || null;
+    const wrapper = lower?.parentElement || null;
+    const clipHost = wrapper?.parentElement && wrapper.parentElement.classList?.contains('canvas-clip-host')
+      ? wrapper.parentElement
+      : null;
+
+    // Panel bodies by MiniLayout-generated classes
+    const canvasBody = getEl('.minilayout-panel-body--canvaspanel');
+    const toolbarBody = getEl('.minilayout-panel-body--canvastoolbarpanel');
+    const settingsBody = getEl('.minilayout-panel-body--settingspanel');
+
+    // Rects
+    const rects = {
+      upperCanvas: rectOf(upper),
+      lowerCanvas: rectOf(lower),
+      wrapper: rectOf(wrapper),
+      clipHost: rectOf(clipHost),
+      canvasBody: rectOf(canvasBody),
+      toolbarBody: rectOf(toolbarBody),
+      settingsBody: rectOf(settingsBody)
+    };
+
+    // Bleed indicators
+    const bleed = {
+      upperOverlapsToolbar: rectsIntersect(rects.upperCanvas, rects.toolbarBody),
+      upperOverlapsSettings: rectsIntersect(rects.upperCanvas, rects.settingsBody),
+      wrapperOverlapsToolbar: rectsIntersect(rects.wrapper, rects.toolbarBody),
+      wrapperOverlapsSettings: rectsIntersect(rects.wrapper, rects.settingsBody),
+      upperOutsideCanvasPanel: !!(rects.upperCanvas && rects.canvasBody && !rectContains(rects.canvasBody, rects.upperCanvas)),
+      wrapperOutsideCanvasPanel: !!(rects.wrapper && rects.canvasBody && !rectContains(rects.canvasBody, rects.wrapper))
+    };
+
+    // Styles/stacking summary
+    const styles = {
+      upperCanvas: styleSummary(upper),
+      lowerCanvas: styleSummary(lower),
+      wrapper: styleSummary(wrapper),
+      clipHost: styleSummary(clipHost),
+      canvasBody: styleSummary(canvasBody),
+      toolbarBody: styleSummary(toolbarBody),
+      settingsBody: styleSummary(settingsBody)
+    };
+
+    // Layer metrics
+    const layers = {
+      upperCanvas: canvasLayerMetrics(upper),
+      lowerCanvas: canvasLayerMetrics(lower)
+    };
+
+    return {
+      dpr,
+      elementsPresent: {
+        upperCanvas: !!upper,
+        lowerCanvas: !!lower,
+        wrapper: !!wrapper,
+        clipHost: !!clipHost,
+        canvasBody: !!canvasBody,
+        toolbarBody: !!toolbarBody,
+        settingsBody: !!settingsBody
+      },
+      rects,
+      styles,
+      layers,
+      bleedIndicators: bleed
+    };
+  } catch (e) {
+    return { error: safe(e) };
+  }
+}
+
+/** ---------- Snapshot builder ---------- */
+
 /**
  * Collect a comprehensive snapshot of current app diagnostics.
  */
@@ -194,6 +359,7 @@ export function collectDebugSnapshot() {
   const fabricSel = summarizeFabricSelection(canvas);
   const canvasSumm = summarizeCanvas(canvas);
   const bgSumm = summarizeBackgroundImage(bgImg);
+  const domLayout = collectDomLayout(canvas);
 
   const env = {
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'n/a',
@@ -206,7 +372,7 @@ export function collectDebugSnapshot() {
   const snapshot = {
     meta: {
       tool: 'Scene Designer',
-      version: 'debug-snapshot-1',
+      version: 'debug-snapshot-2', // bumped for DOM layout section
       timeISO: env.timeISO
     },
     scene: {
@@ -219,6 +385,7 @@ export function collectDebugSnapshot() {
     canvas: canvasSumm,
     backgroundImage: bgSumm,
     fabricSelection: fabricSel,
+    domLayout, // NEW: DOM/stacking/rect diagnostics
     shapes: shapesSumm,
     selectedShapes: selectedSumm,
     ids: {
@@ -276,10 +443,13 @@ export function formatDebugSnapshot(snapshot, format = 'json') {
   try {
     if (format === 'markdown') {
       const json = JSON.stringify(snapshot, null, 2);
+      const bleed = snapshot?.domLayout?.bleedIndicators || {};
       return [
         '## Scene Designer Debug Snapshot',
         `- Captured: ${snapshot?.meta?.timeISO || new Date().toISOString()}`,
         `- Shapes: ${snapshot?.scene?.shapeCount ?? '?'}, Selected: ${snapshot?.scene?.selectedCount ?? '?'}`,
+        `- Bleed: upper→Toolbar=${!!bleed.upperOverlapsToolbar}, upper→Settings=${!!bleed.upperOverlapsSettings}, ` +
+          `upperOutsideCanvas=${!!bleed.upperOutsideCanvasPanel}`,
         '',
         '```json',
         json,
@@ -345,12 +515,16 @@ export async function runDebugCapture(options = {}) {
   }
 
   if (doLog) {
+    const bleed = snapshot?.domLayout?.bleedIndicators || {};
     log("INFO", "[debug] Snapshot collected", {
       copiedToClipboard: copied,
       shapeCount: snapshot?.scene?.shapeCount,
       selectedCount: snapshot?.scene?.selectedCount,
       fabricActiveType: snapshot?.fabricSelection?.activeType,
-      fabricMemberCount: snapshot?.fabricSelection?.memberCount
+      fabricMemberCount: snapshot?.fabricSelection?.memberCount,
+      bleed_upperOverlapsToolbar: !!bleed.upperOverlapsToolbar,
+      bleed_upperOverlapsSettings: !!bleed.upperOverlapsSettings,
+      bleed_upperOutsideCanvasPanel: !!bleed.upperOutsideCanvasPanel
     });
     // Emit the full text as a DEBUG-level log so remote log panes can be used for copy
     log("DEBUG", "[debug] Snapshot text", text);
@@ -358,3 +532,4 @@ export async function runDebugCapture(options = {}) {
 
   return { text, snapshot };
 }
+
