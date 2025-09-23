@@ -38,6 +38,7 @@ Toolbar
 Selection
 - selection-core.js           – single/multi selection; transformer lifecycle
 - transformer.js              – attach/detach/update Fabric controls
+- **geometry/selection-rects.js** – centralized geometry for selection hulls, overlays, alignment
 
 Shapes
 - shapes-core.js              – rect/circle factories; colors; stroke width; labels
@@ -70,6 +71,7 @@ Other Notes
 Recent Changes (brief)
 - 2025-09-23
   - ALN-01: Alignment wired with six buttons relative to selection hull only; removed reference dropdown from toolbar.
+  - PHASE-01: Added geometry/selection-rects.js for centralized selection hull/rect math; overlays and alignment now use shared geometry (see docs/PHASED_ARCHITECTURE_PATH.md).
 - 2025-09-22
   - STY-01: Pickr color pickers added (toolbar-color.js); toolbar split into panel/styles/dom/handlers/state.
   - Selection overlays moved to top-context painter (selection-outlines.js).
@@ -79,3 +81,4 @@ Recent Changes (brief)
 How to add here
 - When you add/rename/remove a module: update the relevant section above and keep the line short.
 - If you add a new facade, list it in “Facades (public import paths)”.
+

@@ -1,7 +1,7 @@
 /**
  * selection-outlines.js
  * -----------------------------------------------------------
- * Scene Designer – Multi-select Outlines Overlay (ESM ONLY)
+ * Scene Designer – Multi-select Outlines Overlay (ESM ONLY, Phase 1 Geometry Refactor)
  * Purpose:
  * - Draw dashed selection outlines as an overlay on Fabric's top canvas (no Fabric objects).
  * - Shows per-shape dashed boxes for multi-select and a single outer hull box.
@@ -18,22 +18,21 @@
  * - Only paints when:
  *    - Settings: Show Multi-Drag Box is enabled (settings.multiDragBox !== false), AND
  *    - A Fabric ActiveSelection exists with 2+ members.
- * - When ActiveSelection exists, some Fabric builds report member bounding boxes
- *   relative to the group CENTER. We compose absolute rects as:
- *     activeAbs = active.getBoundingRect(true, true)
- *     center = { x: activeAbs.left + activeAbs.width/2, y: activeAbs.top + activeAbs.height/2 }
- *     memberRel = member.getBoundingRect(false, true)
- *     memberAbs = { left: center.x + memberRel.left, top: center.y + memberRel.top, ... }
- * - Single selection is ignored (transformer UI handles it).
+ * - Geometry for outlines is now sourced from geometry/selection-rects.js.
  *
  * Dependencies:
  * - state.js (getState, sceneDesignerStore)
  * - log.js (log)
+ * - geometry/selection-rects.js (centralized geometry)
  * -----------------------------------------------------------
  */
 
 import { getState, sceneDesignerStore } from './state.js';
 import { log } from './log.js';
+import {
+  getActiveSelectionMemberRects,
+  getActiveSelectionHullRect
+} from './geometry/selection-rects.js';
 
 /**
  * Obtain the overlay (top) 2D context for Fabric.
@@ -95,59 +94,9 @@ function expandRect(rect, padding) {
   };
 }
 
-// Safe wrapper around getBoundingRect
-function safeBBox(obj, absolute, calc) {
-  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
-  try {
-    return obj.getBoundingRect(absolute, calc);
-  } catch (e) {
-    log("WARN", "[selection-outlines] getBoundingRect failed", { absolute, calc, e });
-    return null;
-  }
-}
-
-/**
- * Normalize tiny fractional drift (Safari often returns 0.5px deltas).
- */
-function norm(n) {
-  if (typeof n !== 'number' || !Number.isFinite(n)) return 0;
-  const r = Math.round(n * 100) / 100; // keep to 0.01 precision
-  const near = Math.round(r);
-  return Math.abs(r - near) < 0.01 ? near : r;
-}
-
-/**
- * Build absolute rects for members using ActiveSelection center anchoring.
- */
-function collectMemberAbsoluteRectsFromActive(active) {
-  const rects = [];
-  if (!active || active.type !== 'activeSelection' || !Array.isArray(active._objects)) return rects;
-
-  try { if (typeof active.setCoords === 'function') active.setCoords(); } catch {}
-  const activeAbs = safeBBox(active, true, true);
-  if (!activeAbs) return rects;
-
-  const centerX = (activeAbs.left || 0) + (activeAbs.width || 0) / 2;
-  const centerY = (activeAbs.top || 0) + (activeAbs.height || 0) / 2;
-
-  for (const s of active._objects) {
-    if (!s) continue;
-    try { if (typeof s.setCoords === 'function') s.setCoords(); } catch {}
-    const rel = safeBBox(s, false, true);
-    if (!rel) continue;
-    rects.push({
-      left: norm(centerX + rel.left),
-      top: norm(centerY + rel.top),
-      width: norm(rel.width),
-      height: norm(rel.height)
-    });
-  }
-  return rects;
-}
-
 /**
  * Draw per-shape boxes and a single outer hull on top context.
- * IMPORTANT: Draw only if setting enabled and an ActiveSelection exists.
+ * Geometry from geometry/selection-rects.js.
  */
 function paintSelectionOutlines(canvas) {
   const ctx = getTopContext(canvas);
@@ -169,7 +118,8 @@ function paintSelectionOutlines(canvas) {
 
   ctx.save();
 
-  const rects = collectMemberAbsoluteRectsFromActive(active);
+  // Use centralized geometry utility
+  const rects = getActiveSelectionMemberRects(canvas);
   if (rects.length === 0) {
     ctx.restore();
     return;
@@ -181,15 +131,11 @@ function paintSelectionOutlines(canvas) {
   }
 
   // Draw outer hull
-  const minLeft = Math.min(...rects.map(r => r.left));
-  const minTop = Math.min(...rects.map(r => r.top));
-  const maxRight = Math.max(...rects.map(r => r.left + r.width));
-  const maxBottom = Math.max(...rects.map(r => r.top + r.height));
-  const hull = expandRect(
-    { left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop },
-    4
-  );
-  strokeDashedRect(ctx, hull.left, hull.top, hull.width, hull.height, { color, lineWidth: 2, dash: [8, 6] });
+  const hull = getActiveSelectionHullRect(canvas);
+  if (hull) {
+    const paddedHull = expandRect(hull, 4);
+    strokeDashedRect(ctx, paddedHull.left, paddedHull.top, paddedHull.width, paddedHull.height, { color, lineWidth: 2, dash: [8, 6] });
+  }
 
   ctx.restore();
 }
@@ -264,7 +210,7 @@ export function installSelectionOutlines(canvas) {
     }
   });
 
-  log("INFO", "[selection-outlines] Overlay selection outlines installed (ActiveSelection-only, honors multiDragBox)");
+  log("INFO", "[selection-outlines] Overlay selection outlines installed (ActiveSelection-only, honors multiDragBox, centralized geometry)");
   return function detach() {
     try {
       canvas.off('before:render', clearTop);

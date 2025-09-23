@@ -1,7 +1,7 @@
 /**
  * actions-alignment.js
  * -----------------------------------------------------------
- * Scene Designer – Alignment Actions (ESM ONLY, Manifesto-compliant)
+ * Scene Designer – Alignment Actions (ESM ONLY, Manifesto-compliant, Phase 1 Geometry Refactor)
  * Purpose:
  * - Provide alignment operations for selected shapes:
  *     left, centerX, right, top, middleY, bottom
@@ -20,103 +20,19 @@
  * Dependencies:
  * - state.js (getState)
  * - log.js (log)
+ * - geometry/selection-rects.js (absolute rects for selection)
  *
  * Notes:
- * - Fabric peculiarity: when an ActiveSelection exists, some builds report member bounding boxes
- *   relative to the group's CENTER for getBoundingRect(false, true). To get absolute member rects,
- *   compose them as:
- *     activeAbs = active.getBoundingRect(true, true)
- *     center = { x: activeAbs.left + activeAbs.width/2, y: activeAbs.top + activeAbs.height/2 }
- *     memberRel = member.getBoundingRect(false, true)
- *     memberAbs = { left: center.x + memberRel.left, top: center.y + memberRel.top, width: memberRel.width, height: memberRel.height }
- * - If no ActiveSelection is present, fall back to member.getBoundingRect(true, true) safely.
+ * - All bounding-box logic now uses geometry/selection-rects.js for robust, centralized geometry.
+ * - No local getBoundingRect calls; all geometry logic is unified.
  * -----------------------------------------------------------
  */
 
 import { getState } from './state.js';
 import { log } from './log.js';
-
-/**
- * Safe absolute bbox via Fabric API (absolute=true, calc=true).
- */
-function safeAbsBBox(obj) {
-  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
-  try {
-    const r = obj.getBoundingRect(true, true);
-    if (!r) return null;
-    return {
-      left: Number(r.left) || 0,
-      top: Number(r.top) || 0,
-      width: Number(r.width) || 0,
-      height: Number(r.height) || 0
-    };
-  } catch (e) {
-    log("WARN", "[align] safeAbsBBox getBoundingRect(true,true) failed", { id: obj?._id, e });
-    return null;
-  }
-}
-
-/**
- * Safe relative bbox (relative to current group's center when activeSelection), calc=true.
- */
-function safeRelBBox(obj) {
-  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
-  try {
-    const r = obj.getBoundingRect(false, true);
-    if (!r) return null;
-    return {
-      left: Number(r.left) || 0,
-      top: Number(r.top) || 0,
-      width: Number(r.width) || 0,
-      height: Number(r.height) || 0
-    };
-  } catch (e) {
-    log("WARN", "[align] safeRelBBox getBoundingRect(false,true) failed", { id: obj?._id, e });
-    return null;
-  }
-}
-
-/**
- * If an ActiveSelection exists, compose true absolute member rects from its center + member-relative rects.
- * Returns a Map keyed by object reference with absolute rects. If no ActiveSelection, returns null.
- */
-function collectMemberAbsRectsFromActiveSelection() {
-  const canvas = getState().fabricCanvas;
-  if (!canvas || typeof canvas.getActiveObject !== 'function') return null;
-
-  const active = canvas.getActiveObject();
-  if (!active || active.type !== 'activeSelection' || !Array.isArray(active._objects) || active._objects.length < 2) {
-    return null;
-  }
-
-  try {
-    if (typeof active.setCoords === 'function') { try { active.setCoords(); } catch {} }
-    const activeAbs = safeAbsBBox(active);
-    if (!activeAbs) return null;
-
-    const centerX = activeAbs.left + activeAbs.width / 2;
-    const centerY = activeAbs.top + activeAbs.height / 2;
-
-    const map = new Map();
-    for (const m of active._objects) {
-      if (!m) continue;
-      try { if (typeof m.setCoords === 'function') { try { m.setCoords(); } catch {} } } catch {}
-      const rel = safeRelBBox(m);
-      if (!rel) continue;
-      const abs = {
-        left: centerX + rel.left,
-        top: centerY + rel.top,
-        width: rel.width,
-        height: rel.height
-      };
-      map.set(m, abs);
-    }
-    return map;
-  } catch (e) {
-    log("WARN", "[align] collectMemberAbsRectsFromActiveSelection failed; falling back", e);
-    return null;
-  }
-}
+import {
+  getAbsoluteRectsForSelection
+} from './geometry/selection-rects.js';
 
 /**
  * Clamp a new bbox (left/top computed by delta) within background image bounds.
@@ -210,16 +126,8 @@ export function alignSelected(mode, ref = 'selection') {
     return;
   }
 
-  // Build absolute bboxes for every selected shape, robust under ActiveSelection.
-  // Prefer ActiveSelection-derived absolute rects if available for accuracy.
-  const fromActiveMap = collectMemberAbsRectsFromActiveSelection();
-  const bboxes = selected.map(s => {
-    // Try by object identity first (when store and canvas share references, which they should)
-    let rect = fromActiveMap ? fromActiveMap.get(s) : null;
-    // If not found by reference, attempt a fallback to absolute bbox
-    if (!rect) rect = safeAbsBBox(s);
-    return rect;
-  });
+  // Use centralized geometry utility for robust bounding box logic
+  const bboxes = getAbsoluteRectsForSelection(selected, store.fabricCanvas);
 
   // Guard: if any bbox is null, filter it out (still allow moving others + computing reference).
   const existingBboxes = bboxes.filter(Boolean);
@@ -326,5 +234,4 @@ export function alignSelected(mode, ref = 'selection') {
   });
   log("DEBUG", "[align] alignSelected EXIT");
 }
-
 
