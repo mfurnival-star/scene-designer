@@ -47,7 +47,7 @@ import { log } from './log.js';
  * @returns {object} refs - See header comment for fields
  */
 export function renderToolbar(element) {
-  log("TRACE", "[toolbar-dom] renderToolbar ENTRY", {
+  log("DEBUG", "[toolbar-dom] renderToolbar ENTRY", {
     elementType: element?.tagName
   });
 
@@ -189,7 +189,7 @@ export function renderToolbar(element) {
   }
 
   log("INFO", "[toolbar-dom] Toolbar DOM rendered (two-row layout, alignment controls added)");
-  log("TRACE", "[toolbar-dom] renderToolbar EXIT");
+  log("DEBUG", "[toolbar-dom] renderToolbar EXIT");
 
   return refs;
 }

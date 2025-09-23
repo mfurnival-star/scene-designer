@@ -34,7 +34,7 @@ import { attachToolbarHandlers } from './toolbar-handlers.js';
  * Accepts: { element, title, componentName }
  */
 export function buildCanvasToolbarPanel({ element, title, componentName }) {
-  log("TRACE", "[toolbar-panel] buildCanvasToolbarPanel ENTRY", {
+  log("DEBUG", "[toolbar-panel] buildCanvasToolbarPanel ENTRY", {
     elementType: element?.tagName,
     title,
     componentName
@@ -82,10 +82,9 @@ export function buildCanvasToolbarPanel({ element, title, componentName }) {
     throw e;
   }
 
-  log("TRACE", "[toolbar-panel] buildCanvasToolbarPanel EXIT", {
+  log("DEBUG", "[toolbar-panel] buildCanvasToolbarPanel EXIT", {
     elementType: element?.tagName,
     title,
     componentName
   });
 }
-

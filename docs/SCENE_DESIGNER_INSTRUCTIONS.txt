@@ -20,7 +20,7 @@ Scene Designer – Engineering & Review Instructions (Short, for Copilot Space)
    - Update imports/exports and modules.index.md after splitting.
 
 5. Logging:
-   - Use log() from log.js with levels: ERROR, WARN, INFO, DEBUG, TRACE.
+   - Use log() from log.js with levels: ERROR, WARN, INFO, DEBUG.
    - No console.log except inside logger.
 
 6. Each module/file must start with a comment summarizing purpose, exports, dependencies.
@@ -41,4 +41,3 @@ Scene Designer – Engineering & Review Instructions (Short, for Copilot Space)
     - src/exports.index.json is auto-generated; do not edit by hand.
 
 Refer to SCENE_DESIGNER_MANIFESTO.txt for full philosophy and rules.
-

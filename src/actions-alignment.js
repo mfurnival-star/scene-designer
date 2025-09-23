@@ -196,7 +196,7 @@ export function alignSelected(mode, ref = 'selection') {
       shape.set({ left: newLeft, top: newTop });
       if (typeof shape.setCoords === "function") shape.setCoords();
       movedCount++;
-      log("TRACE", "[align] moved shape", {
+      log("DEBUG", "[align] moved shape", {
         id: shape._id, type: shape._type, dx, dy, newLeft, newTop
       });
     } catch (e) {
@@ -214,4 +214,3 @@ export function alignSelected(mode, ref = 'selection') {
   });
   log("DEBUG", "[align] alignSelected EXIT");
 }
-

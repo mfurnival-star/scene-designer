@@ -1,411 +1,289 @@
 /**
- * settings-core.js
- * -------------------------------------------------------------------
- * Scene Designer – Settings Core (ESM ONLY)
+ * selection-core.js
+ * -----------------------------------------------------------
+ * Scene Designer – Centralized Shape Selection Logic (Core, ESM ONLY)
  * Purpose:
- * - Owns the settings registry, persistence (localForage), coercion/merging,
- *   and non-UI side effects (logging config, console interception, diagnostics).
- * - NO UI code here. The Tweakpane panel lives in settings-ui.js.
+ * - Manage single/multi-shape selection state for Fabric.js objects.
+ * - Own the transformer lifecycle (attach/detach/update) using transformer.js.
+ * - Integrate shape-state.js and shape-defs.js for per-shape behavior.
+ * - Multi-select dashed outlines are rendered by the overlay painter installed in canvas-core.js.
  *
- * Exports:
- * - LOG_LEVELS, LOG_LEVEL_LABEL_TO_NUM, LOG_LEVEL_NUM_TO_LABEL
- * - settingsRegistry
- * - loadSettings(), saveSettings()
- * - setSettingAndSave(key, value), setSettingsAndSave(obj)
+ * Exports (public API):
+ * - setSelectedShape(shape|null)
+ * - setSelectedShapes(arrayOfShapes)
+ * - selectAllShapes()
+ * - deselectAll()
+ * - attachSelectionHandlers(shape)
+ * - isShapeSelected(shape) : boolean
+ * - getSelectedShapes() : array
+ * - getSelectedShape() : shape|null
  *
  * Dependencies:
- * - state.js (getState, setSettings, setSetting)
- * - log.js (log, setLogLevel, setLogDestination)
- * - console-stream.js (enable/disable/isConsoleInterceptionEnabled)
- * - localforage
- * - shapes.js (applyDiagnosticLabelsVisibility, setStrokeWidthForSelectedShapes)
- * -------------------------------------------------------------------
+ * - log.js (log)
+ * - transformer.js (attachTransformerForShape, detachTransformer)
+ * - shape-state.js (setShapeState, selectShape, deselectShape, setMultiSelected)
+ * - shape-defs.js (getShapeDef)
+ * - shapes.js (fixStrokeWidthAfterTransform)
+ * - state.js (sceneDesignerStore, getState)
+ * - fabric-wrapper.js (default fabric namespace for ActiveSelection)
+ * -----------------------------------------------------------
  */
 
+import { log } from './log.js';
+import { attachTransformerForShape, detachTransformer } from './transformer.js';
+import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
+import { getShapeDef } from './shape-defs.js';
+import { fixStrokeWidthAfterTransform } from './shapes.js';
 import {
-  getState,
-  setSettings,
-  setSetting
+  sceneDesignerStore,
+  getState
 } from './state.js';
-import {
-  log,
-  setLogLevel,
-  setLogDestination,
-} from './log.js';
-import {
-  enableConsoleInterception,
-  disableConsoleInterception,
-  isConsoleInterceptionEnabled
-} from './console-stream.js';
-import localforage from 'localforage';
-import { applyDiagnosticLabelsVisibility, setStrokeWidthForSelectedShapes } from './shapes.js';
+import fabric from './fabric-wrapper.js';
 
-// --- Log Level Options (label and value are identical) ---
-export const LOG_LEVELS = [
-  { value: "Silent", label: "Silent" },
-  { value: "Error", label: "Error" },
-  { value: "Warning", label: "Warning" },
-  { value: "Info", label: "Info" },
-  { value: "Debug", label: "Debug" }
-];
-export const LOG_LEVEL_LABEL_TO_NUM = {
-  "Silent": 0,
-  "Error": 1,
-  "Warning": 2,
-  "Info": 3,
-  "Debug": 4
-};
-export const LOG_LEVEL_NUM_TO_LABEL = [
-  "Silent", "Error", "Warning", "Info", "Debug"
-];
-
-// --- Settings Registry ---
-export const settingsRegistry = [
-  // UI/UX
-  { key: "multiDragBox", label: "Show Multi-Drag Box", type: "boolean", default: true },
-
-  // Shape defaults
-  { key: "defaultRectWidth", label: "Default Rectangle Width", type: "number", default: 50, min: 10, max: 300, step: 1 },
-  { key: "defaultRectHeight", label: "Default Rectangle Height", type: "number", default: 30, min: 10, max: 200, step: 1 },
-  { key: "defaultCircleRadius", label: "Default Circle Radius", type: "number", default: 15, min: 4, max: 100, step: 1 },
-  { key: "defaultStrokeColor", label: "Default Stroke Color", type: "color", default: "#000000ff" },
-  { key: "defaultFillColor", label: "Default Fill Color", type: "color", default: "#00000000" },
-  { key: "defaultStrokeWidth", label: "Default Stroke Width (px)", type: "number", default: 1, min: 0.5, max: 10, step: 0.5 },
-
-  // Point reticle customization
-  {
-    key: "reticleStyle",
-    label: "Point Reticle Style",
-    type: "select",
-    options: [
-      { value: "crosshair", label: "Crosshair" },
-      { value: "crosshairHalo", label: "Crosshair + Halo" },
-      { value: "bullseye", label: "Bullseye (rings)" },
-      { value: "dot", label: "Dot" },
-      { value: "target", label: "Target (ring + cross)" }
-    ],
-    default: "crosshairHalo"
-  },
-  { key: "reticleSize", label: "Point Reticle Size (px)", type: "number", default: 14, min: 4, max: 60, step: 1 },
-
-  // Diagnostics
-  { key: "showDiagnosticLabels", label: "Show Diagnostic Labels (IDs)", type: "boolean", default: false },
-
-  // Canvas/image
-  { key: "canvasMaxWidth", label: "Canvas Max Width (px)", type: "number", default: 430, min: 100, max: 4000, step: 10 },
-  { key: "canvasMaxHeight", label: "Canvas Max Height (px)", type:  "number", default: 9999, min: 100, max: 4000, step: 10 },
-  {
-    key: "canvasScaleMode",
-    label: "Image Scale Mode",
-    type: "select",
-    options: [
-      { value: "fit", label: "Fit (aspect ratio, max width)" },
-      { value: "fill", label: "Fill (aspect ratio, max w/h, may crop)" },
-      { value: "stretch", label: "Stretch (fill max w/h, ignore ratio)" },
-      { value: "actual", label: "Actual Size (image pixels, scroll if too large)" }
-    ],
-    default: "fit"
-  },
-  { key: "canvasResponsive", label: "Responsive: Resize on Window Change", type: "boolean", default: true },
-
-  // Toolbar/UI
-  {
-    key: "toolbarUIScale",
-    label: "Toolbar UI Scale",
-    type: "number",
-    default: 1,
-    min: 0.5,
-    max: 2,
-    step: 0.05
-  },
-  {
-    key: "shapeStartXPercent",
-    label: "Shape Start X (%)",
-    type: "number",
-    default: 50,
-    min: 0,
-    max: 100,
-    step: 1
-  },
-  {
-    key: "shapeStartYPercent",
-    label: "Shape Start Y (%)",
-    type: "number",
-    default: 50,
-    min: 0,
-    max: 100,
-    step: 1
-  },
-
-  // Panels
-  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true },
-  { key: "showScenarioRunner", label: "Show Scenario Runner (Debug)", type: "boolean", default: false },
-
-  // Logging
-  {
-    key: "DEBUG_LOG_LEVEL",
-    label: "Debug: Log Level",
-    type: "select",
-    options: LOG_LEVELS,
-    default: "Info"
-  },
-  {
-    key: "LOG_OUTPUT_DEST",
-    label: "Log Output Destination",
-    type: "select",
-    options: [
-      { value: "console", label: "console" },
-      { value: "both", label: "both" }
-    ],
-    default: "console"
-  },
-  { key: "INTERCEPT_CONSOLE", label: "Intercept All Console Logs (for Mobile/Dev)", type: "boolean", default: false }
-];
-
-// --- Persistence using localForage (async) ---
-localforage.config({
-  name: 'scene-designer',
-  storeName: 'settings'
-});
-
-// Normalize log level label (string) to number for runtime/log.js
-function normalizeLogLevelNum(val) {
-  if (typeof val === "string" && val in LOG_LEVEL_LABEL_TO_NUM) return LOG_LEVEL_LABEL_TO_NUM[val];
-  if (typeof val === "number" && LOG_LEVEL_NUM_TO_LABEL[val]) return val;
-  return 3; // Info
+/**
+ * Resolve a canonical shape reference from the store by _id.
+ */
+function getCanonicalShapeById(shapeLike) {
+  if (!shapeLike || !shapeLike._id) return null;
+  const shapes = getState().shapes || [];
+  const result = shapes.find(s => s._id === shapeLike._id) || null;
+  log("DEBUG", "[selection-core] getCanonicalShapeById", {
+    inputId: shapeLike?._id,
+    found: !!result,
+    ids: shapes.map(s => s._id)
+  });
+  return result;
 }
 
-// --- Robust Boolean Coercion for FORCE Settings ---
-function coerceBoolean(val) {
-  if (typeof val === "boolean") return val;
-  if (typeof val === "string") {
-    if (val === "true" || val === "1") return true;
-    if (val === "false" || val === "0") return false;
+/**
+ * Ensure Fabric has an ActiveSelection for the given shapes when multi-selected.
+ * Deterministic: discards prior active object, builds new ActiveSelection, and activates it.
+ */
+function ensureFabricActiveSelection(shapes) {
+  const canvas = getState().fabricCanvas;
+  if (!canvas || !Array.isArray(shapes) || shapes.length <= 1) return;
+
+  // Quick id set compare to avoid churn
+  const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
+  const wantIds = shapes.map(s => s && s._id).filter(Boolean).sort();
+
+  if (active && active.type === 'activeSelection' && Array.isArray(active._objects)) {
+    const activeIds = active._objects.map(o => o && o._id).filter(Boolean).sort();
+    if (activeIds.length === wantIds.length && activeIds.every((v, i) => v === wantIds[i])) {
+      log("DEBUG", "[selection-core] ActiveSelection already matches; no-op");
+      return;
+    }
   }
-  if (typeof val === "number") {
-    return Boolean(val);
+
+  try {
+    // Discard anything currently active to avoid mixed states
+    if (typeof canvas.discardActiveObject === 'function') canvas.discardActiveObject();
+
+    // Build a fresh ActiveSelection with the exact members
+    const sel = new fabric.ActiveSelection(shapes, { canvas });
+
+    // UX: hull visible, but no transform controls for group drag
+    sel.set({
+      hasControls: false,
+      hasBorders: true,
+      selectable: true
+    });
+
+    canvas.setActiveObject(sel);
+
+    // Update coords to keep aCoords fresh for overlay
+    if (typeof sel.setCoords === 'function') sel.setCoords();
+    shapes.forEach(s => { if (typeof s.setCoords === 'function') s.setCoords(); });
+
+    if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
+    else canvas.renderAll();
+
+    log("DEBUG", "[selection-core] Fabric ActiveSelection set", { ids: wantIds });
+  } catch (e) {
+    log("ERROR", "[selection-core] Failed to create/set ActiveSelection", e);
   }
-  return false;
 }
 
-function mergeSettingsWithForce(stored) {
-  log("DEBUG", "[settings-core] mergeSettingsWithForce", { stored });
-  const forceMode = typeof window !== "undefined" &&
-    window.SCENE_DESIGNER_FORCE === true &&
-    window.SCENE_DESIGNER_FORCE_SETTINGS &&
-    typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
-  const merged = {};
-  for (const reg of settingsRegistry) {
-    let val;
-    if (forceMode && reg.key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
-      val = window.SCENE_DESIGNER_FORCE_SETTINGS[reg.key];
-      if (reg.type === "boolean") val = coerceBoolean(val);
-      log("INFO", `[settings-core] FORCE MODE: Overriding ${reg.key} with forced value`, val);
-    } else if (reg.key in stored) {
-      val = stored[reg.key];
+/**
+ * Set a single selected shape (or clear selection with null).
+ */
+export function setSelectedShape(shape) {
+  log("DEBUG", "[selection-core] setSelectedShape ENTRY", {
+    incomingId: shape?._id,
+    prevSelectedId: getState().selectedShape?._id
+  });
+
+  const canonicalShape = getCanonicalShapeById(shape);
+
+  // Deselect any previously selected single
+  if (getState().selectedShape) {
+    deselectShape(getState().selectedShape);
+  }
+
+  // Reset flags
+  (getState().shapes || []).forEach(s => { s._selected = false; });
+  if (canonicalShape) canonicalShape._selected = true;
+
+  // Commit to store
+  sceneDesignerStore.setState({
+    selectedShape: canonicalShape,
+    selectedShapes: canonicalShape ? [canonicalShape] : []
+  });
+
+  if (canonicalShape) {
+    selectShape(canonicalShape);
+    const def = getShapeDef(canonicalShape);
+    if (def && def.editable && !canonicalShape.locked) {
+      attachTransformerForShape(canonicalShape); // sets Fabric active object
     } else {
-      val = reg.default;
+      detachTransformer();
     }
-    if (reg.key === "DEBUG_LOG_LEVEL") {
-      if (typeof val === "number" && LOG_LEVEL_NUM_TO_LABEL[val]) val = LOG_LEVEL_NUM_TO_LABEL[val];
-      if (typeof val !== "string" || !(val in LOG_LEVEL_LABEL_TO_NUM)) val = "Info";
-    }
-    merged[reg.key] = val;
-  }
-  log("DEBUG", "[settings-core] [merge] merged result", merged);
-  return merged;
-}
-
-export async function loadSettings() {
-  log("DEBUG", "[settings-core] loadSettings entry");
-  try {
-    let stored = (await localforage.getItem("sceneDesignerSettings")) || {};
-    log("DEBUG", "[settings-core] loadSettings: raw stored from localforage:", stored);
-    let merged = mergeSettingsWithForce(stored);
-    setSettings(merged);
-    updateLogConfigFromSettings(merged);
-    updateConsoleInterceptionFromSettings(merged);
-    // Apply diagnostic label visibility to all existing shapes
-    try {
-      applyDiagnosticLabelsVisibility(!!merged.showDiagnosticLabels);
-    } catch (e) {
-      log("WARN", "[settings-core] Applying diagnostic labels visibility failed (non-fatal)", e);
-    }
-    log("DEBUG", "[settings-core] Settings loaded and applied", merged);
-    log("DEBUG", "[settings-core] Full settings after load", { settings: getState().settings });
-    return merged;
-  } catch (e) {
-    log("ERROR", "[settings-core] loadSettings error", e);
-    throw e;
-  }
-}
-
-export async function saveSettings() {
-  log("DEBUG", "[settings-core] saveSettings entry");
-  try {
-    const forceMode = typeof window !== "undefined" &&
-      window.SCENE_DESIGNER_FORCE === true &&
-      window.SCENE_DESIGNER_FORCE_SETTINGS &&
-      typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
-    let toSave = {};
-    for (const reg of settingsRegistry) {
-      if (forceMode && reg.key in window.SCENE_DESIGNER_FORCE_SETTINGS) continue;
-      toSave[reg.key] = getState().settings[reg.key];
-    }
-    if ("DEBUG_LOG_LEVEL" in getState().settings) {
-      let label = getState().settings.DEBUG_LOG_LEVEL;
-      if (typeof label === "number" && LOG_LEVEL_NUM_TO_LABEL[label]) label = LOG_LEVEL_NUM_TO_LABEL[label];
-      if (typeof label !== "string" || !(label in LOG_LEVEL_LABEL_TO_NUM)) label = "Info";
-      toSave.DEBUG_LOG_LEVEL = label;
-    }
-    log("DEBUG", "[settings-core] saveSettings: about to persist", toSave);
-    await localforage.setItem("sceneDesignerSettings", toSave);
-    updateLogConfigFromSettings(getState().settings);
-    updateConsoleInterceptionFromSettings(getState().settings);
-    log("DEBUG", "[settings-core] Settings saved", toSave);
-    log("DEBUG", "[settings-core] Full settings after save", { settings: getState().settings });
-  } catch (e) {
-    log("ERROR", "[settings-core] saveSettings error", e);
-    throw e;
-  }
-}
-
-export async function setSettingAndSave(key, value) {
-  log("DEBUG", "[settings-core] setSettingAndSave entry", { key, value, type: typeof value });
-  const forceMode = typeof window !== "undefined" &&
-    window.SCENE_DESIGNER_FORCE === true &&
-    window.SCENE_DESIGNER_FORCE_SETTINGS &&
-    typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
-  if (forceMode && key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
-    log("WARN", `[settings-core] setSettingAndSave: Attempted to save forced setting '${key}'; ignored.`);
-    return;
-  }
-  let valToSet = value;
-  if (key === "DEBUG_LOG_LEVEL") {
-    if (typeof value === "number" && LOG_LEVEL_NUM_TO_LABEL[value]) valToSet = LOG_LEVEL_NUM_TO_LABEL[value];
-    if (typeof valToSet !== "string" || !(valToSet in LOG_LEVEL_LABEL_TO_NUM)) valToSet = "Info";
-    setLogLevelByNum(normalizeLogLevelNum(valToSet));
+    fixStrokeWidthAfterTransform();
+  } else {
+    detachTransformer();
   }
 
-  // Persist to store (synchronous, immediate for subscribers like layout.js)
-  setSetting(key, valToSet);
-  log("DEBUG", "[settings-core] setSettingAndSave: after setSetting", getState().settings);
-  log("DEBUG", `[settings-core] setSettingAndSave: setting '${key}' changed`, { value: valToSet, fullSettings: getState().settings });
-
-  // Side effects handled here for non-layout concerns
-  if (key === "showDiagnosticLabels") {
-    try {
-      applyDiagnosticLabelsVisibility(!!valToSet);
-      log("INFO", "[settings-core] Diagnostic labels visibility updated", { visible: !!valToSet });
-    } catch (e) {
-      log("ERROR", "[settings-core] Failed to update diagnostic labels visibility", e);
-    }
-  }
-
-  if (key === "defaultStrokeWidth") {
-    try {
-      const w = Number(valToSet);
-      if (!Number.isNaN(w) && w > 0) {
-        setStrokeWidthForSelectedShapes(w);
-        log("INFO", "[settings-core] Applied default stroke width to selected shapes", { width: w });
-      }
-    } catch (e) {
-      log("ERROR", "[settings-core] Failed to apply default stroke width to selection", e);
-    }
-  }
-
-  // Note: Panel visibility toggles (showErrorLogPanel, showScenarioRunner) are applied by layout.js via store subscription.
-
-  await saveSettings();
-  log("DEBUG", "[settings-core] setSettingAndSave exit");
-}
-
-export async function setSettingsAndSave(settingsObj) {
-  log("DEBUG", "[settings-core] setSettingsAndSave entry", settingsObj);
-  const forceMode = typeof window !== "undefined" &&
-    window.SCENE_DESIGNER_FORCE === true &&
-    window.SCENE_DESIGNER_FORCE_SETTINGS &&
-    typeof window.SCENE_DESIGNER_FORCE_SETTINGS === "object";
-  if (forceMode) {
-    for (const key in window.SCENE_DESIGNER_FORCE_SETTINGS) {
-      if (key in settingsObj) {
-        log("WARN", `[settings-core] setSettingsAndSave: Attempted to save forced setting '${key}'; ignored.`);
-        delete settingsObj[key];
-      }
-    }
-  }
-  if ("DEBUG_LOG_LEVEL" in settingsObj) {
-    let label = settingsObj.DEBUG_LOG_LEVEL;
-    if (typeof label === "number" && LOG_LEVEL_NUM_TO_LABEL[label]) label = LOG_LEVEL_NUM_TO_LABEL[label];
-    if (typeof label !== "string" || !(label in LOG_LEVEL_LABEL_TO_NUM)) label = "Info";
-    settingsObj.DEBUG_LOG_LEVEL = label;
-    setLogLevelByNum(normalizeLogLevelNum(label));
-  }
-
-  // Persist to store
-  setSettings(settingsObj);
-  log("DEBUG", "[settings-core] setSettingsAndSave: after setSettings", getState().settings);
-  log("DEBUG", "[settings-core] setSettingsAndSave: all settings changed", { fullSettings: getState().settings });
-
-  // Side effects handled here for non-layout concerns
-  if ("showDiagnosticLabels" in settingsObj) {
-    try {
-      applyDiagnosticLabelsVisibility(!!settingsObj.showDiagnosticLabels);
-      log("INFO", "[settings-core] Diagnostic labels visibility updated (bulk)", { visible: !!settingsObj.showDiagnosticLabels });
-    } catch (e) {
-      log("ERROR", "[settings-core] Failed to update diagnostic labels visibility (bulk)", e);
-    }
-  }
-
-  if ("defaultStrokeWidth" in settingsObj) {
-    try {
-      const w = Number(settingsObj.defaultStrokeWidth);
-      if (!Number.isNaN(w) && w > 0) {
-        setStrokeWidthForSelectedShapes(w);
-        log("INFO", "[settings-core] Applied default stroke width to selected shapes (bulk)", { width: w });
-      }
-    } catch (e) {
-      log("ERROR", "[settings-core] Failed to apply default stroke width to selection (bulk)", e);
-    }
-  }
-
-  // Note: Panel visibility toggles (showErrorLogPanel, showScenarioRunner) are applied by layout.js via store subscription.
-
-  await saveSettings();
-  log("DEBUG", "[settings-core] setSettingsAndSave exit");
-}
-
-function setLogLevelByNum(numLevel) {
-  let name = LOG_LEVEL_NUM_TO_LABEL[numLevel] ?? "Silent";
-  setLogLevel(numLevel);
-  log("DEBUG", "[settings-core] Log level changed", { numLevel, name });
-}
-
-function updateLogConfigFromSettings(settings) {
-  if (!settings) return;
-  if ("DEBUG_LOG_LEVEL" in settings) {
-    const num = normalizeLogLevelNum(settings.DEBUG_LOG_LEVEL);
-    setLogLevelByNum(num);
-  }
-  if ("LOG_OUTPUT_DEST" in settings) setLogDestination(settings.LOG_OUTPUT_DEST);
-  log("DEBUG", "[settings-core] Logging config updated", {
-    logLevel: settings.DEBUG_LOG_LEVEL,
-    logDest: settings.LOG_OUTPUT_DEST
+  notifySelectionChanged();
+  log("DEBUG", "[selection-core] setSelectedShape EXIT", {
+    selectedShape: getState().selectedShape?._id,
+    selectedShapes: getState().selectedShapes.map(s => s?._id)
   });
 }
 
-function updateConsoleInterceptionFromSettings(settings) {
-  if (!settings) return;
-  if (settings.INTERCEPT_CONSOLE) {
-    if (!isConsoleInterceptionEnabled()) {
-      enableConsoleInterception();
-      log("INFO", "[settings-core] Console interception ENABLED");
-    }
-  } else {
-    if (isConsoleInterceptionEnabled()) {
-      disableConsoleInterception();
-      log("INFO", "[settings-core] Console interception DISABLED");
-    }
+/**
+ * Set the current selection (array of shapes).
+ * - Single selection: attach transformer and set Fabric active object.
+ * - Multi selection: ensure Fabric ActiveSelection exists (so group drag works).
+ */
+export function setSelectedShapes(arr) {
+  log("DEBUG", "[selection-core] setSelectedShapes ENTRY", {
+    inputIds: Array.isArray(arr) ? arr.map(s => s?._id) : []
+  });
+
+  const all = getState().shapes || [];
+  const newArr = Array.isArray(arr)
+    ? arr.map(shape => getCanonicalShapeById(shape)).filter(Boolean)
+    : [];
+
+  // Deselect shapes that are no longer selected
+  if (Array.isArray(getState().selectedShapes)) {
+    getState().selectedShapes.forEach(s => {
+      if (!newArr.includes(s)) deselectShape(s);
+    });
   }
+
+  // Refresh selected flags
+  all.forEach(s => { s._selected = false; });
+  newArr.forEach(s => { s._selected = true; });
+
+  // Commit to store
+  sceneDesignerStore.setState({
+    selectedShapes: newArr,
+    selectedShape: newArr.length === 1 ? newArr[0] : null
+  });
+
+  // Update per-shape state machine flags
+  newArr.forEach(shape => {
+    setMultiSelected(shape, newArr.length > 1);
+    if (newArr.length === 1) selectShape(shape);
+  });
+
+  if (newArr.length === 1 && newArr[0] && !newArr[0].locked) {
+    // Single selection → attach transformer (sets Fabric active object)
+    const def = getShapeDef(newArr[0]);
+    if (def && def.editable) {
+      attachTransformerForShape(newArr[0]);
+    } else {
+      detachTransformer();
+    }
+    fixStrokeWidthAfterTransform();
+  } else if (newArr.length > 1) {
+    // Multi selection → ensure a Fabric ActiveSelection exists
+    ensureFabricActiveSelection(newArr);
+  } else {
+    // None selected
+    detachTransformer();
+  }
+
+  notifySelectionChanged();
+  log("DEBUG", "[selection-core] setSelectedShapes EXIT", {
+    selectedShape: getState().selectedShape?._id,
+    selectedShapes: getState().selectedShapes.map(s => s?._id)
+  });
 }
 
+/**
+ * Select all shapes in the store (multi-select).
+ */
+export function selectAllShapes() {
+  log("DEBUG", "[selection-core] selectAllShapes ENTRY");
+  setSelectedShapes((getState().shapes || []).slice());
+  log("DEBUG", "[selection-core] selectAllShapes EXIT");
+}
+
+/**
+ * Deselect all shapes and detach transformer.
+ */
+export function deselectAll() {
+  log("DEBUG", "[selection-core] deselectAll ENTRY");
+  if (Array.isArray(getState().selectedShapes)) {
+    getState().selectedShapes.forEach(s => deselectShape(s));
+  }
+
+  (getState().shapes || []).forEach(s => { s._selected = false; });
+
+  sceneDesignerStore.setState({
+    selectedShape: null,
+    selectedShapes: []
+  });
+
+  detachTransformer(); // discards any Fabric active/selection hull
+  notifySelectionChanged();
+  log("DEBUG", "[selection-core] deselectAll EXIT");
+}
+
+/**
+ * Currently unused; kept for compatibility.
+ */
+export function attachSelectionHandlers(shape) {
+  log("DEBUG", "[selection-core] attachSelectionHandlers NO-OP", {
+    shapeId: shape?._id, type: shape?._type
+  });
+}
+
+/** Utils */
+export function isShapeSelected(shape) {
+  const result = !!shape && !!shape._selected;
+  log("DEBUG", "[selection-core] isShapeSelected", { id: shape?._id, result });
+  return result;
+}
+export function getSelectedShapes() {
+  const arr = getState().selectedShapes || [];
+  log("DEBUG", "[selection-core] getSelectedShapes", { ids: arr.map(s => s?._id) });
+  return arr;
+}
+export function getSelectedShape() {
+  const s = getState().selectedShape || null;
+  log("DEBUG", "[selection-core] getSelectedShape", { id: s?._id });
+  return s;
+}
+
+function notifySelectionChanged() {
+  log("DEBUG", "[selection-core] notifySelectionChanged", {
+    selectedShape: getState().selectedShape?._id,
+    selectedShapes: getState().selectedShapes.map(s => s?._id)
+  });
+}
+
+// Optional debugging helpers (dev only)
+if (typeof window !== "undefined") {
+  window.__sel = {
+    setSelectedShape,
+    setSelectedShapes,
+    selectAllShapes,
+    deselectAll,
+    isShapeSelected,
+    getSelectedShape,
+    getSelectedShapes
+  };
+}

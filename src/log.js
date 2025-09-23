@@ -263,4 +263,3 @@ if (typeof window !== "undefined") {
   window.LOG_LEVELS = LOG_LEVELS;
   window.__loggerInstanceId = LOGGER_INSTANCE_ID;
 }
-

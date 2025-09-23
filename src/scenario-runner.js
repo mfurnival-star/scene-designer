@@ -86,7 +86,7 @@ export async function runScenarioStep(step) {
     if (step.fn && API[step.fn]) {
       // Evaluate any function args before passing to API
       const args = evalArgs(step.args || [], step.fn);
-      log("TRACE", `[scenario-runner] Step args evaluated`, { fn: step.fn, rawArgs: step.args, resolvedArgs: args });
+      log("DEBUG", `[scenario-runner] Step args evaluated`, { fn: step.fn, rawArgs: step.args, resolvedArgs: args });
       const result = await API[step.fn](...args);
       log("INFO", `[scenario-runner] Ran action: ${step.fn}`, { args, result });
       return result;
@@ -325,4 +325,3 @@ Example scenario step:
 */
 
 // Future: scenario-panel.js can import getRegisteredScenarios() and runRegisteredScenario(name)
-

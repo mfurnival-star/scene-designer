@@ -1,0 +1,52 @@
+Scene Designer – Engineering & Review Rules
+
+1. ES Module Only
+- Use ES module syntax for all imports/exports.
+- No window.*, no global variables, no CDN/global scripts.
+- External dependencies (e.g. Fabric.js, Pickr, Tweakpane) must be installed via npm and imported.
+
+1A. Remote Logging Exception
+- For remote log streaming: inject Console.Re connector.js CDN script in <head>.
+- Only for remote logging; remove when Console.Re provides an ES module export.
+- Do not use legacy console-remote-client except for old builds.
+- Document this exception in build/deploy scripts.
+
+2. Import/Export Consistency
+- Every import must match a real export in the source file.
+- Update source or imports to ensure consistency.
+- No importing non-exported symbols.
+
+3. File Delivery and Review
+- Deliver complete files only, one at a time, in numbered order.
+- After each file, state the next file and wait for confirmation ("next"/"ready").
+- Keep a running list of remaining files.
+- After all files, state completion.
+- Update src/modules.index.md when adding/removing/renaming modules.
+
+4. File Size/Splitting
+- No file over ~500 lines; split large files into logical modules.
+- Prefer splitting by concern (core, UI, helpers, etc).
+- Each module starts with a summary comment.
+- Update imports/exports and src/modules.index.md after splitting.
+
+5. Logging/Documentation
+- Use log() from log.js with levels: ERROR, WARN, INFO, DEBUG.
+- TRACE is deprecated; use DEBUG for verbose logs.
+- No direct console.log except inside logger.
+- Every file starts with a summary comment (purpose, exports, dependencies).
+
+6. State Management
+- Use exported functions/store object from state.js (Zustand-style).
+- No AppState singletons.
+- Use getState(), mutators, and sceneDesignerStore.subscribe(fn).
+
+7. Separation of Concerns
+- UI emits intents/actions only; no direct state mutation.
+- All business logic for scene actions (add, delete, duplicate, lock, unlock, etc) is in actions.js.
+- Cross-module communication via ES module imports/exports.
+
+8. Manifest/Documentation
+- Update src/modules.index.md for all module changes.
+- src/exports.index.json is auto-generated; do not edit by hand.
+
+Refer to this file for the definitive engineering and delivery rules.
