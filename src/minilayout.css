@@ -6,6 +6,12 @@
  * - GL-inspired: neutral greys, compact header, tab effect, optional close button.
  * - Splitter bars: vertical and horizontal, with hover and drag feedback.
  * - Root container: fullscreen sizing, no scrollbars.
+ *
+ * Mobile/iOS Safari fix (2025-09-23):
+ * - Prevent Fabric upper canvas/overlays from painting over adjacent panels by:
+ *   - Making panels clipping containers (position: relative; overflow: hidden;)
+ *   - Giving panel bodies their own stacking/paint context (position: relative; isolation: isolate; contain: paint;)
+ *   - For CanvasPanel body specifically: overflow: hidden to avoid bleed while keeping Settings scrollable.
  * -----------------------------------------------------------
  */
 
@@ -31,6 +37,12 @@ html, body, #ml-root {
   border-radius: 8px;
   box-shadow: 0 2px 9px -6px #aaa;
   transition: border 0.16s, box-shadow 0.14s;
+
+  /* NEW: contain children and clip any absolute overlays to this panel */
+  position: relative;
+  overflow: hidden;
+  contain: paint;          /* helps Safari clip paints within panel bounds */
+  isolation: isolate;      /* separate stacking context so z-index does not bleed */
 }
 
 .minilayout-panel-header {
@@ -82,16 +94,28 @@ html, body, #ml-root {
 .minilayout-panel-body {
   background: #f3f3f3;
   flex: 1 1 0;
-  overflow: auto;
+  overflow: auto;            /* keep scrollable bodies scrolling */
   padding: 0;
   border-radius: 0 0 8px 8px;
   transition: background 0.12s;
+
+  /* NEW: ensure absolute children (e.g., Fabric wrappers) are positioned/clipped by body */
+  position: relative;
+  isolation: isolate;        /* separate stacking context inside the panel */
+  contain: paint;            /* clip paints to this element */
+  -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
 }
 
 .minilayout-panel-component {
   min-width: 120px;
   min-height: 80px;
   flex: 1 1 0;
+}
+
+/* Specific body class names are generated as: .minilayout-panel-body--{componentName} (sanitized, lowercase) */
+/* Lock the Canvas panel body to overflow hidden to contain Fabric upper canvas/overlays */
+.minilayout-panel-body--canvaspanel {
+  overflow: hidden !important;
 }
 
 .minilayout-panel-stack {
