@@ -100,6 +100,37 @@ function clampDeltaToImage(bbox, dx, dy, img) {
 }
 
 /**
+ * Find the reference value for alignment among selected shapes.
+ * E.g., left align → min left; right align → max right; centerX → center of leftmost.
+ * @param {Array} bboxes
+ * @param {string} mode
+ * @returns {number}
+ */
+function getReferenceValue(bboxes, mode) {
+  if (!Array.isArray(bboxes) || bboxes.length === 0) return 0;
+  switch (mode) {
+    case "left":
+      return Math.min(...bboxes.map(b => b.left));
+    case "centerX":
+      // Center of the leftmost shape
+      const leftmost = bboxes.reduce((min, b) => b.left < min.left ? b : min, bboxes[0]);
+      return leftmost.left + leftmost.width / 2;
+    case "right":
+      return Math.max(...bboxes.map(b => b.left + b.width));
+    case "top":
+      return Math.min(...bboxes.map(b => b.top));
+    case "middleY":
+      // Center of the topmost shape
+      const topmost = bboxes.reduce((min, b) => b.top < min.top ? b : min, bboxes[0]);
+      return topmost.top + topmost.height / 2;
+    case "bottom":
+      return Math.max(...bboxes.map(b => b.top + b.height));
+    default:
+      return 0;
+  }
+}
+
+/**
  * Align currently selected shapes.
  * @param {"left"|"centerX"|"right"|"top"|"middleY"|"bottom"} mode
  * @param {"selection"|"canvas"} ref
@@ -122,39 +153,52 @@ export function alignSelected(mode, ref = 'selection') {
     return;
   }
 
-  // Determine reference rectangle
-  let refRect = null;
+  // Get bboxes for all selected shapes
+  const bboxes = selected.map(absBBox);
+
+  // Determine reference value
+  let referenceValue;
   if (refMode === 'canvas') {
     const img = store.bgFabricImage;
     if (img && Number.isFinite(img.width) && Number.isFinite(img.height)) {
-      refRect = { left: 0, top: 0, width: img.width, height: img.height };
+      switch (mode) {
+        case "left":
+          referenceValue = 0;
+          break;
+        case "centerX":
+          referenceValue = img.width / 2;
+          break;
+        case "right":
+          referenceValue = img.width;
+          break;
+        case "top":
+          referenceValue = 0;
+          break;
+        case "middleY":
+          referenceValue = img.height / 2;
+          break;
+        case "bottom":
+          referenceValue = img.height;
+          break;
+        default:
+          referenceValue = 0;
+      }
     } else {
-      // Fallback to selection when no bg image
-      refRect = selectionHull(selected);
-      log("WARN", "[align] Canvas ref requested but no bg image; falling back to selection hull");
+      // Fallback to selection if no canvas bounds
+      referenceValue = getReferenceValue(bboxes, mode);
+      log("WARN", "[align] Canvas ref requested but no bg image; falling back to selection reference");
     }
   } else {
-    refRect = selectionHull(selected);
+    referenceValue = getReferenceValue(bboxes, mode);
   }
-  if (!refRect) {
-    log("WARN", "[align] Reference rectangle unavailable; no-op", { ref: refMode });
-    return;
-  }
-
-  const refLeft = refRect.left;
-  const refRight = refRect.left + refRect.width;
-  const refTop = refRect.top;
-  const refBottom = refRect.top + refRect.height;
-  const refCenterX = refRect.left + refRect.width / 2;
-  const refCenterY = refRect.top + refRect.height / 2;
 
   const bgImg = store.bgFabricImage;
   const canvas = store.fabricCanvas;
 
   let movedCount = 0;
-  selected.forEach(shape => {
+  selected.forEach((shape, idx) => {
     if (!shape || shape.locked) return;
-    const bbox = absBBox(shape);
+    const bbox = bboxes[idx];
     if (!bbox) return;
 
     let dx = 0;
@@ -162,22 +206,24 @@ export function alignSelected(mode, ref = 'selection') {
 
     switch (mode) {
       case "left":
-        dx = refLeft - bbox.left;
+        dx = referenceValue - bbox.left;
+        // Only X changes
         break;
       case "centerX":
-        dx = refCenterX - (bbox.left + bbox.width / 2);
+        dx = referenceValue - (bbox.left + bbox.width / 2);
         break;
       case "right":
-        dx = refRight - (bbox.left + bbox.width);
+        dx = referenceValue - (bbox.left + bbox.width);
         break;
       case "top":
-        dy = refTop - bbox.top;
+        dy = referenceValue - bbox.top;
+        // Only Y changes
         break;
       case "middleY":
-        dy = refCenterY - (bbox.top + bbox.height / 2);
+        dy = referenceValue - (bbox.top + bbox.height / 2);
         break;
       case "bottom":
-        dy = refBottom - (bbox.top + bbox.height);
+        dy = referenceValue - (bbox.top + bbox.height);
         break;
       default:
         break;
@@ -185,8 +231,15 @@ export function alignSelected(mode, ref = 'selection') {
 
     // Clamp deltas to image bounds when available
     const clamped = clampDeltaToImage(bbox, dx, dy, bgImg);
-    dx = clamped.dx;
-    dy = clamped.dy;
+
+    // Only update the aligned coordinate
+    if (mode === "left" || mode === "centerX" || mode === "right") {
+      dx = clamped.dx;
+      dy = 0; // Never change Y for horizontal align
+    } else {
+      dx = 0; // Never change X for vertical align
+      dy = clamped.dy;
+    }
 
     if (dx === 0 && dy === 0) return;
 
