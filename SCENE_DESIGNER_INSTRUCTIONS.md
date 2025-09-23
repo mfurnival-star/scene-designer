@@ -48,9 +48,9 @@ These instructions are binding for all development, code review, and delivery in
 
 ## 4. File Size Policy and Splitting
 
-- No single file should exceed ~350 lines.
+- No single file should exceed ~500 lines.
 - If a file does, split into logical ES module parts (e.g., `settings-core.js`, `settings-ui.js`, or `settings.part1.js`, `settings.part2.js`).
-- Each part should be ≤350 lines if possible.
+- Each part should be ≤500 lines if possible.
 - When splitting:
   - Prefer logical separation (core, UI, data, helpers, etc).
   - Each part must begin with a summary comment.
