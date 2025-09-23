@@ -26,6 +26,7 @@
  * Notes:
  * - All DOM/CSS classes align with minilayout.css.
  * - This core is intentionally kept <350 lines and delegates splitter persistence to its module.
+ * - 2025-09-23: Hardened stacking/clip contexts inline (iOS Safari bleed fix).
  * -----------------------------------------------------------
  */
 
@@ -85,6 +86,25 @@ function injectPanelScrollbarCSS(className, styleObj) {
     }
   `;
   document.head.appendChild(style);
+}
+
+/** Inline stacking/clip helpers (Safari-safe) */
+function applyPanelStacking(el) {
+  if (!el) return;
+  el.style.position = "relative";
+  el.style.overflow = "hidden";
+  el.style.isolation = "isolate";
+  el.style.contain = "paint";
+  el.style.zIndex = "0";
+}
+
+function applyBodyStacking(bodyDiv) {
+  if (!bodyDiv) return;
+  bodyDiv.style.position = "relative";
+  bodyDiv.style.isolation = "isolate";
+  bodyDiv.style.contain = "paint";
+  // Default z for bodies; specific panels override below
+  bodyDiv.style.zIndex = "1";
 }
 
 /**
@@ -225,6 +245,8 @@ export class MiniLayout {
       el.style.margin = "0";
       el.style.padding = "0";
       el.style.boxSizing = "border-box";
+      // NEW: make the row/column a stacking and clipping context
+      applyPanelStacking(el);
 
       // Persisted sizes for this parent
       const parentKey = panelPathKey(newPathArr);
@@ -269,6 +291,8 @@ export class MiniLayout {
       el.style.margin = "0";
       el.style.padding = "0";
       el.style.boxSizing = "border-box";
+      // NEW: stack container also becomes a stacking/clipping context
+      applyPanelStacking(el);
 
       const tabbar = document.createElement("div");
       tabbar.className = "minilayout-tabbar";
@@ -309,6 +333,8 @@ export class MiniLayout {
       el.style.margin = "0";
       el.style.padding = "0";
       el.style.boxSizing = "border-box";
+      // NEW: each component panel becomes its own stacking/clipping context
+      applyPanelStacking(el);
 
       // Header
       const header = document.createElement("div");
@@ -323,6 +349,9 @@ export class MiniLayout {
       header.style.gap = "10px";
       header.style.height = "var(--header-height)";
       header.style.padding = "2px 10px";
+      // NEW: keep header above its body
+      header.style.zIndex = "2";
+
       const titleTag = document.createElement("span");
       titleTag.className = "minilayout-panel-title";
       titleTag.textContent = node.title || node.componentName || "Panel";
@@ -350,6 +379,8 @@ export class MiniLayout {
       bodyDiv.style.flex = "1 1 0";
       bodyDiv.style.height = "100%";
       bodyDiv.style.padding = "0";
+      // NEW: stacking context for the body
+      applyBodyStacking(bodyDiv);
 
       // Scrollbars behavior
       if (node.scrollbars !== undefined) {
@@ -365,6 +396,16 @@ export class MiniLayout {
         }
       } else {
         bodyDiv.style.overflow = "auto";
+      }
+
+      // Panel-specific z-index tiers (Canvas below, Toolbar/Settings above)
+      const nameLower = String(node.componentName || "").toLowerCase();
+      if (nameLower === 'canvaspanel') {
+        bodyDiv.style.zIndex = "10";
+        bodyDiv.style.overflow = "hidden"; // clip Fabric layers hard
+      } else if (nameLower === 'canvastoolbarpanel' || nameLower === 'settingspanel') {
+        bodyDiv.style.zIndex = "20";
+        // Keep overflow auto so these panels remain scrollable
       }
 
       // Optional custom scrollbar style
@@ -404,6 +445,10 @@ export class MiniLayout {
       el.style.height = "100vh";
       el.style.display = "flex";
       el.style.overflow = "hidden";
+      // Root also isolates paints to prevent global bleed
+      el.style.isolation = "isolate";
+      el.style.contain = "paint";
+      el.style.zIndex = "0";
     }
 
     parentEl.appendChild(el);
@@ -411,4 +456,3 @@ export class MiniLayout {
     return item;
   }
 }
-
