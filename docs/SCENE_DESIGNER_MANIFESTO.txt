@@ -47,6 +47,5 @@ Scene Designer – Engineering & Review Rules
 
 8. Manifest/Documentation
 - Update src/modules.index.md for all module changes.
-- src/exports.index.json is auto-generated; do not edit by hand.
 
 Refer to this file for the definitive engineering and delivery rules.

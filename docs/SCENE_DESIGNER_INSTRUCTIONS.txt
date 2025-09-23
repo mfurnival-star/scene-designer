@@ -38,6 +38,6 @@ Scene Designer – Engineering & Review Instructions (Short, for Copilot Space)
    - Update src/modules.index.md for all module changes.
 
 10. Auto-generated files:
-    - src/exports.index.json is auto-generated; do not edit by hand.
+    - (No auto-generated export manifest is present or required.)
 
 Refer to SCENE_DESIGNER_MANIFESTO.txt for full philosophy and rules.

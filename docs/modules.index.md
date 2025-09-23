@@ -8,7 +8,6 @@ Purpose
 Update Policy
 - Edit this file when modules are added/removed/renamed.
 - Keep entries brief; link to source when needed.
-- exports.index.json is auto-generated. Do not edit it by hand.
 
 Facades (public import paths)
 - ./canvas.js → buildCanvasPanel (delegates to canvas-core.js)
@@ -21,7 +20,6 @@ Core Modules
 - log.js                      – central logger (ESM)
 - state.js                    – Zustand-style store and mutators
 - fabric-wrapper.js           – ESM wrapper for Fabric constructors
-- exports.index.json          – auto-generated export manifest (do not edit)
 
 Canvas
 - canvas-core.js              – Fabric canvas creation, image, sync, overlays
