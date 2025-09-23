@@ -1,16 +1,21 @@
 /**
  * canvas-core.js
  * -----------------------------------------------------------
- * Scene Designer – Fabric Canvas Core (ESM ONLY, Phase 1 – No Regression, Safari-safe background)
+ * Scene Designer – Fabric Canvas Core (ESM ONLY, Phase 1 – Image render fix)
  * Purpose:
- * - Build the Canvas panel, wire selection sync, constraints, overlays.
- * - Render background image as a non-selectable Fabric.Image object at z-index 0
- *   instead of using setBackgroundImage (more reliable across Safari/iOS).
- * - Sync store with fabricCanvas and bgFabricImage.
- * - React to state changes: image, shapes, settings.
+ * - Build the Canvas panel and keep it fully functional while we refactor.
+ * - Creates Fabric canvas, installs selection sync, constraints, and overlays.
+ * - Syncs with store:
+ *    - Background image: set/clear/resize on setImage + settings changes
+ *    - Shapes: add/remove/replace on store mutations
+ * - Exports:
+ *    - buildCanvasPanel({ element, title, componentName })
  *
- * Exports:
- * - buildCanvasPanel({ element, title, componentName })
+ * Key change (fix):
+ * - Render the background as canvas.backgroundImage via canvas.setBackgroundImage(...)
+ *   using a Fabric.Image built from the already-loaded HTMLImageElement from state.
+ *   This avoids any ambiguity with objects list and has been the most reliable path.
+ * - Strong diagnostics to confirm membership and scale each step.
  *
  * Dependencies:
  * - log.js (logging)
@@ -41,36 +46,21 @@ function createCanvasElement(host, width, height) {
   c.width = Math.max(1, Number(width) || 600);
   c.height = Math.max(1, Number(height) || 400);
   c.style.display = 'block';
-  c.style.width = '100%';
-  c.style.height = '100%';
+  c.style.width = `${c.width}px`;
+  c.style.height = `${c.height}px`;
   c.style.background = '#f8fbff';
   host.appendChild(c);
   return c;
 }
 
 /**
- * Remove all non-null objects from Fabric canvas (leave only background layer if present).
+ * Remove all non-null objects from Fabric canvas (leave background alone).
  */
 function clearAllObjects(canvas) {
   try {
     const objs = canvas.getObjects() || [];
-    if (!objs.length) return;
-    // Keep background layer if we use an object for background
-    const keep = objs.filter(o => o && o._isBackgroundLayer);
-    const drop = objs.filter(o => !o || !o._isBackgroundLayer);
-    drop.forEach(o => canvas.remove(o));
-    // Reinsert the kept background at index 0 to be safe
-    if (keep.length) {
-      keep.forEach(k => {
-        try {
-          canvas.remove(k);
-        } catch {}
-      });
-      keep.forEach(k => {
-        try {
-          canvas.insertAt(k, 0, true);
-        } catch {}
-      });
+    if (objs.length) {
+      objs.slice().forEach(o => canvas.remove(o));
     }
   } catch {}
 }
@@ -94,66 +84,20 @@ function addAllStoreShapesToCanvas(canvas) {
 }
 
 /**
- * Scale a Fabric image to fill the current canvas size (axis-independent scale).
+ * Compute scale to fit the current canvas size (axis-independent scaling).
  */
-function scaleImageToCanvas(canvas, img, naturalW, naturalH) {
-  try {
-    const cw = canvas.getWidth();
-    const ch = canvas.getHeight();
-    const iw = Number(naturalW) || img?.width || img?._element?.naturalWidth || 1;
-    const ih = Number(naturalH) || img?.height || img?._element?.naturalHeight || 1;
-    const scaleX = cw / iw;
-    const scaleY = ch / ih;
-    img.set({
-      left: 0,
-      top: 0,
-      scaleX,
-      scaleY,
-      originX: 'left',
-      originY: 'top',
-      selectable: false,
-      evented: false
-    });
-  } catch (e) {
-    log("WARN", "[canvas-core] scaleImageToCanvas failed", e);
-  }
+function computeScaleForCanvas(canvas, naturalW, naturalH) {
+  const cw = canvas.getWidth();
+  const ch = canvas.getHeight();
+  const iw = Number(naturalW) || 1;
+  const ih = Number(naturalH) || 1;
+  return { scaleX: cw / iw, scaleY: ch / ih };
 }
 
 /**
- * Ensure the background layer object is at z-index 0.
- */
-function sendBgToBack(canvas, bg) {
-  try {
-    if (!canvas || !bg) return;
-    // Remove then insert at 0 to guarantee ordering
-    canvas.remove(bg);
-    canvas.insertAt(bg, 0, true);
-  } catch (e) {
-    log("WARN", "[canvas-core] sendBgToBack failed", e);
-  }
-}
-
-/**
- * Clear any background layer object from the canvas and store.
- */
-function clearBackgroundLayer(canvas) {
-  const curBg = getState().bgFabricImage;
-  try {
-    if (canvas && curBg && canvas.getObjects().includes(curBg)) {
-      canvas.remove(curBg);
-    }
-  } catch {}
-  setBgFabricImage(null);
-  if (canvas) {
-    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-    else canvas.renderAll();
-  }
-  log("INFO", "[canvas-core] Background layer cleared");
-}
-
-/**
- * Set or clear the background image as a Fabric.Image object at z-index 0.
- * - Uses the already-loaded HTMLImageElement from state (no extra fetch).
+ * Set or clear the background image via canvas.backgroundImage.
+ * - Uses an already-loaded HTMLImageElement (state.imageObj); no extra fetch.
+ * - Scales to current canvas size.
  */
 function applyBackgroundImage(canvas, url, imgObj) {
   if (!canvas) return;
@@ -167,12 +111,21 @@ function applyBackgroundImage(canvas, url, imgObj) {
 
   // Clear background
   if (!url || !imgObj) {
-    clearBackgroundLayer(canvas);
+    try {
+      canvas.setBackgroundImage(null, () => {
+        setBgFabricImage(null);
+        if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+        else canvas.renderAll();
+        log("INFO", "[canvas-core] Background cleared (canvas.backgroundImage=null)");
+      });
+    } catch (e) {
+      log("ERROR", "[canvas-core] Clearing background image failed", e);
+    }
     log("DEBUG", "[canvas-core] applyBackgroundImage EXIT (cleared)");
     return;
   }
 
-  // Ensure the provided image element is fully loaded
+  // Ensure provided image element is ready
   if (!imgObj.complete || imgObj.naturalWidth <= 0 || imgObj.naturalHeight <= 0) {
     log("WARN", "[canvas-core] Provided HTMLImageElement is not ready; skipping", {
       complete: imgObj?.complete,
@@ -182,69 +135,86 @@ function applyBackgroundImage(canvas, url, imgObj) {
     return;
   }
 
-  // Remove any existing background layer first
-  clearBackgroundLayer(canvas);
-
   try {
-    // Build a Fabric image directly from the provided HTMLImageElement
+    // Construct a Fabric.Image from the HTMLImageElement (no network)
     const bg = new FabricImage(imgObj, {
       originX: 'left',
       originY: 'top',
       selectable: false,
       evented: false
     });
-    bg._isBackgroundLayer = true;
-    bg.excludeFromExport = true;
 
-    // Scale to canvas
-    scaleImageToCanvas(canvas, bg, imgObj.naturalWidth, imgObj.naturalHeight);
+    // Scale to the canvas size
+    const { scaleX, scaleY } = computeScaleForCanvas(canvas, imgObj.naturalWidth, imgObj.naturalHeight);
+    bg.set({ left: 0, top: 0, scaleX, scaleY });
 
-    // Insert at back
-    canvas.add(bg);
-    sendBgToBack(canvas, bg);
+    // Apply as background image
+    canvas.setBackgroundImage(bg, () => {
+      const applied = canvas.backgroundImage || bg;
+      // Ensure our store holds the active background image instance from canvas
+      setBgFabricImage(applied);
 
-    // Publish to store
-    setBgFabricImage(bg);
+      // Diagnostics
+      const d = {
+        url,
+        imgW: imgObj.naturalWidth,
+        imgH: imgObj.naturalHeight,
+        canvasW: canvas.getWidth(),
+        canvasH: canvas.getHeight(),
+        scaleX: applied.scaleX,
+        scaleY: applied.scaleY,
+        objectsCount: canvas.getObjects().length
+      };
 
-    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-    else canvas.renderAll();
+      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+      else canvas.renderAll();
 
-    log("INFO", "[canvas-core] Background layer set (object at z=0, no extra fetch)", {
-      url,
-      imgW: imgObj.naturalWidth,
-      imgH: imgObj.naturalHeight,
-      canvasW: canvas.getWidth(),
-      canvasH: canvas.getHeight()
+      log("INFO", "[canvas-core] Background image set via canvas.backgroundImage", d);
     });
   } catch (e) {
-    log("ERROR", "[canvas-core] Failed to set background layer", e);
+    log("ERROR", "[canvas-core] Failed to set background via canvas.setBackgroundImage", e);
   }
 
   log("DEBUG", "[canvas-core] applyBackgroundImage EXIT");
 }
 
 /**
- * Update canvas dimension from settings and re-scale background image layer.
+ * Update canvas dimension from settings and re-scale background image.
  */
 function applyCanvasSizeFromSettings(canvas) {
   try {
     const w = getState().settings?.canvasMaxWidth ?? 600;
     const h = getState().settings?.canvasMaxHeight ?? 400;
+
+    // Update DOM canvas element css size as well to avoid ambiguous client sizes
     canvas.setWidth(w);
     canvas.setHeight(h);
+    if (canvas.lowerCanvasEl) {
+      canvas.lowerCanvasEl.style.width = `${w}px`;
+      canvas.lowerCanvasEl.style.height = `${h}px`;
+    }
+    if (canvas.upperCanvasEl) {
+      canvas.upperCanvasEl.style.width = `${w}px`;
+      canvas.upperCanvasEl.style.height = `${h}px`;
+    }
 
     // Re-scale current bg image (if any) to new size
-    const bg = getState().bgFabricImage;
+    const bg = canvas.backgroundImage || getState().bgFabricImage;
     const imgObj = getState().imageObj;
     if (bg && imgObj && imgObj.naturalWidth > 0 && imgObj.naturalHeight > 0) {
-      scaleImageToCanvas(canvas, bg, imgObj.naturalWidth, imgObj.naturalHeight);
-      sendBgToBack(canvas, bg);
+      const { scaleX, scaleY } = computeScaleForCanvas(canvas, imgObj.naturalWidth, imgObj.naturalHeight);
+      bg.set({ left: 0, top: 0, scaleX, scaleY });
+      try { if (typeof bg.setCoords === "function") bg.setCoords(); } catch {}
     }
 
     if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
     else canvas.renderAll();
 
-    log("INFO", "[canvas-core] Canvas size applied", { width: canvas.getWidth(), height: canvas.getHeight() });
+    log("INFO", "[canvas-core] Canvas size applied", {
+      width: canvas.getWidth(),
+      height: canvas.getHeight(),
+      objectsCount: canvas.getObjects().length
+    });
   } catch (e) {
     log("ERROR", "[canvas-core] applyCanvasSizeFromSettings failed", e);
   }
@@ -329,9 +299,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
             try { canvas.add(shape); } catch (e) {
               log("ERROR", "[canvas-core] Failed to add shape on addShape", e);
             }
-            // Keep bg at back
-            const bg = getState().bgFabricImage;
-            if (bg) sendBgToBack(canvas, bg);
             if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
             else canvas.renderAll();
           }
@@ -347,16 +314,12 @@ export function buildCanvasPanel({ element, title, componentName }) {
           break;
         }
         case "setShapes": {
-          // Replace all shape objects on canvas with the new array (preserve bg layer)
+          // Replace all shape objects on canvas with the new array (bg is independent — not in objects list)
           clearAllObjects(canvas);
           addAllStoreShapesToCanvas(canvas);
-          // Ensure bg at back after re-add
-          const bg = getState().bgFabricImage;
-          if (bg) sendBgToBack(canvas, bg);
           break;
         }
         case "setSettings": {
-          // Size might have changed
           applyCanvasSizeFromSettings(canvas);
           break;
         }
@@ -367,7 +330,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
           break;
         }
         default:
-          // ignore others
           break;
       }
     } catch (e) {
