@@ -6,13 +6,13 @@
  * - Provide alignment operations for selected shapes:
  *     left, centerX, right, top, middleY, bottom
  * - Reference modes:
- *     - "selection" (default): aligns to the selection hull (all selected, locked included in hull)
+ *     - "selection" (default): aligns to the selection set (locked contribute but don't move)
  *     - "canvas": aligns to canvas/image bounds (bgFabricImage)
  * - Behavior:
  *     - Requires 2+ selected shapes (INFO no-op otherwise).
- *     - Locked shapes are not moved (but still contribute to "selection" hull).
- *     - Resulting positions are clamped to image bounds when a background image exists.
- *     - Preserves shape sizes/angles; translates via left/top.
+ *     - Locked shapes are not moved (but still contribute to reference calculation).
+ *     - Only the aligned axis is changed (X for left/centerX/right, Y for top/middleY/bottom).
+ *     - Clamps resulting motion to image bounds on the changed axis if a background image exists.
  *
  * Export:
  * - alignSelected(mode, ref = 'selection')
@@ -22,8 +22,14 @@
  * - log.js (log)
  *
  * Notes:
- * - Uses Fabric getBoundingRect(true, true) for absolute bounding boxes.
- * - Updates coords after movement and triggers a single render at the end.
+ * - Fabric peculiarity: when an ActiveSelection exists, some builds report member bounding boxes
+ *   relative to the group's CENTER for getBoundingRect(false, true). To get absolute member rects,
+ *   compose them as:
+ *     activeAbs = active.getBoundingRect(true, true)
+ *     center = { x: activeAbs.left + activeAbs.width/2, y: activeAbs.top + activeAbs.height/2 }
+ *     memberRel = member.getBoundingRect(false, true)
+ *     memberAbs = { left: center.x + memberRel.left, top: center.y + memberRel.top, width: memberRel.width, height: memberRel.height }
+ * - If no ActiveSelection is present, fall back to member.getBoundingRect(true, true) safely.
  * -----------------------------------------------------------
  */
 
@@ -31,41 +37,85 @@ import { getState } from './state.js';
 import { log } from './log.js';
 
 /**
- * Compute absolute bounding rectangle for a Fabric object.
- * Returns { left, top, width, height } or null.
+ * Safe absolute bbox via Fabric API (absolute=true, calc=true).
  */
-function absBBox(obj) {
+function safeAbsBBox(obj) {
   if (!obj || typeof obj.getBoundingRect !== 'function') return null;
   try {
-    return obj.getBoundingRect(true, true);
+    const r = obj.getBoundingRect(true, true);
+    if (!r) return null;
+    return {
+      left: Number(r.left) || 0,
+      top: Number(r.top) || 0,
+      width: Number(r.width) || 0,
+      height: Number(r.height) || 0
+    };
   } catch (e) {
-    log("ERROR", "[align] getBoundingRect failed", e);
+    log("WARN", "[align] safeAbsBBox getBoundingRect(true,true) failed", { id: obj?._id, e });
     return null;
   }
 }
 
 /**
- * Compute the selection hull across provided objects (by absolute bounding rects).
+ * Safe relative bbox (relative to current group's center when activeSelection), calc=true.
  */
-function selectionHull(objs) {
-  const rects = [];
-  for (const o of objs) {
-    const r = absBBox(o);
-    if (r && Number.isFinite(r.left) && Number.isFinite(r.top) && Number.isFinite(r.width) && Number.isFinite(r.height)) {
-      rects.push(r);
-    }
+function safeRelBBox(obj) {
+  if (!obj || typeof obj.getBoundingRect !== 'function') return null;
+  try {
+    const r = obj.getBoundingRect(false, true);
+    if (!r) return null;
+    return {
+      left: Number(r.left) || 0,
+      top: Number(r.top) || 0,
+      width: Number(r.width) || 0,
+      height: Number(r.height) || 0
+    };
+  } catch (e) {
+    log("WARN", "[align] safeRelBBox getBoundingRect(false,true) failed", { id: obj?._id, e });
+    return null;
   }
-  if (rects.length === 0) return null;
-  const minLeft = Math.min(...rects.map(r => r.left));
-  const minTop = Math.min(...rects.map(r => r.top));
-  const maxRight = Math.max(...rects.map(r => r.left + r.width));
-  const maxBottom = Math.max(...rects.map(r => r.top + r.height));
-  return {
-    left: minLeft,
-    top: minTop,
-    width: maxRight - minLeft,
-    height: maxBottom - minTop
-  };
+}
+
+/**
+ * If an ActiveSelection exists, compose true absolute member rects from its center + member-relative rects.
+ * Returns a Map keyed by object reference with absolute rects. If no ActiveSelection, returns null.
+ */
+function collectMemberAbsRectsFromActiveSelection() {
+  const canvas = getState().fabricCanvas;
+  if (!canvas || typeof canvas.getActiveObject !== 'function') return null;
+
+  const active = canvas.getActiveObject();
+  if (!active || active.type !== 'activeSelection' || !Array.isArray(active._objects) || active._objects.length < 2) {
+    return null;
+  }
+
+  try {
+    if (typeof active.setCoords === 'function') { try { active.setCoords(); } catch {} }
+    const activeAbs = safeAbsBBox(active);
+    if (!activeAbs) return null;
+
+    const centerX = activeAbs.left + activeAbs.width / 2;
+    const centerY = activeAbs.top + activeAbs.height / 2;
+
+    const map = new Map();
+    for (const m of active._objects) {
+      if (!m) continue;
+      try { if (typeof m.setCoords === 'function') { try { m.setCoords(); } catch {} } } catch {}
+      const rel = safeRelBBox(m);
+      if (!rel) continue;
+      const abs = {
+        left: centerX + rel.left,
+        top: centerY + rel.top,
+        width: rel.width,
+        height: rel.height
+      };
+      map.set(m, abs);
+    }
+    return map;
+  } catch (e) {
+    log("WARN", "[align] collectMemberAbsRectsFromActiveSelection failed; falling back", e);
+    return null;
+  }
 }
 
 /**
@@ -100,31 +150,38 @@ function clampDeltaToImage(bbox, dx, dy, img) {
 }
 
 /**
- * Find the reference value for alignment among selected shapes.
- * E.g., left align → min left; right align → max right; centerX → center of leftmost.
- * @param {Array} bboxes
- * @param {string} mode
- * @returns {number}
+ * Find the reference value for alignment among selected shapes' absolute bboxes.
+ * - left: min left
+ * - centerX: horizontal center of the leftmost shape
+ * - right: max right
+ * - top: min top
+ * - middleY: vertical center of the topmost shape
+ * - bottom: max bottom
  */
 function getReferenceValue(bboxes, mode) {
   if (!Array.isArray(bboxes) || bboxes.length === 0) return 0;
+
   switch (mode) {
-    case "left":
+    case "left": {
       return Math.min(...bboxes.map(b => b.left));
-    case "centerX":
-      // Center of the leftmost shape
-      const leftmost = bboxes.reduce((min, b) => b.left < min.left ? b : min, bboxes[0]);
+    }
+    case "centerX": {
+      const leftmost = bboxes.reduce((min, b) => (b.left < min.left ? b : min), bboxes[0]);
       return leftmost.left + leftmost.width / 2;
-    case "right":
+    }
+    case "right": {
       return Math.max(...bboxes.map(b => b.left + b.width));
-    case "top":
+    }
+    case "top": {
       return Math.min(...bboxes.map(b => b.top));
-    case "middleY":
-      // Center of the topmost shape
-      const topmost = bboxes.reduce((min, b) => b.top < min.top ? b : min, bboxes[0]);
+    }
+    case "middleY": {
+      const topmost = bboxes.reduce((min, b) => (b.top < min.top ? b : min), bboxes[0]);
       return topmost.top + topmost.height / 2;
-    case "bottom":
+    }
+    case "bottom": {
       return Math.max(...bboxes.map(b => b.top + b.height));
+    }
     default:
       return 0;
   }
@@ -153,8 +210,23 @@ export function alignSelected(mode, ref = 'selection') {
     return;
   }
 
-  // Get bboxes for all selected shapes
-  const bboxes = selected.map(absBBox);
+  // Build absolute bboxes for every selected shape, robust under ActiveSelection.
+  // Prefer ActiveSelection-derived absolute rects if available for accuracy.
+  const fromActiveMap = collectMemberAbsRectsFromActiveSelection();
+  const bboxes = selected.map(s => {
+    // Try by object identity first (when store and canvas share references, which they should)
+    let rect = fromActiveMap ? fromActiveMap.get(s) : null;
+    // If not found by reference, attempt a fallback to absolute bbox
+    if (!rect) rect = safeAbsBBox(s);
+    return rect;
+  });
+
+  // Guard: if any bbox is null, filter it out (still allow moving others + computing reference).
+  const existingBboxes = bboxes.filter(Boolean);
+  if (existingBboxes.length < 2) {
+    log("WARN", "[align] Not enough valid bounding boxes; no-op", { have: existingBboxes.length });
+    return;
+  }
 
   // Determine reference value
   let referenceValue;
@@ -162,44 +234,35 @@ export function alignSelected(mode, ref = 'selection') {
     const img = store.bgFabricImage;
     if (img && Number.isFinite(img.width) && Number.isFinite(img.height)) {
       switch (mode) {
-        case "left":
-          referenceValue = 0;
-          break;
-        case "centerX":
-          referenceValue = img.width / 2;
-          break;
-        case "right":
-          referenceValue = img.width;
-          break;
-        case "top":
-          referenceValue = 0;
-          break;
-        case "middleY":
-          referenceValue = img.height / 2;
-          break;
-        case "bottom":
-          referenceValue = img.height;
-          break;
-        default:
-          referenceValue = 0;
+        case "left": referenceValue = 0; break;
+        case "centerX": referenceValue = img.width / 2; break;
+        case "right": referenceValue = img.width; break;
+        case "top": referenceValue = 0; break;
+        case "middleY": referenceValue = img.height / 2; break;
+        case "bottom": referenceValue = img.height; break;
+        default: referenceValue = 0;
       }
     } else {
-      // Fallback to selection if no canvas bounds
-      referenceValue = getReferenceValue(bboxes, mode);
+      // Fallback to selection-based reference if no bg image
+      referenceValue = getReferenceValue(existingBboxes, mode);
       log("WARN", "[align] Canvas ref requested but no bg image; falling back to selection reference");
     }
   } else {
-    referenceValue = getReferenceValue(bboxes, mode);
+    referenceValue = getReferenceValue(existingBboxes, mode);
   }
 
   const bgImg = store.bgFabricImage;
   const canvas = store.fabricCanvas;
 
   let movedCount = 0;
+
   selected.forEach((shape, idx) => {
-    if (!shape || shape.locked) return;
+    if (!shape) return;
+
+    // Use the corresponding bbox (skip if missing). Locked shapes contribute to reference but don't move.
     const bbox = bboxes[idx];
     if (!bbox) return;
+    if (shape.locked) return;
 
     let dx = 0;
     let dy = 0;
@@ -207,7 +270,6 @@ export function alignSelected(mode, ref = 'selection') {
     switch (mode) {
       case "left":
         dx = referenceValue - bbox.left;
-        // Only X changes
         break;
       case "centerX":
         dx = referenceValue - (bbox.left + bbox.width / 2);
@@ -217,7 +279,6 @@ export function alignSelected(mode, ref = 'selection') {
         break;
       case "top":
         dy = referenceValue - bbox.top;
-        // Only Y changes
         break;
       case "middleY":
         dy = referenceValue - (bbox.top + bbox.height / 2);
@@ -229,15 +290,13 @@ export function alignSelected(mode, ref = 'selection') {
         break;
     }
 
-    // Clamp deltas to image bounds when available
+    // Clamp to image bounds, but only apply along the aligned axis
     const clamped = clampDeltaToImage(bbox, dx, dy, bgImg);
-
-    // Only update the aligned coordinate
     if (mode === "left" || mode === "centerX" || mode === "right") {
       dx = clamped.dx;
-      dy = 0; // Never change Y for horizontal align
+      dy = 0; // preserve Y on horizontal align
     } else {
-      dx = 0; // Never change X for vertical align
+      dx = 0; // preserve X on vertical align
       dy = clamped.dy;
     }
 
@@ -267,4 +326,5 @@ export function alignSelected(mode, ref = 'selection') {
   });
   log("DEBUG", "[align] alignSelected EXIT");
 }
+
 

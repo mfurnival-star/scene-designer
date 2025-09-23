@@ -23,6 +23,7 @@
  * - Suppresses handling when changes are programmatic (to avoid event feedback loops).
  * - Ignores 'selection:cleared' if not triggered by a user event (opt.e is falsy).
  * - NEW: Clears selection when clicking the background (mouse:down with no target).
+ * - NEW (2025-09-23): Robustly unwrap ActiveSelection so marquee multi-select enables toolbar buttons.
  */
 
 import { log } from './log.js';
@@ -45,19 +46,50 @@ function withSuppressedHandlers(fn, tag = "") {
 }
 
 /**
- * Utility: Normalize Fabric selection event into an array of selected objects.
- * Handles both single-object and multi-select (ActiveSelection) cases.
+ * Utility: Convert Fabric selection state to an array of selected member objects.
+ * - Always unwrap ActiveSelection to its _objects (members) when present.
+ * - Falls back to options.selected / options.target.
  */
 function getSelectedObjectsFromFabric(canvas, options) {
-  if (canvas && typeof canvas.getActiveObjects === 'function') {
-    const objs = canvas.getActiveObjects() || [];
-    return Array.isArray(objs) ? objs : (objs ? [objs] : []);
-  }
-  if (options && Array.isArray(options.selected) && options.selected.length) {
-    return options.selected;
-  }
-  if (options && options.target) {
-    return [options.target];
+  try {
+    const active = canvas && typeof canvas.getActiveObject === 'function'
+      ? canvas.getActiveObject()
+      : null;
+
+    // If we have an ActiveSelection, always return its members
+    if (active && active.type === 'activeSelection' && Array.isArray(active._objects)) {
+      return active._objects.slice(); // clone for safety
+    }
+
+    if (canvas && typeof canvas.getActiveObjects === 'function') {
+      const objs = canvas.getActiveObjects() || [];
+      if (Array.isArray(objs) && objs.length === 1 && objs[0] && objs[0].type === 'activeSelection') {
+        const sel = objs[0];
+        if (Array.isArray(sel._objects)) return sel._objects.slice();
+      }
+      return Array.isArray(objs) ? objs : (objs ? [objs] : []);
+    }
+
+    if (options && Array.isArray(options.selected) && options.selected.length) {
+      // Some builds provide members directly here
+      const arr = options.selected;
+      // If this happens to be [ActiveSelection], unwrap
+      if (arr.length === 1 && arr[0] && arr[0].type === 'activeSelection' && Array.isArray(arr[0]._objects)) {
+        return arr[0]._objects.slice();
+      }
+      return arr;
+    }
+
+    if (options && options.target) {
+      // Single target case
+      const t = options.target;
+      if (t && t.type === 'activeSelection' && Array.isArray(t._objects)) {
+        return t._objects.slice();
+      }
+      return [t];
+    }
+  } catch (e) {
+    log("ERROR", "[canvas-events] getSelectedObjectsFromFabric error", e);
   }
   return [];
 }
@@ -111,7 +143,6 @@ export function installFabricSelectionSync(canvas) {
       log("DEBUG", "[canvas-events] selection:created no-op (ids match)");
       return;
     }
-    // Suppress re-entrant Fabric events caused by transformer attach/setActiveObject
     withSuppressedHandlers(() => selectionSetSelectedShapes(selObjs), "created->setSelectedShapes");
   };
 
@@ -161,10 +192,7 @@ export function installFabricSelectionSync(canvas) {
   };
 
   /**
-   * NEW: Clear selection when clicking on background (blank area).
-   * Some environments with full-size background images and overlay UIs
-   * do not emit selection:cleared reliably on background clicks.
-   * We ensure UX by clearing selection on mouse:down with no target.
+   * Clear selection when clicking on background (blank area).
    */
   const onMouseDown = (opt) => {
     try {
@@ -174,7 +202,6 @@ export function installFabricSelectionSync(canvas) {
       if (hadSelection && clickedBlank) {
         log("DEBUG", "[canvas-events] mouse:down on blank area → clearing selection");
         withSuppressedHandlers(() => {
-          // Discard Fabric active object (hides hull) and clear store selection
           if (typeof canvas.discardActiveObject === 'function') {
             try { canvas.discardActiveObject(); } catch {}
           }
@@ -193,6 +220,6 @@ export function installFabricSelectionSync(canvas) {
   canvas.on('selection:cleared', onCleared);
   canvas.on('mouse:down', onMouseDown);
 
-  log("INFO", "[canvas-events] Fabric selection sync installed (created/updated/cleared handlers + blank-click clear + reentrancy guard)");
+  log("INFO", "[canvas-events] Fabric selection sync installed (created/updated/cleared handlers + blank-click clear + reentrancy guard + ActiveSelection unwrap)");
 }
 
