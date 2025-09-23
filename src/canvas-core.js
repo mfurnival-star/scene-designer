@@ -1,29 +1,22 @@
 /**
  * canvas-core.js
  * -----------------------------------------------------------
- * Scene Designer – Fabric Canvas Core (ESM ONLY, Phase 1 – Image render fix, auto-resize to image aspect ratio)
+ * Scene Designer – Fabric Canvas Core (ESM ONLY, Image Fit + Panel Resize Integration)
  * Purpose:
- * - Build the Canvas panel and keep it fully functional while we refactor.
- * - Creates Fabric canvas, installs selection sync, constraints, and overlays.
- * - Syncs with store:
- *    - Background image: set/clear/resize on setImage + settings changes
- *    - Shapes: add/remove/replace on store mutations
- * - Exports:
- *    - buildCanvasPanel({ element, title, componentName })
+ * - Build and manage Fabric canvas panel, sync with store, and dynamically resize
+ *   the parent MiniLayout panel/container to fit the image.
+ * - Uses MiniLayout API to ensure the panel always matches canvas size.
+ * - No snippets, full file, Manifesto-compliant.
  *
- * Key change (fix):
- * - When a background image is set, resize the canvas to the image's native aspect ratio,
- *   up to max width/height from settings.
- * - Do not scale the image to fit the canvas; instead, change the canvas size to fit the image.
- * - If no image, use settings for default canvas size.
+ * Exports:
+ *    buildCanvasPanel({ element, title, componentName })
  *
  * Dependencies:
- * - log.js (logging)
+ * - log.js
  * - fabric-wrapper.js ({ Canvas, Image })
- * - state.js (getState, sceneDesignerStore, setFabricCanvas, setBgFabricImage, setSettings, setSetting)
- * - canvas-events.js (installFabricSelectionSync)
- * - canvas-constraints.js (installCanvasConstraints)
- * - selection-outlines.js (installSelectionOutlines)
+ * - state.js
+ * - canvas-events.js, canvas-constraints.js, selection-outlines.js
+ * - minilayout.js (for panel resizing API)
  */
 
 import { log } from './log.js';
@@ -39,6 +32,7 @@ import {
 import { installFabricSelectionSync } from './canvas-events.js';
 import { installCanvasConstraints } from './canvas-constraints.js';
 import { installSelectionOutlines } from './selection-outlines.js';
+import { MiniLayout } from './minilayout.js';
 
 function createCanvasElement(host, width, height) {
   const c = document.createElement('canvas');
@@ -97,18 +91,51 @@ function fitImageToMax(imageW, imageH, maxW, maxH) {
   return { width: w, height: h, scale };
 }
 
-function computeScaleForCanvas(canvas, naturalW, naturalH) {
-  const cw = canvas.getWidth();
-  const ch = canvas.getHeight();
-  const iw = Number(naturalW) || 1;
-  const ih = Number(naturalH) || 1;
-  return { scaleX: cw / iw, scaleY: ch / ih };
+/**
+ * Resize MiniLayout panel and .canvas-container to match the canvas.
+ * Uses the new API if available.
+ */
+function resizeMiniLayoutPanel(canvas, width, height) {
+  // Find CanvasPanel in MiniLayout and resize it.
+  // Use window.layout if available, else try to find parent .minilayout-panel-body.
+  try {
+    let layoutInstance = null;
+    if (typeof window !== "undefined" && window.layout instanceof MiniLayout) {
+      layoutInstance = window.layout;
+    }
+    if (layoutInstance && typeof layoutInstance.resizePanelBody === "function") {
+      layoutInstance.resizePanelBody('CanvasPanel', width, height);
+      log("INFO", "[canvas-core] resizePanelBody(CanvasPanel)", { width, height });
+    } else {
+      // Fallback: resize .canvas-container and parent panel body directly
+      if (canvas && canvas.lowerCanvasEl) {
+        const container = canvas.lowerCanvasEl.parentElement;
+        if (container) {
+          container.style.width = `${width}px`;
+          container.style.height = `${height}px`;
+        }
+        const panelBody = container?.closest('.minilayout-panel-body');
+        if (panelBody) {
+          panelBody.style.width = `${width}px`;
+          panelBody.style.height = `${height}px`;
+        }
+        const panel = container?.closest('.minilayout-panel');
+        if (panel) {
+          panel.style.width = `${width}px`;
+          panel.style.height = `${height}px`;
+          panel.style.flex = "0 0 auto";
+        }
+        log("INFO", "[canvas-core] Fallback panel/container resize", { width, height });
+      }
+    }
+  } catch (e) {
+    log("ERROR", "[canvas-core] resizeMiniLayoutPanel failed", e);
+  }
 }
 
 /**
  * Set or clear the background image via canvas.backgroundImage.
- * - When image is set, resize canvas to image's native aspect ratio (within max).
- * - Image is rendered at 1:1 scale; canvas is resized to match.
+ * When image is set, resize canvas AND panel to image's aspect ratio.
  */
 function applyBackgroundImage(canvas, url, imgObj) {
   if (!canvas) return;
@@ -171,7 +198,9 @@ function applyBackgroundImage(canvas, url, imgObj) {
     canvas.upperCanvasEl.style.background = "transparent";
   }
 
-  // Optionally update state settings so UI reflects the new size (optional, comment out if undesired)
+  // Resize the panel and container to fit
+  resizeMiniLayoutPanel(canvas, newCanvasW, newCanvasH);
+
   setSetting("canvasMaxWidth", newCanvasW);
   setSetting("canvasMaxHeight", newCanvasH);
 
@@ -183,7 +212,6 @@ function applyBackgroundImage(canvas, url, imgObj) {
       evented: false
     });
 
-    // Render at 1:1 scale (no scaling to fit canvas, since canvas matches image size)
     bg.set({ left: 0, top: 0, scaleX: 1, scaleY: 1 });
 
     canvas.setBackgroundImage(bg, () => {
@@ -216,6 +244,7 @@ function applyBackgroundImage(canvas, url, imgObj) {
 /**
  * Update canvas dimension from settings and re-scale background image.
  * If an image is present, canvas should keep image's aspect ratio.
+ * Also resize MiniLayout panel/container.
  */
 function applyCanvasSizeFromSettings(canvas) {
   try {
@@ -223,7 +252,6 @@ function applyCanvasSizeFromSettings(canvas) {
     let w = getState().settings?.canvasMaxWidth ?? 600;
     let h = getState().settings?.canvasMaxHeight ?? 400;
 
-    // If image is present, resize canvas to image's aspect ratio within max
     if (imgObj && imgObj.naturalWidth > 0 && imgObj.naturalHeight > 0) {
       const fit = fitImageToMax(imgObj.naturalWidth, imgObj.naturalHeight, w, h);
       w = fit.width;
@@ -245,6 +273,9 @@ function applyCanvasSizeFromSettings(canvas) {
       canvas.upperCanvasEl.style.height = `${h}px`;
       canvas.upperCanvasEl.style.background = "transparent";
     }
+
+    // Resize the panel/container to fit new canvas size
+    resizeMiniLayoutPanel(canvas, w, h);
 
     // Scale background image (if present) to 1:1
     const bg = canvas.backgroundImage || getState().bgFabricImage;
@@ -390,3 +421,4 @@ export function buildCanvasPanel({ element, title, componentName }) {
   log("INFO", "[canvas-core] Canvas panel built and initialized");
   log("DEBUG", "[canvas-core] buildCanvasPanel EXIT");
 }
+

@@ -27,7 +27,7 @@ while true; do
     echo "---------------------------"
 
     # Build sorted list of file basenames (case-insensitive sort)
-    files=("$DIR"/*)
+    files=("$DIR"/*.js docs/*)
     sorted=($(for f in "${files[@]}"; do basename "$f"; done | sort -f))
 
     # Partition into unmodified and modified

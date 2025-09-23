@@ -253,12 +253,68 @@ const tabBar = buildTabBar(panels, activeTabIdx, (newIdx) => {...});
 - **2024-06**: Initial release: row/column/stack/component, draggable splitters, compact headers, tab bar, close button.
 - **2024-09**: Added advanced UI helpers in `minilayout-ui.js` (ARIA, animated splitters, accessible tab bars).
 - **2025-09**: **Panel size persistence:** Splitter drag changes are now saved/restored via localStorage.
+- **2025-09**: **Panel Resizing API:**  
+  - Added `MiniLayout.resizePanelBody(componentName, widthPx, heightPx)` and `MiniLayout.resizePanelByElement(element, widthPx, heightPx)` methods to allow runtime resizing of a panel and its body/container.
+  - Intended for integration with dynamic content (e.g., auto-resizing canvas panels).
+  - See **Panel Resizing API** section below.
+
+---
+
+## Panel Resizing API (NEW: 2025-09-23)
+
+Scene Designer and other apps may need to resize a panel at runtime, for example, to fit an image or dynamic content.  
+MiniLayout now provides a robust API for resizing panels and their containers programmatically.
+
+### Methods
+
+#### `resizePanelBody(componentName, widthPx, heightPx)`
+
+Resize a panel by its registered `componentName`.  
+Updates both the panel body and the parent panel container.
+
+```js
+layout.resizePanelBody('CanvasPanel', 1080, 2340); // Resize CanvasPanel to image size
+```
+
+#### `resizePanelByElement(element, widthPx, heightPx)`
+
+Resize a panel by providing its body element.  
+Also resizes the `.canvas-container` inside if present.
+
+```js
+const bodyEl = ...; // Obtain reference to panel body element
+layout.resizePanelByElement(bodyEl, 1080, 2340);
+```
+
+### Behavior
+
+- Resizes both the panel body and the parent `.minilayout-panel`.
+- Also updates the `.canvas-container` inside (if present) to match.
+- Sets min/max width/height to prevent squashing.
+- Panel proportions are persisted if splitters are present.
+- Fully compatible with all layout/row/column/stack arrangements.
+
+### Use Case Example
+
+When loading an image in a canvas panel, call:
+
+```js
+layout.resizePanelBody('CanvasPanel', image.naturalWidth, image.naturalHeight);
+```
+
+This will ensure the panel, its body, and the canvas container are all sized to fit the image exactly.
+
+### Notes
+
+- The CanvasPanel and other dynamic panels should call this API after changing their content size.
+- This API can be called as often as needed—no need to rebuild the layout.
 
 ---
 
 ## See Also
 
 - `src/minilayout.js` – Main engine
+- `src/minilayout-core.js` – Full implementation of resizing API
 - `src/minilayout-ui.js` – Advanced UI helpers
 - `src/minilayout.demo.js` – Demo entry
 - `src/minilayout.css` – CSS (auto-injected)
@@ -273,4 +329,3 @@ MIT
 ---
 
 **For updates, see `src/modules.index.md` and `SCENE_DESIGNER_MANIFESTO.md`.**
-

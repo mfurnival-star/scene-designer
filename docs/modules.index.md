@@ -22,7 +22,7 @@ Core Modules
 - fabric-wrapper.js           – ESM wrapper for Fabric constructors
 
 Canvas
-- canvas-core.js              – Fabric canvas creation, image, sync, overlays
+- canvas-core.js              – Fabric canvas creation, image, sync, overlays (now calls MiniLayout resize API)
 - canvas-events.js            – Fabric selection sync → store selection
 - canvas-constraints.js       – movement clamping + multi-drag lock guard
 - selection-outlines.js       – overlay painter for multi-select hull/boxes
@@ -60,7 +60,7 @@ Layout / Panels / Diagnostics
 - scenario-runner.js          – scriptable scenarios for dev/QA
 
 MiniLayout (split)
-- minilayout-core.js          – layout engine
+- minilayout-core.js          – layout engine (**now exposes panel resizing API**)
 - minilayout-splitter-persist.js – splitter + size persistence
 - minilayout.js               – facade export { MiniLayout }
 
@@ -72,6 +72,7 @@ Recent Changes (brief)
 - 2025-09-23
   - ALN-01: Alignment wired with six buttons relative to selection hull only; removed reference dropdown from toolbar.
   - PHASE-01: Added geometry/selection-rects.js for centralized selection hull/rect math; overlays and alignment now use shared geometry (see docs/PHASED_ARCHITECTURE_PATH.md).
+  - **MINILAYOUT-API: Added panel resizing API to minilayout-core.js: `resizePanelBody(componentName, widthPx, heightPx)` and `resizePanelByElement(element, widthPx, heightPx)`. Canvas panels now auto-resize to image.**
 - 2025-09-22
   - STY-01: Pickr color pickers added (toolbar-color.js); toolbar split into panel/styles/dom/handlers/state.
   - Selection overlays moved to top-context painter (selection-outlines.js).
@@ -81,4 +82,5 @@ Recent Changes (brief)
 How to add here
 - When you add/rename/remove a module: update the relevant section above and keep the line short.
 - If you add a new facade, list it in “Facades (public import paths)”.
+
 

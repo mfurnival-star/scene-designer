@@ -8,6 +8,7 @@
  * - Uses persisted splitters (localStorage) via minilayout-splitter-persist.js.
  * - Invokes registered panel factories with MiniLayout API: { element, title, componentName }.
  * - Applies per-panel scrollbar behavior and optional custom scrollbar styling.
+ * - Provides runtime panel resizing API for content-driven panel adaptation (see resizePanelBody).
  *
  * Public API:
  * - class MiniLayout
@@ -15,6 +16,8 @@
  *    - registerComponent(name, factoryFn)
  *    - init()
  *    - destroy()
+ *    - resizePanelBody(componentName, widthPx, heightPx)      // NEW
+ *    - resizePanelByElement(element, widthPx, heightPx)       // NEW
  *
  * Dependencies:
  * - log.js (log)
@@ -30,7 +33,8 @@ import { log } from './log.js';
 import {
   makePersistedSplitter,
   loadPanelSizes,
-  panelPathKey
+  panelPathKey,
+  savePanelSizes
 } from './minilayout-splitter-persist.js';
 
 /** Shallow-safe clone for config to avoid mutation */
@@ -136,6 +140,59 @@ export class MiniLayout {
     this._panelRefs = [];
     this.rootItem = null;
     this._destroyed = true;
+  }
+
+  /**
+   * Resize a panel by its componentName.
+   * @param {string} componentName - registered component name
+   * @param {number|string|null} widthPx - new width in px (optional)
+   * @param {number|string|null} heightPx - new height in px (optional)
+   * Returns true if panel found and resized.
+   */
+  resizePanelBody(componentName, widthPx = null, heightPx = null) {
+    const ref = this._panelRefs.find(r => r.node?.componentName === componentName);
+    if (!ref) {
+      log("WARN", "[minilayout-core] resizePanelBody: panel not found", { componentName });
+      return false;
+    }
+    return this.resizePanelByElement(ref.bodyDiv, widthPx, heightPx);
+  }
+
+  /**
+   * Resize a panel by its body element.
+   * @param {HTMLElement} element - panel body div
+   * @param {number|string|null} widthPx
+   * @param {number|string|null} heightPx
+   * Returns true if successful.
+   */
+  resizePanelByElement(element, widthPx = null, heightPx = null) {
+    if (!element || !(element instanceof HTMLElement)) {
+      log("ERROR", "[minilayout-core] resizePanelByElement: invalid element", { element });
+      return false;
+    }
+    if (widthPx != null) {
+      element.style.width = typeof widthPx === "number" ? `${widthPx}px` : String(widthPx);
+    }
+    if (heightPx != null) {
+      element.style.height = typeof heightPx === "number" ? `${heightPx}px` : String(heightPx);
+    }
+    // Also update .canvas-container inside, if present
+    const container = element.querySelector('.canvas-container');
+    if (container) {
+      if (widthPx != null) container.style.width = typeof widthPx === "number" ? `${widthPx}px` : String(widthPx);
+      if (heightPx != null) container.style.height = typeof heightPx === "number" ? `${heightPx}px` : String(heightPx);
+    }
+    // Optionally: update parent panel size and persisted splitters
+    const parentPanel = element.closest('.minilayout-panel');
+    if (parentPanel) {
+      if (widthPx != null) parentPanel.style.width = typeof widthPx === "number" ? `${widthPx}px` : String(widthPx);
+      if (heightPx != null) parentPanel.style.height = typeof heightPx === "number" ? `${heightPx}px` : String(heightPx);
+      parentPanel.style.flex = "0 0 auto";
+    }
+    log("INFO", "[minilayout-core] Panel resized", {
+      widthPx, heightPx, element, container, parentPanel
+    });
+    return true;
   }
 
   /**
@@ -354,3 +411,4 @@ export class MiniLayout {
     return item;
   }
 }
+
