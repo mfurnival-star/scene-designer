@@ -1,4 +1,3 @@
-
 import { log } from '../log.js';
 import {
   getState,
@@ -19,6 +18,13 @@ import {
   getShapeCenter,
   getShapeOuterRadius
 } from '../geometry/shape-rect.js';
+
+function requestRender() {
+  const canvas = getState().fabricCanvas;
+  if (!canvas) return;
+  if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
+  else canvas.renderAll();
+}
 
 function getShapesByIds(ids) {
   const map = new Map((getState().shapes || []).filter(Boolean).map(s => [s._id, s]));
@@ -78,7 +84,6 @@ function duplicateShapeFallback(src, dx = 20, dy = 20) {
     if (!center || !bbox) return null;
     return makeEllipseShape(center.x + dx, center.y + dy, bbox.width, bbox.height);
   }
-  // Unknown → try bbox as rect
   const bbox = getShapeBoundingBox(src);
   if (bbox) {
     return makeRectShape(bbox.left + dx, bbox.top + dy, bbox.width, bbox.height);
@@ -116,13 +121,11 @@ function cmdDeleteShapes(payload) {
     log("INFO", "[commands] DELETE_SHAPES: nothing to delete");
     return null;
   }
-  // Snapshot removed shapes (same instances) for undo
   const removed = [];
   targets.forEach(shape => {
     removed.push(shape);
     removeShape(shape);
   });
-  // Clear selection if it referenced any removed shapes
   const remainingSelected = (getState().selectedShapes || []).filter(s => !ids.includes(s._id));
   selectionSetSelectedShapes(remainingSelected);
 
@@ -142,10 +145,8 @@ function cmdDuplicateShapes(payload) {
   }
 
   const created = sources.map(src => {
-    // Prefer async clone if ever needed; for command determinism we use synchronous fallback
     const dup = duplicateShapeFallback(src, dx, dy);
     if (dup) {
-      // Ensure reasonable unlocked defaults
       dup.locked = false;
       dup.selectable = true;
       dup.evented = true;
@@ -155,7 +156,6 @@ function cmdDuplicateShapes(payload) {
       dup.lockScalingY = false;
       dup.lockRotation = false;
       dup.hoverCursor = 'move';
-      // New id (factory already sets one, but ensure uniqueness if needed)
       if (!dup._id) dup._id = uniqueIdFor(dup._type || 'shape');
       addShape(dup);
     }
@@ -181,6 +181,276 @@ function cmdSetSelection(payload) {
   return { type: 'SET_SELECTION', payload: { ids: prevIds } };
 }
 
+// ---------- Helpers for movement/rotation/locking ----------
+
+function clampDeltaToImage(bbox, dx, dy, img) {
+  if (!img || !bbox) return { dx, dy };
+  try {
+    const imgW = img.width;
+    const imgH = img.height;
+
+    const newLeft = bbox.left + dx;
+    const newTop = bbox.top + dy;
+
+    const minLeft = 0;
+    const minTop = 0;
+    const maxLeft = Math.max(0, imgW - bbox.width);
+    const maxTop = Math.max(0, imgH - bbox.height);
+
+    const clampedLeft = Math.min(Math.max(newLeft, minLeft), maxLeft);
+    const clampedTop = Math.min(Math.max(newTop, minTop), maxTop);
+
+    return {
+      dx: clampedLeft - bbox.left,
+      dy: clampedTop - bbox.top
+    };
+  } catch (e) {
+    log("WARN", "[commands] clampDeltaToImage failed; applying unclamped delta", e);
+    return { dx, dy };
+  }
+}
+
+function setAngleAndCenter(shape, angle, center) {
+  try {
+    if (!shape) return;
+    const a = Number(angle) || 0;
+    shape.set({ angle: a });
+    if (center && typeof shape.setPositionByOrigin === "function") {
+      shape.setPositionByOrigin(center, 'center', 'center');
+    } else if (center) {
+      const w = typeof shape.getScaledWidth === "function" ? shape.getScaledWidth() : (shape.width || 0);
+      const h = typeof shape.getScaledHeight === "function" ? shape.getScaledHeight() : (shape.height || 0);
+      shape.set({ left: center.x - w / 2, top: center.y - h / 2 });
+    }
+    if (typeof shape.setCoords === "function") shape.setCoords();
+  } catch (e) {
+    log("ERROR", "[commands] setAngleAndCenter failed", { id: shape?._id, error: e });
+  }
+}
+
+// ---------- MOVE_SHAPES_DELTA (+ internal SET_POSITIONS) ----------
+
+function cmdMoveShapesDelta(payload) {
+  const { ids, dx = 0, dy = 0, clamp = true } = payload || {};
+  const dxN = Number(dx) || 0;
+  const dyN = Number(dy) || 0;
+
+  const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
+  const targets = shapes.filter(s => s && !s.locked);
+  if (!targets.length) {
+    log("INFO", "[commands] MOVE_SHAPES_DELTA: no unlocked targets");
+    return null;
+  }
+
+  const prevPositions = [];
+  const img = getState().bgFabricImage;
+
+  targets.forEach(shape => {
+    try {
+      prevPositions.push({ id: shape._id, left: shape.left ?? 0, top: shape.top ?? 0 });
+      let ddx = dxN, ddy = dyN;
+      if (clamp) {
+        const bbox = getShapeBoundingBox(shape);
+        const clamped = clampDeltaToImage(bbox, dxN, dyN, img);
+        ddx = clamped.dx;
+        ddy = clamped.dy;
+      }
+      const newLeft = (shape.left ?? 0) + ddx;
+      const newTop = (shape.top ?? 0) + ddy;
+      shape.set({ left: newLeft, top: newTop });
+      if (typeof shape.setCoords === "function") shape.setCoords();
+    } catch (e) {
+      log("ERROR", "[commands] MOVE_SHAPES_DELTA: failed to move shape", { id: shape._id, error: e });
+    }
+  });
+
+  requestRender();
+  log("INFO", "[commands] Moved shapes by delta", { count: targets.length, dx: dxN, dy: dyN });
+  return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
+}
+
+function cmdSetPositions(payload) {
+  const { positions } = payload || {};
+  const arr = Array.isArray(positions) ? positions.filter(p => p && p.id != null) : [];
+  if (!arr.length) return null;
+
+  const shapesMap = new Map((getState().shapes || []).map(s => [s._id, s]));
+  const prevPositions = [];
+
+  arr.forEach(p => {
+    const shape = shapesMap.get(p.id);
+    if (!shape) return;
+    try {
+      prevPositions.push({ id: shape._id, left: shape.left ?? 0, top: shape.top ?? 0 });
+      shape.set({ left: Number(p.left) || 0, top: Number(p.top) || 0 });
+      if (typeof shape.setCoords === "function") shape.setCoords();
+    } catch (e) {
+      log("ERROR", "[commands] SET_POSITIONS failed", { id: p.id, error: e });
+    }
+  });
+
+  requestRender();
+  return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
+}
+
+// ---------- RESET_ROTATION (+ internal SET_ANGLES_POSITIONS) ----------
+
+function cmdResetRotation(payload) {
+  const { ids } = payload || {};
+  const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
+  const targets = shapes.filter(s =>
+    s && !s.locked && (s._type === 'rect' || s._type === 'circle' || s._type === 'ellipse')
+  );
+  if (!targets.length) {
+    log("INFO", "[commands] RESET_ROTATION: no eligible targets");
+    return null;
+  }
+
+  const prev = targets.map(shape => {
+    try {
+      const center = (typeof shape.getCenterPoint === "function")
+        ? shape.getCenterPoint()
+        : getShapeCenter(shape);
+      const angle = Number(shape.angle) || 0;
+
+      setAngleAndCenter(shape, 0, center);
+      return { id: shape._id, angle, center };
+    } catch (e) {
+      log("ERROR", "[commands] RESET_ROTATION: failed for shape", { id: shape._id, error: e });
+      return null;
+    }
+  }).filter(Boolean);
+
+  requestRender();
+  log("INFO", "[commands] Rotation reset to 0°", { ids: targets.map(t => t._id) });
+  return { type: 'SET_ANGLES_POSITIONS', payload: { items: prev } };
+}
+
+function cmdSetAnglesPositions(payload) {
+  const { items } = payload || {};
+  const arr = Array.isArray(items) ? items.filter(i => i && i.id != null) : [];
+  if (!arr.length) return null;
+
+  const map = new Map((getState().shapes || []).map(s => [s._id, s]));
+  const prev = [];
+
+  arr.forEach(i => {
+    const shape = map.get(i.id);
+    if (!shape) return;
+    try {
+      // Snapshot current state before applying
+      const currentCenter = (typeof shape.getCenterPoint === "function")
+        ? shape.getCenterPoint()
+        : getShapeCenter(shape);
+      prev.push({ id: shape._id, angle: Number(shape.angle) || 0, center: currentCenter });
+
+      setAngleAndCenter(shape, i.angle, i.center);
+    } catch (e) {
+      log("ERROR", "[commands] SET_ANGLES_POSITIONS failed", { id: i.id, error: e });
+    }
+  });
+
+  requestRender();
+  return { type: 'SET_ANGLES_POSITIONS', payload: { items: prev } };
+}
+
+// ---------- LOCK / UNLOCK ----------
+
+function applyLockFlags(shape, locked) {
+  if (!shape) return;
+  if (locked) {
+    shape.locked = true;
+    shape.selectable = true;
+    shape.evented = true;
+    shape.lockMovementX = true;
+    shape.lockMovementY = true;
+    shape.lockScalingX = true;
+    shape.lockScalingY = true;
+    shape.lockRotation = true;
+    shape.hoverCursor = 'not-allowed';
+  } else {
+    shape.locked = false;
+    shape.selectable = true;
+    shape.evented = true;
+    shape.lockMovementX = false;
+    shape.lockMovementY = false;
+    shape.lockScalingX = false;
+    shape.lockScalingY = false;
+    shape.lockRotation = false;
+    shape.hoverCursor = 'move';
+  }
+  if (typeof shape.setCoords === "function") {
+    try { shape.setCoords(); } catch {}
+  }
+}
+
+function cmdLockShapes(payload) {
+  const { ids } = payload || {};
+  const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
+  if (!shapes.length) {
+    log("INFO", "[commands] LOCK_SHAPES: nothing selected");
+    return null;
+  }
+
+  const affected = [];
+  shapes.forEach(s => {
+    if (!s.locked) {
+      applyLockFlags(s, true);
+      affected.push(s._id);
+    }
+  });
+
+  if (!affected.length) {
+    log("INFO", "[commands] LOCK_SHAPES: no unlocked shapes to lock");
+    return null;
+  }
+
+  requestRender();
+  selectionSetSelectedShapes(shapes.slice());
+  log("INFO", "[commands] Locked shapes", { count: affected.length, ids: affected });
+  return { type: 'UNLOCK_SHAPES', payload: { ids: affected } };
+}
+
+function cmdUnlockShapes(payload) {
+  const { ids } = payload || {};
+  const shapes = getState().shapes || [];
+  let targets;
+  if (ids && ids.length) {
+    targets = getShapesByIds(ids);
+  } else {
+    const selected = getState().selectedShapes || [];
+    targets = selected.length ? selected.filter(Boolean) : shapes.filter(s => s && s.locked);
+  }
+
+  if (!targets.length) {
+    log("INFO", "[commands] UNLOCK_SHAPES: no shapes to unlock");
+    return null;
+  }
+
+  const affected = [];
+  targets.forEach(s => {
+    if (s.locked) {
+      applyLockFlags(s, false);
+      affected.push(s._id);
+    }
+  });
+
+  if (!affected.length) {
+    log("INFO", "[commands] UNLOCK_SHAPES: none were locked");
+    return null;
+  }
+
+  // Preserve selection
+  const preserve = (getState().selectedShapes || []).slice();
+  selectionSetSelectedShapes(preserve);
+
+  requestRender();
+  log("INFO", "[commands] Unlocked shapes", { count: affected.length, ids: affected });
+  return { type: 'LOCK_SHAPES', payload: { ids: affected } };
+}
+
+// ---------- Execute ----------
+
 export function executeCommand(cmd) {
   if (!cmd || typeof cmd.type !== 'string') {
     log("WARN", "[commands] executeCommand: invalid cmd", { cmd });
@@ -200,6 +470,22 @@ export function executeCommand(cmd) {
       return cmdDuplicateShapes(p);
     case 'SET_SELECTION':
       return cmdSetSelection(p);
+
+    case 'MOVE_SHAPES_DELTA':
+      return cmdMoveShapesDelta(p);
+    case 'SET_POSITIONS':
+      return cmdSetPositions(p);
+
+    case 'RESET_ROTATION':
+      return cmdResetRotation(p);
+    case 'SET_ANGLES_POSITIONS':
+      return cmdSetAnglesPositions(p);
+
+    case 'LOCK_SHAPES':
+      return cmdLockShapes(p);
+    case 'UNLOCK_SHAPES':
+      return cmdUnlockShapes(p);
+
     default:
       log("WARN", "[commands] Unknown command type", { type: t });
       return null;

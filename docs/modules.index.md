@@ -27,10 +27,12 @@ Core Modules
 
 Commands
 - commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
-- commands/commands.js        – core command implementations (add/delete/duplicate/selection)
+- commands/commands.js        – core command implementations:
+  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES
+  - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
 
 Keybindings
-- keybindings.js              – global Ctrl/Cmd+Z (undo) and Ctrl/Cmd+Shift+Z / Ctrl+Y (redo); installs in layout.js
+- keybindings.js              – global Ctrl/Cmd+Z (undo) and Ctrl/Cmd+Shift+Z / Ctrl+Y (redo); installed in layout.js
 
 Geometry
 - geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
@@ -63,7 +65,7 @@ Shapes
 - shape-state.js              – per-shape state machine (selected/dragging/locked)
 
 Actions
-- actions.js                  – centralized business logic; now dispatches add/delete/duplicate via command bus
+- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation via command bus (align remains direct for now)
 - actions-alignment.js        – alignSelected(mode) relative to selection hull only
 
 Settings
@@ -92,8 +94,11 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Step B.2)
+  - commands/commands.js extended: MOVE_SHAPES_DELTA (+ SET_POSITIONS), RESET_ROTATION (+ SET_ANGLES_POSITIONS), LOCK_SHAPES, UNLOCK_SHAPES.
+  - actions.js now routes lock/unlock/resetRotation through command bus.
 - 2025-09-24 (Phase 2 – Step B)
-  - keybindings.js added (global undo/redo). layout.js now installs/uninstalls keybindings during app lifecycle.
+  - keybindings.js added (global undo/redo). layout.js installs/uninstalls keybindings during app lifecycle.
 - 2025-09-24 (Phase 2 – Step A)
   - Added commands/command-bus.js (dispatch, undo/redo, subscribers).
   - Added commands/commands.js (ADD_SHAPE/ADD_SHAPES/DELETE_SHAPES/DUPLICATE_SHAPES/SET_SELECTION).
@@ -110,13 +115,6 @@ Recent Changes (brief)
   - STROKE-OPT: shapes-core.js + selection-core.js reworked so stroke width reapplies only after actual scale/rotate (transform tracking via _pendingStrokeWidthReapply).
   - SEL-CLEAN: selection-core.js removed unconditional stroke normalization logic.
   - DEV-SANITY: dev/geometry-sanity.js script validates unified geometry vs Fabric boundingRect (tolerance-based diff logging).
-- 2025-09-24 (earlier same day)
-  - EVT-TRACE: canvas-events.js ring buffer (selectionEventTrace) for created/updated/cleared + blank clears with suppression tokens; ActiveSelection visuals enforced.
-  - SHP-CLAMP: shapes-core.js clamps initial Rect/Circle placement (now also Ellipse).
-  - CONSTRAINTS-PATCH: canvas-constraints.js idempotent/non-destructive install.
-  - MULTI-DELETE-FIX: Store/Fabric selection sync stabilized—Delete removes exactly the visually selected set.
-  - SHP-ELLIPSE: Ellipse shape added across wrapper/defs/factories/UI.
-  - SHP-CIRCLE-LOCK: Circle behavior clarified/enforced (non-rotatable, aspect-ratio locked).
 
 How to add here
 - When you add/rename/remove a module: update the relevant section above and keep the line short.
