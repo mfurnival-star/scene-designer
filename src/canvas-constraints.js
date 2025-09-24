@@ -11,16 +11,16 @@
  * Public Exports:
  * - installCanvasConstraints(canvas) -> detachFn
  *
- * Behavior:
- * - On 'selection:created' / 'selection:updated':
- *   - If the active object is an ActiveSelection and any member is locked, set
- *     lockMovementX/Y=true on the group and use 'not-allowed' cursor.
- *   - Record the group's origin so we can snap back if a move sneaks through.
- * - On 'object:moving':
- *   - If target is an ActiveSelection and any member is locked -> reset position to origin
- *     and render (secondary guard).
- *   - Otherwise, clamp the moving target’s bounding rect to the background image bounds.
- *   - Tracks target._prevLeft/_prevTop and _moveStartLeft/_moveStartTop for stability.
+ * IMPORTANT (2025-09-24 PATCH):
+ * - Previously this module called canvas.off('selection:*') before attaching its own handlers,
+ *   which unintentionally removed selection sync handlers installed by canvas-events.js.
+ * - That broke store/Fabric selection synchronization (multi-select never synced).
+ * - This patch:
+ *     * Removes global off() calls for selection events.
+ *     * Tracks ONLY its own handlers in a private symbol/property so reinstallation
+ *       or teardown is safe and non-destructive to other modules.
+ *     * Idempotent: calling installCanvasConstraints multiple times will first
+ *       detach only the handlers it previously registered.
  *
  * Dependencies:
  * - state.js (getState)
@@ -102,7 +102,6 @@ function applyGroupMoveLockState(activeSel) {
   activeSel.hoverCursor = locked ? 'not-allowed' : 'move';
   // Record origin whenever we set the state so we can snap back if needed
   try {
-    // Use absolute bbox to derive a stable origin, but 'left/top' is fine for snapping
     recordMoveStartPosition(activeSel);
   } catch {}
   log("DEBUG", "[canvas-constraints] Group move lock state", {
@@ -110,9 +109,15 @@ function applyGroupMoveLockState(activeSel) {
   });
 }
 
+// Symbol / key to store prior handlers on the canvas safely
+const HANDLERS_KEY = '__sceneDesignerCanvasConstraintsHandlers__';
+
 /**
  * Install movement constraints and guards on the Fabric canvas.
  * Returns a detach function to remove handlers.
+ *
+ * Idempotent: On re-install, existing handlers installed by THIS module
+ * are removed first (other modules' handlers are preserved).
  */
 export function installCanvasConstraints(canvas) {
   if (!canvas) {
@@ -120,12 +125,26 @@ export function installCanvasConstraints(canvas) {
     return () => {};
   }
 
-  // Detach prior handlers (in case of hot reload or panel rebuild)
-  canvas.off('object:moving');
-  canvas.off('selection:created');
-  canvas.off('selection:updated');
-  canvas.off('selection:cleared');
-  canvas.off('mouse:down');
+  // If we previously installed handlers, detach them first (NON-destructive to other modules)
+  try {
+    if (canvas[HANDLERS_KEY] && Array.isArray(canvas[HANDLERS_KEY])) {
+      canvas[HANDLERS_KEY].forEach(({ event, fn }) => {
+        try { canvas.off(event, fn); } catch {}
+      });
+      canvas[HANDLERS_KEY] = [];
+    }
+  } catch (e) {
+    log("WARN", "[canvas-constraints] Failed detaching prior handlers (safe to ignore)", e);
+  }
+
+  // Local registry for new handlers
+  const localHandlers = [];
+
+  // Helper to attach and record
+  function on(event, fn) {
+    canvas.on(event, fn);
+    localHandlers.push({ event, fn });
+  }
 
   const onSelectionCreatedOrUpdated = () => {
     try {
@@ -184,8 +203,8 @@ export function installCanvasConstraints(canvas) {
         const backTop = (target._moveStartTop !== undefined) ? target._moveStartTop : (target._prevTop ?? target.top);
 
         if (typeof target.set === "function") {
-          target.set({ left: backLeft, top: backTop });
-          if (typeof target.setCoords === 'function') target.setCoords();
+            target.set({ left: backLeft, top: backTop });
+            if (typeof target.setCoords === 'function') target.setCoords();
         }
 
         // Re-assert lock on the group so Fabric stops processing further drags
@@ -224,21 +243,26 @@ export function installCanvasConstraints(canvas) {
     }
   };
 
-  canvas.on('selection:created', onSelectionCreatedOrUpdated);
-  canvas.on('selection:updated', onSelectionCreatedOrUpdated);
-  canvas.on('selection:cleared', onSelectionCleared);
-  canvas.on('mouse:down', onMouseDown);
-  canvas.on('object:moving', onObjectMoving);
+  // Attach ONLY our handlers (non-destructive)
+  on('selection:created', onSelectionCreatedOrUpdated);
+  on('selection:updated', onSelectionCreatedOrUpdated);
+  on('selection:cleared', onSelectionCleared);
+  on('mouse:down', onMouseDown);
+  on('object:moving', onObjectMoving);
 
-  log("INFO", "[canvas-constraints] Installed constraints (selection guards + object:moving clamp/lock)");
+  // Persist registry on canvas for safe future re-install
+  canvas[HANDLERS_KEY] = localHandlers;
+
+  log("INFO", "[canvas-constraints] Installed constraints (selection guards + object:moving clamp/lock) without clobbering external selection handlers");
 
   return function detach() {
     try {
-      canvas.off('selection:created', onSelectionCreatedOrUpdated);
-      canvas.off('selection:updated', onSelectionCreatedOrUpdated);
-      canvas.off('selection:cleared', onSelectionCleared);
-      canvas.off('mouse:down', onMouseDown);
-      canvas.off('object:moving', onObjectMoving);
+      if (canvas[HANDLERS_KEY]) {
+        canvas[HANDLERS_KEY].forEach(({ event, fn }) => {
+          try { canvas.off(event, fn); } catch {}
+        });
+        canvas[HANDLERS_KEY] = [];
+      }
       log("INFO", "[canvas-constraints] Detached constraints handlers");
     } catch (e) {
       log("ERROR", "[canvas-constraints] Detach error", e);
