@@ -9,6 +9,10 @@
  * - No business logic, no event wiring here (handlers live in toolbar-handlers.js).
  * - Styles are injected by toolbar-styles.js.
  *
+ * 2025-09-24 Update:
+ * - Added Ellipse shape option (new freely resizable + rotatable ellipse).
+ * - Circle remains (aspect locked & non-rotatable per shape-defs / transformer).
+ *
  * Public Exports:
  * - renderToolbar(element) -> refs
  *
@@ -33,7 +37,7 @@
  * - alignTopBtn
  * - alignMiddleYBtn
  * - alignBottomBtn
- * - debugBtn               // NEW: Collects a debug snapshot (see debug.js)
+ * - debugBtn
  *
  * Dependencies:
  * - log.js (logging)
@@ -65,7 +69,7 @@ export function renderToolbar(element) {
       <div class="toolbar-row" id="toolbar-row-1">
         <div class="toolbar-group">
           <label for="toolbar-image-upload" class="toolbar-btn" title="Upload image">Upload Image</label>
-          <input type="file" id="toolbar-image-upload" accept="image/*">
+            <input type="file" id="toolbar-image-upload" accept="image/*">
           <select id="toolbar-server-image-select" title="Choose server image">
             <option value="">[Server image]</option>
             <option value="sample1.png">sample1.png</option>
@@ -79,6 +83,7 @@ export function renderToolbar(element) {
             <option value="point">Point</option>
             <option value="rect">Rectangle</option>
             <option value="circle">Circle</option>
+            <option value="ellipse">Ellipse</option>
           </select>
           <button id="toolbar-add-shape-btn" class="toolbar-btn" title="Add shape">
             <span style="font-size:1em;margin-right:3px;">&#x2795;</span> Add
@@ -154,7 +159,7 @@ export function renderToolbar(element) {
   const lockBtn = element.querySelector('#toolbar-lock-btn');
   const unlockBtn = element.querySelector('#toolbar-unlock-btn');
 
-  // Alignment refs (no reference dropdown)
+  // Alignment refs
   const alignLeftBtn = element.querySelector('#toolbar-align-left-btn');
   const alignCenterXBtn = element.querySelector('#toolbar-align-centerX-btn');
   const alignRightBtn = element.querySelector('#toolbar-align-right-btn');
@@ -162,7 +167,7 @@ export function renderToolbar(element) {
   const alignMiddleYBtn = element.querySelector('#toolbar-align-middleY-btn');
   const alignBottomBtn = element.querySelector('#toolbar-align-bottom-btn');
 
-  // Pickr hosts (replaces native color inputs/alpha slider)
+  // Pickr hosts
   const strokePickrEl = element.querySelector('#toolbar-stroke-pickr');
   const fillPickrEl = element.querySelector('#toolbar-fill-pickr');
 
@@ -201,7 +206,7 @@ export function renderToolbar(element) {
     log("WARN", "[toolbar-dom] Some toolbar refs are missing", { missing });
   }
 
-  log("INFO", "[toolbar-dom] Toolbar DOM rendered (two-row layout, alignment controls added, debug button added)");
+  log("INFO", "[toolbar-dom] Toolbar DOM rendered (two-row layout, ellipse option included, debug button present)");
   log("DEBUG", "[toolbar-dom] renderToolbar EXIT");
 
   return refs;

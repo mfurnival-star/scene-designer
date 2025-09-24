@@ -6,12 +6,13 @@
  * - Keeps all consumers on ESM named imports (no window/global access).
  *
  * Exports:
- * - Named: Canvas, Rect, Circle, Line, Group, Image, Path, Text
+ * - Named: Canvas, Rect, Circle, Ellipse, Line, Group, Image, Path, Text
  * - Default: fabric namespace (for access to ActiveSelection, etc.)
  *
  * Notes:
- * - This wrapper allows files like shapes-core.js to import { Text } from './fabric-wrapper.js'
- *   instead of using window.fabric.Text, maintaining manifesto compliance.
+ * - Added Ellipse export (2025-09-24) for new 'ellipse' shape type.
+ * - This wrapper allows files like shapes-core.js to import { Ellipse, Text } from './fabric-wrapper.js'
+ *   instead of using window.fabric.* thereby maintaining manifesto compliance.
  * -----------------------------------------------------------
  */
 
@@ -24,6 +25,7 @@ const fabric = fabricImport.fabric || fabricImport;
 export const Canvas = fabric.Canvas;
 export const Rect = fabric.Rect;
 export const Circle = fabric.Circle;
+export const Ellipse = fabric.Ellipse;
 export const Line = fabric.Line;
 export const Group = fabric.Group;
 export const Image = fabric.Image;

@@ -3,8 +3,18 @@
  * -----------------------------------------------------------
  * Centralized per-shape definition/config for Scene Designer.
  * - All shape types and their edit/transform properties in one place.
- * - Used by transformer.js, shapes.js, canvas.js, etc.
+ * - Consumed by: transformer.js (controls), selection-core.js, actions.js (for intent logic).
  * - Easy to extend for new shape types or features.
+ *
+ * 2025-09-24 Update:
+ * - Added new 'ellipse' shape type (free aspect ratio, rotatable, 8 anchors).
+ * - Clarified 'circle' shape: non-rotatable, aspect ratio locked (uniform scaling),
+ *   only 4 corner anchors to enforce uniform resize (no edge-only distortion).
+ *
+ * Notes:
+ * - enabledAnchors values correspond to the control positions our transformer logic
+ *   understands. Unsupported anchors are simply ignored.
+ * - keepRatio=true is enforced in transformer.js via lockUniScaling for circle only.
  * -----------------------------------------------------------
  */
 
@@ -21,19 +31,38 @@ export const SHAPE_DEFS = {
     resizable: true,
     selectable: true,
     editable: true
-    // Future: canDuplicate, supportsLabelEdit, etc.
   },
+
+  // Circle: perfect circle – cannot rotate, cannot be non-uniformly scaled.
+  // Only 4 corner anchors shown to reinforce uniform scaling UX.
   circle: {
     label: "Circle",
     enabledAnchors: [
       'top-left','top-right','bottom-left','bottom-right'
     ],
     rotateEnabled: false,
-    keepRatio: true,
+    keepRatio: true,         // enforce uniform (radius) scaling
     resizable: true,
     selectable: true,
     editable: true
   },
+
+  // Ellipse: new shape – rotatable and freely resizable (non-uniform),
+  // all 8 anchors (corners + edges) enabled.
+  ellipse: {
+    label: "Ellipse",
+    enabledAnchors: [
+      'top-left','top-center','top-right',
+      'middle-left','middle-right',
+      'bottom-left','bottom-center','bottom-right'
+    ],
+    rotateEnabled: true,
+    keepRatio: false,        // allow user to stretch into any ellipse
+    resizable: true,
+    selectable: true,
+    editable: true
+  },
+
   point: {
     label: "Point",
     enabledAnchors: [],
@@ -47,12 +76,14 @@ export const SHAPE_DEFS = {
 };
 
 /**
- * Utility: Get shape definition for a shape or type string.
+ * Utility: Get shape definition for a shape instance or a type string.
  * @param {string|object} shapeOrType
- * @returns {object} shape definition config
+ * @returns {object|null} shape definition config
  */
 export function getShapeDef(shapeOrType) {
-  const type = typeof shapeOrType === "string" ? shapeOrType
+  const type = typeof shapeOrType === "string"
+    ? shapeOrType
     : shapeOrType?._type;
   return SHAPE_DEFS[type] || null;
 }
+

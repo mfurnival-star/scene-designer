@@ -4,14 +4,16 @@
  * Scene Designer – Shape Core (Fabric.js, ESM ONLY)
  * Purpose:
  * - Core helpers used by shape factories (IDs, labels, stroke/fill/width).
- * - Implements non-point shapes (rect, circle).
+ * - Implements non-point shapes (rect, circle, ellipse).
  * - Diagnostic label visibility management for all shapes.
  *
  * Enhancements (2025-09-24):
- * - Initial placement clamp: newly created Rect / Circle groups are clamped so their
+ * - Initial placement clamp: newly created Rect / Circle / Ellipse groups are clamped so their
  *   top-left never starts with negative coordinates (prevents partially off-canvas
  *   objects when start percentages or offsets yield < 0). Children retain correct
  *   relative positioning after clamp.
+ * - Added Ellipse shape (freely resizable & rotatable – defined in shape-defs.js).
+ * - Circle remains aspect-locked & non-rotatable (handled in shape-defs + transformer).
  *
  * Exports:
  * - Public:
@@ -21,6 +23,7 @@
  *    setFillColorForSelectedShapes,
  *    makeRectShape,
  *    makeCircleShape,
+ *    makeEllipseShape,
  *    applyDiagnosticLabelsVisibility
  * - Internal helpers (consumed by shapes-point.js):
  *    getDefaultStrokeWidth,
@@ -33,14 +36,14 @@
  *    setGroupDiagnosticLabelVisible
  *
  * Dependencies:
- * - fabric-wrapper.js (Rect, Circle, Group, Text)
+ * - fabric-wrapper.js (Rect, Circle, Ellipse, Group, Text)
  * - state.js (getState)
  * - log.js (log)
  * - shape-state.js (setShapeState)
  * -----------------------------------------------------------
  */
 
-import { Rect, Circle, Group, Text } from './fabric-wrapper.js';
+import { Rect, Circle, Ellipse, Group, Text } from './fabric-wrapper.js';
 import { log } from './log.js';
 import { setShapeState } from './shape-state.js';
 import { getState } from './state.js';
@@ -161,7 +164,7 @@ export function setShapeStrokeWidth(shape, width = 1) {
 
   if (shape._objects && Array.isArray(shape._objects)) {
     shape._objects.forEach(obj => {
-      if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'line') {
+      if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'line' || obj.type === 'ellipse') {
         // Skip diagnostic labels
         if (obj._isDiagnosticLabel) return;
         applyToObj(obj);
@@ -174,8 +177,8 @@ export function setShapeStrokeWidth(shape, width = 1) {
 // ---------- New: stroke/fill color application ----------
 /**
  * Apply stroke color to all unlocked selected shapes.
- * - Rect/Circle: stroke on main primitive; strokeUniform true.
- * - Point: updates line and circle strokes (rings); skips label/hit/holes.
+ * - Rect/Circle/Ellipse: stroke on main primitive; strokeUniform true.
+ * - Point handled separately in shapes-point.js.
  */
 export function setStrokeColorForSelectedShapes(hexColor) {
   const color = typeof hexColor === "string" ? hexColor : "#000000";
@@ -188,7 +191,7 @@ export function setStrokeColorForSelectedShapes(hexColor) {
     if (!Array.isArray(shape._objects)) return;
     shape._objects.forEach(obj => {
       if (!obj || obj._isDiagnosticLabel) return;
-      if (obj.type === 'line' || obj.type === 'rect' || obj.type === 'circle') {
+      if (obj.type === 'line' || obj.type === 'rect' || obj.type === 'circle' || obj.type === 'ellipse') {
         if ('stroke' in obj) obj.set({ stroke: color });
         if ('strokeUniform' in obj) obj.set({ strokeUniform: true });
       }
@@ -204,9 +207,8 @@ export function setStrokeColorForSelectedShapes(hexColor) {
 
 /**
  * Apply fill color (with alpha) to all unlocked selected shapes.
- * - Rect/Circle: set fill to rgba(...) computed from hex + alpha slider value.
- * - Point: only update halo-like circles (opacity between 0 and 1). Skips hitCircle (opacity 0),
- *          skips 'dot' filled center (opacity 1), skips label and hole rects.
+ * - Rect/Circle/Ellipse: set fill to rgba(...) computed from hex + alpha slider value.
+ * - Point: handled by shapes-point.js (only halo elements).
  */
 export function setFillColorForSelectedShapes(hexColor, alphaPercent = null) {
   const rgba = rgbaStringFromHex(hexColor || "#000000", alphaPercent);
@@ -223,19 +225,12 @@ export function setFillColorForSelectedShapes(hexColor, alphaPercent = null) {
       if (!obj || obj._isDiagnosticLabel) return;
 
       if (!isPoint) {
-        // Rect/Circle shapes: set fill on main primitive(s)
-        if ((obj.type === 'rect' || obj.type === 'circle') && 'fill' in obj) {
+        // Rect/Circle/Ellipse shapes: set fill on main primitive(s)
+        if ((obj.type === 'rect' || obj.type === 'circle' || obj.type === 'ellipse') && 'fill' in obj) {
           obj.set({ fill: rgba });
         }
       } else {
-        // Point: only update halo-like circles (semi-transparent overlays)
-        if (obj.type === 'circle' && 'fill' in obj) {
-            const op = (typeof obj.opacity === "number") ? obj.opacity : 1;
-            if (op > 0 && op < 1) {
-              obj.set({ fill: rgba });
-            }
-        }
-        // Never touch hole rects (destination-out) or hitCircle (opacity 0)
+        // (Point handled elsewhere; skip here.)
       }
     });
   });
@@ -335,6 +330,37 @@ export function generateShapeId(type = "shape") {
   return id;
 }
 
+// Shared modification handler for shapes to re-apply stroke width
+function installModifiedHandler(group) {
+  group.on("modified", () => {
+    setShapeStrokeWidth(group, getDefaultStrokeWidth());
+    const canvas = getState().fabricCanvas;
+    if (canvas) {
+      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+      else canvas.renderAll();
+    }
+  });
+}
+
+// Clamp top-left if negative
+function clampInitialPlacement(group, label) {
+  const originalLeft = group.left;
+  const originalTop = group.top;
+  const clampedLeft = Math.max(0, originalLeft);
+  const clampedTop = Math.max(0, originalTop);
+  if (clampedLeft !== originalLeft || clampedTop !== originalTop) {
+    group.set({ left: clampedLeft, top: clampedTop });
+    if (typeof group.setCoords === 'function') {
+      try { group.setCoords(); } catch {}
+    }
+    log("INFO", `[shapes] ${label}: initial placement clamped`, {
+      id: group._id,
+      from: { left: originalLeft, top: originalTop },
+      to: { left: clampedLeft, top: clampedTop }
+    });
+  }
+}
+
 // ---------- Rectangle ----------
 export function makeRectShape(x, y, w, h) {
   const strokeW = getDefaultStrokeWidth();
@@ -379,38 +405,15 @@ export function makeRectShape(x, y, w, h) {
     setGroupDiagnosticLabelVisible(group, false);
   }
 
-  // Clamp initial placement so shape never starts partially off-canvas (negative coords)
-  const originalLeft = group.left;
-  const originalTop = group.top;
-  const clampedLeft = Math.max(0, originalLeft);
-  const clampedTop = Math.max(0, originalTop);
-  if (clampedLeft !== originalLeft || clampedTop !== originalTop) {
-    group.set({ left: clampedLeft, top: clampedTop });
-    if (typeof group.setCoords === 'function') {
-      try { group.setCoords(); } catch {}
-    }
-    log("INFO", "[shapes] makeRectShape: initial placement clamped", {
-      id: group._id,
-      from: { left: originalLeft, top: originalTop },
-      to: { left: clampedLeft, top: clampedTop }
-    });
-  }
-
-  group.on("modified", () => {
-    setShapeStrokeWidth(group, getDefaultStrokeWidth());
-    const canvas = getState().fabricCanvas;
-    if (canvas) {
-      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-      else canvas.renderAll();
-    }
-  });
+  clampInitialPlacement(group, 'makeRectShape');
+  installModifiedHandler(group);
 
   setShapeState(group, 'default');
   log("DEBUG", "[shapes] makeRectShape EXIT", { id: group._id });
   return group;
 }
 
-// ---------- Circle ----------
+// ---------- Circle (Aspect Locked) ----------
 export function makeCircleShape(x, y, r) {
   const strokeW = getDefaultStrokeWidth();
   currentStrokeWidth = strokeW;
@@ -453,34 +456,77 @@ export function makeCircleShape(x, y, r) {
     setGroupDiagnosticLabelVisible(group, false);
   }
 
-  // Clamp initial placement (same rationale as rectangle)
-  const originalLeft = group.left;
-  const originalTop = group.top;
-  const clampedLeft = Math.max(0, originalLeft);
-  const clampedTop = Math.max(0, originalTop);
-  if (clampedLeft !== originalLeft || clampedTop !== originalTop) {
-    group.set({ left: clampedLeft, top: clampedTop });
-    if (typeof group.setCoords === 'function') {
-      try { group.setCoords(); } catch {}
-    }
-    log("INFO", "[shapes] makeCircleShape: initial placement clamped", {
-      id: group._id,
-      from: { left: originalLeft, top: originalTop },
-      to: { left: clampedLeft, top: clampedTop }
-    });
-  }
-
-  group.on("modified", () => {
-    setShapeStrokeWidth(group, getDefaultStrokeWidth());
-    const canvas = getState().fabricCanvas;
-    if (canvas) {
-      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-      else canvas.renderAll();
-    }
-  });
+  clampInitialPlacement(group, 'makeCircleShape');
+  installModifiedHandler(group);
 
   setShapeState(group, 'default');
   log("DEBUG", "[shapes] makeCircleShape EXIT", { id: group._id });
+  return group;
+}
+
+// ---------- Ellipse (Free Aspect, Rotatable) ----------
+/**
+ * Create an Ellipse shape.
+ * @param {number} x - center X
+ * @param {number} y - center Y
+ * @param {number} w - width of ellipse
+ * @param {number} h - height of ellipse
+ *
+ * NOTE:
+ * - Fabric Ellipse uses rx / ry, with left/top typically at the bounding box origin.
+ * - We normalize so caller passes center (x,y) like circle; we offset left/top by w/2,h/2.
+ */
+export function makeEllipseShape(x, y, w, h) {
+  const strokeW = getDefaultStrokeWidth();
+  currentStrokeWidth = strokeW;
+  const strokeColor = getStrokeColor();
+  const fillColor = getFillColor();
+  const showLabels = getShowDiagnosticLabels();
+
+  log("DEBUG", "[shapes] makeEllipseShape ENTRY", {
+    x, y, w, h, strokeW, strokeColor, fillColor, showLabels
+  });
+
+  const rx = Math.max(1, w / 2);
+  const ry = Math.max(1, h / 2);
+
+  const ellipseId = generateShapeId('ellipse');
+  const ellipse = new Ellipse({
+    left: x - rx,
+    top: y - ry,
+    rx,
+    ry,
+    stroke: strokeColor,
+    strokeWidth: strokeW,
+    fill: rgbaStringFromHex(fillColor)
+  });
+  ellipse.selectable = false;
+  ellipse.evented = false;
+  ellipse.strokeUniform = true;
+
+  const labelObj = makeDiagnosticLabel("Ellipse", ellipseId, x, y - ry);
+
+  const group = new Group([ellipse, labelObj], {
+    left: x - rx,
+    top: y - ry,
+    selectable: true,
+    evented: true
+  });
+  group._type = 'ellipse';
+  group._label = 'Ellipse';
+  group.locked = false;
+  group._id = ellipseId;
+  group._diagLabel = labelObj;
+
+  if (!showLabels) {
+    setGroupDiagnosticLabelVisible(group, false);
+  }
+
+  clampInitialPlacement(group, 'makeEllipseShape');
+  installModifiedHandler(group);
+
+  setShapeState(group, 'default');
+  log("DEBUG", "[shapes] makeEllipseShape EXIT", { id: group._id, rx, ry });
   return group;
 }
 
