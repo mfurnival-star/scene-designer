@@ -18,6 +18,7 @@ import {
   getShapeCenter,
   getShapeOuterRadius
 } from '../geometry/shape-rect.js';
+import { getAbsoluteRectsForSelection } from '../geometry/selection-rects.js';
 
 function requestRender() {
   const canvas = getState().fabricCanvas;
@@ -181,7 +182,7 @@ function cmdSetSelection(payload) {
   return { type: 'SET_SELECTION', payload: { ids: prevIds } };
 }
 
-// ---------- Helpers for movement/rotation/locking ----------
+// ---------- Helpers for movement/rotation/locking/align ----------
 
 function clampDeltaToImage(bbox, dx, dy, img) {
   if (!img || !bbox) return { dx, dy };
@@ -338,7 +339,6 @@ function cmdSetAnglesPositions(payload) {
     const shape = map.get(i.id);
     if (!shape) return;
     try {
-      // Snapshot current state before applying
       const currentCenter = (typeof shape.getCenterPoint === "function")
         ? shape.getCenterPoint()
         : getShapeCenter(shape);
@@ -440,13 +440,137 @@ function cmdUnlockShapes(payload) {
     return null;
   }
 
-  // Preserve selection
   const preserve = (getState().selectedShapes || []).slice();
   selectionSetSelectedShapes(preserve);
 
   requestRender();
   log("INFO", "[commands] Unlocked shapes", { count: affected.length, ids: affected });
   return { type: 'LOCK_SHAPES', payload: { ids: affected } };
+}
+
+// ---------- ALIGN_SELECTED (+ undo via SET_POSITIONS) ----------
+
+function referenceFromBboxes(bboxes, mode) {
+  if (!Array.isArray(bboxes) || bboxes.length === 0) return 0;
+  switch (mode) {
+    case 'left':
+      return Math.min(...bboxes.map(b => b.left));
+    case 'centerX': {
+      const leftmost = bboxes.reduce((min, b) => (b.left < min.left ? b : min), bboxes[0]);
+      return leftmost.left + leftmost.width / 2;
+    }
+    case 'right':
+      return Math.max(...bboxes.map(b => b.left + b.width));
+    case 'top':
+      return Math.min(...bboxes.map(b => b.top));
+    case 'middleY': {
+      const topmost = bboxes.reduce((min, b) => (b.top < min.top ? b : min), bboxes[0]);
+      return topmost.top + topmost.height / 2;
+    }
+    case 'bottom':
+      return Math.max(...bboxes.map(b => b.top + b.height));
+    default:
+      return 0;
+  }
+}
+
+function cmdAlignSelected(payload) {
+  const mode = payload?.mode;
+  const ref = payload?.ref === 'canvas' ? 'canvas' : 'selection';
+  const valid = new Set(['left', 'centerX', 'right', 'top', 'middleY', 'bottom']);
+  if (!valid.has(mode)) {
+    log("WARN", "[commands] ALIGN_SELECTED: invalid mode", { mode });
+    return null;
+  }
+
+  const store = getState();
+  const selected = Array.isArray(store.selectedShapes) ? store.selectedShapes.filter(Boolean) : [];
+  if (selected.length < 2) {
+    log("INFO", "[commands] ALIGN_SELECTED: need 2+ selected");
+    return null;
+  }
+
+  const bboxes = getAbsoluteRectsForSelection(selected, store.fabricCanvas);
+  const existingBboxes = bboxes.filter(Boolean);
+  if (existingBboxes.length < 2) {
+    log("WARN", "[commands] ALIGN_SELECTED: not enough valid bounding boxes", { have: existingBboxes.length });
+    return null;
+  }
+
+  let referenceValue;
+  if (ref === 'canvas' && store.bgFabricImage && Number.isFinite(store.bgFabricImage.width) && Number.isFinite(store.bgFabricImage.height)) {
+    const img = store.bgFabricImage;
+    switch (mode) {
+      case 'left': referenceValue = 0; break;
+      case 'centerX': referenceValue = img.width / 2; break;
+      case 'right': referenceValue = img.width; break;
+      case 'top': referenceValue = 0; break;
+      case 'middleY': referenceValue = img.height / 2; break;
+      case 'bottom': referenceValue = img.height; break;
+      default: referenceValue = 0;
+    }
+  } else {
+    referenceValue = referenceFromBboxes(existingBboxes, mode);
+  }
+
+  const prevPositions = [];
+  const img = store.bgFabricImage;
+  let movedCount = 0;
+
+  selected.forEach((shape, idx) => {
+    if (!shape) return;
+    const bbox = bboxes[idx];
+    if (!bbox) return;
+    if (shape.locked) return;
+
+    let dx = 0, dy = 0;
+    switch (mode) {
+      case 'left':
+        dx = referenceValue - bbox.left; break;
+      case 'centerX':
+        dx = referenceValue - (bbox.left + bbox.width / 2); break;
+      case 'right':
+        dx = referenceValue - (bbox.left + bbox.width); break;
+      case 'top':
+        dy = referenceValue - bbox.top; break;
+      case 'middleY':
+        dy = referenceValue - (bbox.top + bbox.height / 2); break;
+      case 'bottom':
+        dy = referenceValue - (bbox.top + bbox.height); break;
+      default: break;
+    }
+
+    const clamped = clampDeltaToImage(bbox, dx, dy, img);
+    if (mode === 'left' || mode === 'centerX' || mode === 'right') {
+      dx = clamped.dx;
+      dy = 0;
+    } else {
+      dx = 0;
+      dy = clamped.dy;
+    }
+
+    if (dx === 0 && dy === 0) return;
+
+    try {
+      prevPositions.push({ id: shape._id, left: shape.left ?? 0, top: shape.top ?? 0 });
+      const newLeft = (shape.left ?? 0) + dx;
+      const newTop = (shape.top ?? 0) + dy;
+      shape.set({ left: newLeft, top: newTop });
+      if (typeof shape.setCoords === "function") shape.setCoords();
+      movedCount++;
+    } catch (e) {
+      log("ERROR", "[commands] ALIGN_SELECTED: move failed", { id: shape._id, error: e });
+    }
+  });
+
+  if (movedCount === 0) {
+    log("INFO", "[commands] ALIGN_SELECTED: nothing moved");
+    return null;
+  }
+
+  requestRender();
+  log("INFO", "[commands] ALIGN_SELECTED complete", { mode, ref, movedCount, selectedCount: selected.length });
+  return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
 }
 
 // ---------- Execute ----------
@@ -485,6 +609,9 @@ export function executeCommand(cmd) {
       return cmdLockShapes(p);
     case 'UNLOCK_SHAPES':
       return cmdUnlockShapes(p);
+
+    case 'ALIGN_SELECTED':
+      return cmdAlignSelected(p);
 
     default:
       log("WARN", "[commands] Unknown command type", { type: t });

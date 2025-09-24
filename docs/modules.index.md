@@ -28,7 +28,7 @@ Core Modules
 Commands
 - commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
 - commands/commands.js        – core command implementations:
-  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES
+  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED
   - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
 
 Keybindings
@@ -65,8 +65,8 @@ Shapes
 - shape-state.js              – per-shape state machine (selected/dragging/locked)
 
 Actions
-- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation via command bus (align remains direct for now)
-- actions-alignment.js        – alignSelected(mode) relative to selection hull only
+- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation/align via command bus
+- actions-alignment.js        – dispatches ALIGN_SELECTED command (alignSelected(mode, ref))
 
 Settings
 - settings-core.js            – registry, persistence, side effects (logging, console)
@@ -94,6 +94,10 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Step C)
+  - commands/commands.js: added ALIGN_SELECTED (undo via SET_POSITIONS), using centralized selection geometry and clamped deltas.
+  - actions-alignment.js: now dispatches ALIGN_SELECTED via the command bus.
+  - actions.js: Actions section updated to reflect alignment using command bus.
 - 2025-09-24 (Phase 2 – Step B.2)
   - commands/commands.js extended: MOVE_SHAPES_DELTA (+ SET_POSITIONS), RESET_ROTATION (+ SET_ANGLES_POSITIONS), LOCK_SHAPES, UNLOCK_SHAPES.
   - actions.js now routes lock/unlock/resetRotation through command bus.
@@ -111,7 +115,7 @@ Recent Changes (brief)
   - GEO-UNIFY: Added geometry/shape-rect.js – single source for bounding box, center, aspectRatio, outerRadius.
   - CONSTRAINTS-GEOM: canvas-constraints.js now uses getShapeBoundingBox for single shapes (ActiveSelection hull still Fabric fallback).
   - DEBUG-GEOM: debug.js shape summaries now reference unified geometry (adds aspectRatio, outerRadius, geometrySource).
-  - CIRCLE-GUARD: transformer.js defensive uniform scaling guard for circle (lockUniScaling + scale normalization).
+  - CIRCLE-GUARD: transformer.js defensive uniform scaling guard (lockUniScaling + scale normalization).
   - STROKE-OPT: shapes-core.js + selection-core.js reworked so stroke width reapplies only after actual scale/rotate (transform tracking via _pendingStrokeWidthReapply).
   - SEL-CLEAN: selection-core.js removed unconditional stroke normalization logic.
   - DEV-SANITY: dev/geometry-sanity.js script validates unified geometry vs Fabric boundingRect (tolerance-based diff logging).
