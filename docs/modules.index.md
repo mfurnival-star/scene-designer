@@ -3,11 +3,15 @@
 Purpose
 - Curated, human-readable list of modules and facades in this repo.
 - Keep it short: what exists, where to import from, and recent changes.
-- For rules/philosophy, see SCENE_DESIGNER_MANIFESTO.md.
+- For rules/philosophy, see SCENE_DESIGNER_MANIFESTO.txt.
 
 Update Policy
 - Edit this file when modules are added/removed/renamed.
 - Keep entries brief; link to source when needed.
+
+**Comment Policy:**  
+- During development, header and function-level comments may be omitted from source files to reduce file size and speed iteration.  
+- Before production/release, restore concise summary headers and key function comments as per engineering rules.
 
 Facades (public import paths)
 - ./canvas.js → buildCanvasPanel (delegates to canvas-core.js)
@@ -107,3 +111,4 @@ Recent Changes (brief)
 How to add here
 - When you add/rename/remove a module: update the relevant section above and keep the line short.
 - If you add a new facade, list it in “Facades (public import paths)”.
+

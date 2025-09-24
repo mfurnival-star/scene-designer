@@ -35,7 +35,11 @@ Scene Designer – Engineering & Review Rules
 - Use log() from log.js with levels: ERROR, WARN, INFO, DEBUG.
 - TRACE is deprecated; use DEBUG for verbose logs.
 - No direct console.log except inside logger.
-- Every file starts with a summary comment (purpose, exports, dependencies).
+
+- **Comment Policy: Development vs Production**
+    - During development: Header comments and function-level comments may be omitted from source files to reduce file size and cognitive overhead. All logic and code must remain clear and maintainable without comment blocks. Logging and variable/function naming should remain descriptive to aid understanding.
+    - Before production/release: All source files must restore a concise header summary comment (purpose, exports, dependencies). Key functions (especially public API, complex logic, or business rules) must include summary comments explaining intent, parameters, and edge cases. Code review must include a check for proper documentation in headers and functions.
+    - This staged policy ensures rapid iteration during development and maintainability for long-term support.
 
 6. State Management
 - Use exported functions/store object from state.js (Zustand-style).
@@ -173,5 +177,4 @@ Quality Outcomes:
 Refer to this file before making foundational changes.  
 Always update this section if the architectural path is revised.  
 For detailed chronological progress and checklists see: docs/PHASED_ARCHITECTURE_PATH.md
-
 
