@@ -11,9 +11,9 @@
  * - installButtonsStateSync(refs) -> detachFn
  * - installToolbarScaleSync(containerEl) -> detachFn
  *
- * Dependencies:
- * - state.js (getState, sceneDesignerStore)
- * - log.js (log)
+ * Logging (reduced noise):
+ * - INFO only on install/detach and major errors/warnings.
+ * - No per-change DEBUG spam inside hot paths.
  * -----------------------------------------------------------
  */
 
@@ -75,12 +75,12 @@ export function installButtonsStateSync(refs) {
     const anyLockedSelected = selected.some(s => s && s.locked);
     const anyLockedInStore = shapes.some(s => s && s.locked);
 
-    // Rotatable eligibility: unlocked rect or circle
+    // Rotatable eligibility: unlocked rect/circle/ellipse
     const anyRotatableSelected = selected.some(s =>
-      s && !s.locked && (s._type === 'rect' || s._type === 'circle')
+      s && !s.locked && (s._type === 'rect' || s._type === 'circle' || s._type === 'ellipse')
     );
 
-    // Alignment eligibility: must have 2+ selected (locks are handled by the action)
+    // Alignment eligibility: must have 2+ selected
     const canAlign = selectedCount >= 2;
 
     // Delete
@@ -103,7 +103,7 @@ export function installButtonsStateSync(refs) {
     setEnabled(
       resetRotationBtn,
       anyRotatableSelected,
-      "Select an unlocked rectangle or circle",
+      "Select an unlocked rectangle, circle or ellipse",
       "Reset rotation to 0°"
     );
 
@@ -175,16 +175,6 @@ export function installButtonsStateSync(refs) {
       "Select 2 or more shapes to align",
       "Align bottom (2+ selected)"
     );
-
-    log("DEBUG", "[toolbar-state] updateButtonsState", {
-      selectedCount,
-      shapesCount,
-      anyUnlockedSelected,
-      anyLockedSelected,
-      anyLockedInStore,
-      anyRotatableSelected,
-      canAlign
-    });
   }
 
   // Initial run
@@ -214,7 +204,7 @@ export function installToolbarScaleSync(containerEl) {
   const applyScale = () => {
     const scale = getState().settings?.toolbarUIScale ?? 1;
     containerEl.style.setProperty('--toolbar-ui-scale', String(scale));
-    log("DEBUG", "[toolbar-state] Applied toolbar scale", { scale });
+    // No per-change DEBUG logging to reduce noise
   };
 
   // Initial apply
@@ -240,4 +230,3 @@ export function installToolbarScaleSync(containerEl) {
     log("INFO", "[toolbar-state] Toolbar scale sync detached");
   };
 }
-

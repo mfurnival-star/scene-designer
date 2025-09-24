@@ -3,38 +3,20 @@
  * -----------------------------------------------------------
  * Scene Designer – Toolbar Event Handlers (ESM ONLY)
  * Purpose:
- * - Attach all toolbar UI handlers (click/change) to DOM refs returned by renderToolbar().
+ * - Attach toolbar UI handlers (click/change) to DOM refs returned by renderToolbar().
  * - Dispatch intents to actions.js and selection.js (no business logic here).
  * - Handle image upload/server image selection via state.setImage().
- * - Color controls use Pickr via toolbar-color.js (no native <input type="color"> here).
+ * - Color controls use Pickr via toolbar-color.js.
  * - Alignment controls dispatch actions.alignSelected(mode) relative to the selection hull.
- * - Debug button (optional) triggers a diagnostic snapshot via debug.js and copies it to clipboard.
+ * - Debug button triggers a diagnostic snapshot via debug.js (on-demand).
  *
- * Phase-1 Hardening:
- * - Server image selection now performs a fetch() preflight to surface 404/NETWORK errors
- *   and guarantee a visible network request (Eruda Network panel).
- * - On success, the image element is loaded from a Blob URL (no 2nd network hit),
- *   while state.imageURL stores the canonical absolute URL for reference.
+ * Logging (reduced noise):
+ * - Keep WARN/ERROR for failures or disabled-clicks.
+ * - Minimize INFO for routine successful clicks (UI already shows the effect).
+ * - Image operations keep concise INFO since they affect canvas size.
  *
- * Public Exports:
+ * Public Export:
  * - attachToolbarHandlers(refs) -> detachFn
- *   - refs: {
- *       container, imageUploadInput, imageUploadLabel, serverImageSelect,
- *       shapeTypeSelect, addShapeBtn, deleteBtn, duplicateBtn, resetRotationBtn,
- *       selectAllBtn, lockBtn, unlockBtn,
- *       strokePickrEl?, fillPickrEl?,
- *       alignLeftBtn?, alignCenterXBtn?, alignRightBtn?,
- *       alignTopBtn?, alignMiddleYBtn?, alignBottomBtn?,
- *       debugBtn? // NEW: optional Debug snapshot button
- *     }
- *
- * Dependencies:
- * - log.js (log)
- * - state.js (setImage, getState)
- * - actions.js (add/delete/duplicate/lock/unlock/resetRotation/alignSelected)
- * - selection.js (selectAllShapes)
- * - toolbar-color.js (installColorPickers)
- * - debug.js (runDebugCapture)  // NEW
  * -----------------------------------------------------------
  */
 
@@ -55,17 +37,14 @@ import { runDebugCapture } from './debug.js';
 
 /**
  * Resolve an absolute URL for a server image under ./images/
- * Ensures paths remain correct when hosted under /scene-designer/.
  */
 function resolveServerImageUrl(filename) {
   const base = (typeof window !== 'undefined' ? window.location.href : '');
-  const url = new URL(`./images/${filename}`, base).href;
-  return url;
+  return new URL(`./images/${filename}`, base).href;
 }
 
 /**
  * Load an HTMLImageElement from a Blob (fetch response) and invoke cb(imageEl).
- * Pass canonicalUrl through for logging/state.
  */
 function loadImageFromBlob(blob, cb, canonicalUrl) {
   try {
@@ -96,7 +75,6 @@ export function attachToolbarHandlers(refs) {
   }
 
   const {
-    container,
     imageUploadInput,
     imageUploadLabel,
     serverImageSelect,
@@ -108,7 +86,7 @@ export function attachToolbarHandlers(refs) {
     selectAllBtn,
     lockBtn,
     unlockBtn,
-    // Alignment controls (relative to selection hull only)
+    // Alignment controls
     alignLeftBtn,
     alignCenterXBtn,
     alignRightBtn,
@@ -122,24 +100,21 @@ export function attachToolbarHandlers(refs) {
     debugBtn
   } = refs;
 
-  // Keep references to handlers and detach fns for clean removal on detach()
   const handlers = [];
   let detachPickrs = null;
 
-  // Utility to bind and track
   function on(el, evt, fn, opts) {
     if (!el || typeof el.addEventListener !== "function") return;
     el.addEventListener(evt, fn, opts || false);
     handlers.push(() => el.removeEventListener(evt, fn, opts || false));
   }
 
-  // --- IMAGE UPLOAD (local file → data URL) ---
+  // --- IMAGE: Upload (local file → data URL) ---
   const onUploadLabelClick = () => {
     try {
       if (!imageUploadInput) return;
-      imageUploadInput.value = ""; // reset so selecting the same file re-triggers change
+      imageUploadInput.value = ""; // allow same-file reselect
       imageUploadInput.click();
-      log("DEBUG", "[toolbar-handlers] Upload label clicked → file input opened");
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Upload label click failed", err);
     }
@@ -151,9 +126,6 @@ export function attachToolbarHandlers(refs) {
       const file = e?.target?.files && e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onloadstart = () => {
-        log("DEBUG", "[toolbar-handlers] FileReader onloadstart (upload)");
-      };
       reader.onerror = (ev) => {
         log("ERROR", "[toolbar-handlers] FileReader error (upload)", ev?.target?.error || ev);
       };
@@ -186,7 +158,7 @@ export function attachToolbarHandlers(refs) {
   };
   on(imageUploadInput, 'change', onUploadInputChange);
 
-  // --- SERVER IMAGE SELECT (fetch preflight → Blob → Image element) ---
+  // --- IMAGE: Server select (fetch preflight → Blob → Image) ---
   const onServerImageChange = async (e) => {
     try {
       const filename = e?.target?.value || "";
@@ -197,14 +169,7 @@ export function attachToolbarHandlers(refs) {
       }
 
       const absoluteUrl = resolveServerImageUrl(filename);
-      log("INFO", "[toolbar-handlers] Server image selection", {
-        filename,
-        absoluteUrl,
-        location: { href: window.location.href, pathname: window.location.pathname }
-      });
 
-      // Preflight fetch so that Network tab shows the request and we can surface errors
-      log("DEBUG", "[toolbar-handlers] Fetching server image (preflight)", { absoluteUrl });
       let resp;
       try {
         resp = await fetch(absoluteUrl, { method: 'GET', cache: 'no-cache' });
@@ -220,10 +185,10 @@ export function attachToolbarHandlers(refs) {
       const blob = await resp.blob();
       loadImageFromBlob(blob, (imgEl, canonicalUrl) => {
         setImage(canonicalUrl, imgEl);
-        log("INFO", "[toolbar-handlers] Server image loaded and set", {
+        log("INFO", "[toolbar-handlers] Server image loaded", {
           canonicalUrl,
-          naturalWidth: imgEl.naturalWidth,
-          naturalHeight: imgEl.naturalHeight
+          w: imgEl.naturalWidth,
+          h: imgEl.naturalHeight
         });
       }, absoluteUrl);
 
@@ -240,7 +205,7 @@ export function attachToolbarHandlers(refs) {
     try {
       const type = shapeTypeSelect?.value || 'point';
       addShapeOfType(type);
-      log("INFO", "[toolbar-handlers] Add shape intent", { type });
+      // No INFO log; success is visible on canvas
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Add shape failed", err);
     }
@@ -256,7 +221,6 @@ export function attachToolbarHandlers(refs) {
         return;
       }
       deleteSelectedShapes();
-      log("INFO", "[toolbar-handlers] Delete intent dispatched");
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Delete failed", err);
     }
@@ -272,7 +236,6 @@ export function attachToolbarHandlers(refs) {
         return;
       }
       duplicateSelectedShapes();
-      log("INFO", "[toolbar-handlers] Duplicate intent dispatched");
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Duplicate failed", err);
     }
@@ -288,7 +251,6 @@ export function attachToolbarHandlers(refs) {
         return;
       }
       resetRotationForSelectedShapes();
-      log("INFO", "[toolbar-handlers] Reset Rotation intent dispatched");
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Reset Rotation failed", err);
     }
@@ -304,7 +266,6 @@ export function attachToolbarHandlers(refs) {
         return;
       }
       selectAllShapes();
-      log("INFO", "[toolbar-handlers] Select All intent dispatched");
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Select All failed", err);
     }
@@ -320,7 +281,6 @@ export function attachToolbarHandlers(refs) {
         return;
       }
       lockSelectedShapes();
-      log("INFO", "[toolbar-handlers] Lock intent dispatched");
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Lock failed", err);
     }
@@ -335,7 +295,6 @@ export function attachToolbarHandlers(refs) {
         return;
       }
       unlockSelectedShapes(); // selected locked or all locked if none selected
-      log("INFO", "[toolbar-handlers] Unlock intent dispatched");
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Unlock failed", err);
     }
@@ -356,12 +315,10 @@ export function attachToolbarHandlers(refs) {
         return;
       }
       if (!hasTwoOrMoreSelected()) {
-        log("INFO", "[toolbar-handlers] Align no-op (need 2+ selected)");
+        log("WARN", "[toolbar-handlers] Align: need 2+ selected");
         return;
       }
-      // Always align relative to selection hull
       alignSelected(mode);
-      log("INFO", "[toolbar-handlers] Align intent dispatched", { mode });
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Align failed", { mode, err });
     }
@@ -378,7 +335,8 @@ export function attachToolbarHandlers(refs) {
   try {
     if (strokePickrEl && fillPickrEl) {
       detachPickrs = installColorPickers({ strokePickrEl, fillPickrEl });
-      log("INFO", "[toolbar-handlers] Pickr color pickers installed via toolbar-color.js");
+      // Keep one INFO (installed); heavy logs inside pickr handlers are already minimal
+      log("INFO", "[toolbar-handlers] Pickr color pickers installed");
     } else {
       log("WARN", "[toolbar-handlers] Pickr hosts missing; color pickers not installed", {
         hasStrokeHost: !!strokePickrEl,
@@ -389,57 +347,47 @@ export function attachToolbarHandlers(refs) {
     log("ERROR", "[toolbar-handlers] Failed to install Pickr color pickers", e);
   }
 
-  // --- Debug button (optional) ---
-  const onDebugClick = async (ev) => {
+  // --- Debug button (optional, on-demand) ---
+  const onDebugClick = async () => {
     try {
       if (!debugBtn) return;
       debugBtn.disabled = true;
       const origText = debugBtn.textContent;
       debugBtn.textContent = "Collecting…";
 
-      const { text, snapshot } = await runDebugCapture({ format: 'json', copy: true, log: true });
+      const { text, snapshot } = await runDebugCapture({ format: 'json', copy: true, log: false });
 
-      // Simple visual feedback
+      // Visual feedback only; logging is on-demand
       debugBtn.textContent = "Copied ✓";
       setTimeout(() => {
         debugBtn.textContent = origText || "Debug";
         debugBtn.disabled = false;
-      }, 1200);
+      }, 1000);
 
+      // Keep a single INFO line (low frequency action)
       log("INFO", "[toolbar-handlers] Debug snapshot captured", {
-        copiedToClipboard: true,
-        shapeCount: snapshot?.scene?.shapeCount,
-        selectedCount: snapshot?.scene?.selectedCount,
-        fabricActiveType: snapshot?.fabricSelection?.activeType,
-        fabricMemberCount: snapshot?.fabricSelection?.memberCount
+        copiedToClipboard: !!text,
+        sections: snapshot?.meta?.sections || []
       });
-      // Full text already logged at DEBUG inside runDebugCapture
     } catch (e) {
       if (debugBtn) {
         debugBtn.textContent = "Failed";
         setTimeout(() => {
           debugBtn.textContent = "Debug";
           debugBtn.disabled = false;
-        }, 1200);
+        }, 1000);
       }
       log("ERROR", "[toolbar-handlers] Debug snapshot failed", e);
     }
   };
-  if (debugBtn) {
-    on(debugBtn, 'click', onDebugClick);
-    log("INFO", "[toolbar-handlers] Debug button handler attached");
-  } else {
-    log("DEBUG", "[toolbar-handlers] Debug button not present (skipping handler)");
-  }
+  if (debugBtn) on(debugBtn, 'click', onDebugClick);
 
   log("INFO", "[toolbar-handlers] Toolbar handlers attached");
 
   // Detach function for cleanup (hot reload, panel destroy)
   return function detach() {
     try {
-      handlers.forEach(off => {
-        try { off(); } catch {}
-      });
+      handlers.forEach(off => { try { off(); } catch {} });
       try { detachPickrs && detachPickrs(); } catch {}
       log("INFO", "[toolbar-handlers] Toolbar handlers detached");
     } catch (e) {

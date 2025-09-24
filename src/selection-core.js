@@ -22,15 +22,10 @@
  * - Removed unconditional stroke width reapplication on selection changes.
  *   (shapes-core.js now performs stroke width normalization only after actual
  *    scale/rotate gestures via transform tracking + 'modified' event.)
- * - This reduces redundant writes and render cycles when simply changing selection.
  *
- * Dependencies:
- * - log.js (log)
- * - transformer.js (attachTransformerForShape, detachTransformer)
- * - shape-state.js (setShapeState, selectShape, deselectShape, setMultiSelected)
- * - shape-defs.js (getShapeDef)
- * - state.js (sceneDesignerStore, getState)
- * - fabric-wrapper.js (default fabric namespace for ActiveSelection)
+ * Logging Policy (reduced noise):
+ * - WARN/ERROR only for exceptional cases.
+ * - No DEBUG spam in hot paths (getters, frequent selection updates).
  * -----------------------------------------------------------
  */
 
@@ -50,13 +45,7 @@ import fabric from './fabric-wrapper.js';
 function getCanonicalShapeById(shapeLike) {
   if (!shapeLike || !shapeLike._id) return null;
   const shapes = getState().shapes || [];
-  const result = shapes.find(s => s._id === shapeLike._id) || null;
-  log("DEBUG", "[selection-core] getCanonicalShapeById", {
-    inputId: shapeLike?._id,
-    found: !!result,
-    ids: shapes.map(s => s._id)
-  });
-  return result;
+  return shapes.find(s => s._id === shapeLike._id) || null;
 }
 
 /**
@@ -67,14 +56,13 @@ function ensureFabricActiveSelection(shapes) {
   const canvas = getState().fabricCanvas;
   if (!canvas || !Array.isArray(shapes) || shapes.length <= 1) return;
 
-  // Quick id set compare to avoid churn
+  // Avoid churn if ActiveSelection already matches desired ids
   const active = typeof canvas.getActiveObject === 'function' ? canvas.getActiveObject() : null;
   const wantIds = shapes.map(s => s && s._id).filter(Boolean).sort();
 
   if (active && active.type === 'activeSelection' && Array.isArray(active._objects)) {
     const activeIds = active._objects.map(o => o && o._id).filter(Boolean).sort();
     if (activeIds.length === wantIds.length && activeIds.every((v, i) => v === wantIds[i])) {
-      log("DEBUG", "[selection-core] ActiveSelection already matches; no-op");
       return;
     }
   }
@@ -98,8 +86,6 @@ function ensureFabricActiveSelection(shapes) {
 
     if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
     else canvas.renderAll();
-
-    log("DEBUG", "[selection-core] Fabric ActiveSelection set", { ids: wantIds });
   } catch (e) {
     log("ERROR", "[selection-core] Failed to create/set ActiveSelection", e);
   }
@@ -109,11 +95,6 @@ function ensureFabricActiveSelection(shapes) {
  * Set a single selected shape (or clear selection with null).
  */
 export function setSelectedShape(shape) {
-  log("DEBUG", "[selection-core] setSelectedShape ENTRY", {
-    incomingId: shape?._id,
-    prevSelectedId: getState().selectedShape?._id
-  });
-
   const canonicalShape = getCanonicalShapeById(shape);
 
   // Deselect previous single if any
@@ -131,6 +112,7 @@ export function setSelectedShape(shape) {
     selectedShapes: canonicalShape ? [canonicalShape] : []
   });
 
+  // Transformer lifecycle
   if (canonicalShape) {
     selectShape(canonicalShape);
     const def = getShapeDef(canonicalShape);
@@ -139,16 +121,9 @@ export function setSelectedShape(shape) {
     } else {
       detachTransformer();
     }
-    // (Removed stroke width reapply here – now transform-driven only)
   } else {
     detachTransformer();
   }
-
-  notifySelectionChanged();
-  log("DEBUG", "[selection-core] setSelectedShape EXIT", {
-    selectedShape: getState().selectedShape?._id,
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
-  });
 }
 
 /**
@@ -158,10 +133,6 @@ export function setSelectedShape(shape) {
  * - None: detach transformer.
  */
 export function setSelectedShapes(arr) {
-  log("DEBUG", "[selection-core] setSelectedShapes ENTRY", {
-    inputIds: Array.isArray(arr) ? arr.map(s => s?._id) : []
-  });
-
   const all = getState().shapes || [];
   const newArr = Array.isArray(arr)
     ? arr.map(shape => getCanonicalShapeById(shape)).filter(Boolean)
@@ -184,7 +155,7 @@ export function setSelectedShapes(arr) {
     selectedShape: newArr.length === 1 ? newArr[0] : null
   });
 
-  // Update per-shape state flags
+  // Update per-shape state flags and transformer
   newArr.forEach(shape => {
     setMultiSelected(shape, newArr.length > 1);
     if (newArr.length === 1) selectShape(shape);
@@ -197,34 +168,24 @@ export function setSelectedShapes(arr) {
     } else {
       detachTransformer();
     }
-    // (Removed stroke width reapply here – transform lifecycle handles it now)
   } else if (newArr.length > 1) {
     ensureFabricActiveSelection(newArr);
   } else {
     detachTransformer();
   }
-
-  notifySelectionChanged();
-  log("DEBUG", "[selection-core] setSelectedShapes EXIT", {
-    selectedShape: getState().selectedShape?._id,
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
-  });
 }
 
 /**
  * Select all shapes in the store (multi-select).
  */
 export function selectAllShapes() {
-  log("DEBUG", "[selection-core] selectAllShapes ENTRY");
   setSelectedShapes((getState().shapes || []).slice());
-  log("DEBUG", "[selection-core] selectAllShapes EXIT");
 }
 
 /**
  * Deselect all shapes and detach transformer.
  */
 export function deselectAll() {
-  log("DEBUG", "[selection-core] deselectAll ENTRY");
   if (Array.isArray(getState().selectedShapes)) {
     getState().selectedShapes.forEach(s => deselectShape(s));
   }
@@ -237,41 +198,24 @@ export function deselectAll() {
   });
 
   detachTransformer();
-  notifySelectionChanged();
-  log("DEBUG", "[selection-core] deselectAll EXIT");
 }
 
 /**
  * Currently unused; kept for compatibility and future hook injection.
  */
-export function attachSelectionHandlers(shape) {
-  log("DEBUG", "[selection-core] attachSelectionHandlers NO-OP", {
-    shapeId: shape?._id, type: shape?._type
-  });
+export function attachSelectionHandlers(_shape) {
+  // NO-OP by design
 }
 
-/** Utils */
+/** Utils (no logging to keep hot paths quiet) */
 export function isShapeSelected(shape) {
-  const result = !!shape && !!shape._selected;
-  log("DEBUG", "[selection-core] isShapeSelected", { id: shape?._id, result });
-  return result;
+  return !!shape && !!shape._selected;
 }
 export function getSelectedShapes() {
-  const arr = getState().selectedShapes || [];
-  log("DEBUG", "[selection-core] getSelectedShapes", { ids: arr.map(s => s?._id) });
-  return arr;
+  return getState().selectedShapes || [];
 }
 export function getSelectedShape() {
-  const s = getState().selectedShape || null;
-  log("DEBUG", "[selection-core] getSelectedShape", { id: s?._id });
-  return s;
-}
-
-function notifySelectionChanged() {
-  log("DEBUG", "[selection-core] notifySelectionChanged", {
-    selectedShape: getState().selectedShape?._id,
-    selectedShapes: getState().selectedShapes.map(s => s?._id)
-  });
+  return getState().selectedShape || null;
 }
 
 // Optional debugging helpers (dev only)
@@ -286,4 +230,3 @@ if (typeof window !== "undefined") {
     getSelectedShapes
   };
 }
-

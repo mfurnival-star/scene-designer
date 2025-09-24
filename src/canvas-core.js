@@ -19,6 +19,12 @@
  * - state.js
  * - canvas-events.js, canvas-constraints.js, selection-outlines.js
  * - minilayout.js (for panel resizing API)
+ *
+ * Logging Policy (reduced noise):
+ * - INFO: key lifecycle (panel init/cleanup, background set/cleared).
+ * - DEBUG: responsive zoom changes, fallback resize path, store setState (uncommon).
+ * - WARN/ERROR: unchanged for failure paths.
+ * - No entry/exit spam in hot paths.
  */
 
 import { log } from './log.js';
@@ -157,7 +163,8 @@ function resizeMiniLayoutPanel(canvas, width, height) {
     }
     if (layoutInstance && typeof layoutInstance.resizePanelBody === "function") {
       layoutInstance.resizePanelBody('CanvasPanel', width, height);
-      log("INFO", "[canvas-core] resizePanelBody(CanvasPanel)", { width, height });
+      // Reduced to DEBUG: may be called frequently on image/apply
+      log("DEBUG", "[canvas-core] resizePanelBody(CanvasPanel)", { width, height });
     } else {
       // Fallback: resize the wrapper, clip host, and panel body directly
       if (canvas && canvas.lowerCanvasEl) {
@@ -182,7 +189,7 @@ function resizeMiniLayoutPanel(canvas, width, height) {
           panel.style.height = `${height}px`;
           panel.style.flex = "0 0 auto";
         }
-        log("INFO", "[canvas-core] Fallback panel/container resize", { width, height });
+        log("DEBUG", "[canvas-core] Fallback panel/container resize", { width, height });
       }
     }
   } catch (e) {
@@ -192,6 +199,7 @@ function resizeMiniLayoutPanel(canvas, width, height) {
 
 /**
  * Keep Fabric wrapper and clip host CSS in sync with canvas size.
+ * Silent on success; WARN on failure.
  */
 function syncWrapperAndHostSizes(canvas) {
   try {
@@ -224,6 +232,7 @@ function syncWrapperAndHostSizes(canvas) {
 
 /**
  * Set upper/lower canvas visual layering to avoid bleeding.
+ * Silent on success; WARN on failure.
  */
 function enforceLayerZOrder(canvas) {
   try {
@@ -256,6 +265,7 @@ function enforceLayerZOrder(canvas) {
  * - Uses Fabric zoom so pointer math remains correct.
  * - Does NOT change logical canvas width/height.
  * - Adjusts wrapper/clipHost and panel body height to the scaled height.
+ * DEBUG only when scale actually changes.
  */
 function applyResponsiveViewport(canvas, reason = "") {
   try {
@@ -288,13 +298,12 @@ function applyResponsiveViewport(canvas, reason = "") {
           canvas.viewportTransform[5] = 0;     // f (y)
         }
         canvas.__responsiveScale = scale;
-        log("INFO", "[canvas-core] Responsive zoom applied", { reason, scale, availableW, canvasW });
+        log("DEBUG", "[canvas-core] Responsive zoom applied", { reason, scale, availableW, canvasW });
       }
     }
 
     // Size the visual host to the scaled height; width follows panel body (100%)
-    const scaledW = Math.round(canvasW * scale);
-    const scaledH = Math.round(canvasH * scale);
+    const scaledH = Math.round(canvasH * (canvas.__responsiveScale || 1));
 
     // Let the panel/body be fluid in width; hard-set heights to scaledH to avoid overflow
     body.style.width = "100%";
@@ -330,13 +339,6 @@ function applyResponsiveViewport(canvas, reason = "") {
 function applyBackgroundImage(canvas, url, imgObj) {
   if (!canvas) return;
 
-  log("DEBUG", "[canvas-core] applyBackgroundImage ENTRY", {
-    url,
-    hasImgObj: !!imgObj,
-    imgComplete: !!(imgObj && imgObj.complete),
-    imgNatural: imgObj ? { w: imgObj.naturalWidth, h: imgObj.naturalHeight } : null
-  });
-
   const maxW = getState().settings?.canvasMaxWidth ?? 600;
   const maxH = getState().settings?.canvasMaxHeight ?? 400;
 
@@ -346,12 +348,11 @@ function applyBackgroundImage(canvas, url, imgObj) {
         setBgFabricImage(null);
         if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
         else canvas.renderAll();
-        log("INFO", "[canvas-core] Background cleared (canvas.backgroundImage=null)");
+        log("INFO", "[canvas-core] Background cleared");
       });
     } catch (e) {
       log("ERROR", "[canvas-core] Clearing background image failed", e);
     }
-    log("DEBUG", "[canvas-core] applyBackgroundImage EXIT (cleared)");
     return;
   }
 
@@ -401,21 +402,15 @@ function applyBackgroundImage(canvas, url, imgObj) {
       const applied = canvas.backgroundImage || bg;
       setBgFabricImage(applied);
 
-      const d = {
-        url,
-        imgW: imgObj.naturalWidth,
-        imgH: imgObj.naturalHeight,
-        canvasW: canvas.getWidth(),
-        canvasH: canvas.getHeight(),
-        scaleX: applied.scaleX,
-        scaleY: applied.scaleY,
-        objectsCount: canvas.getObjects().length
-      };
-
       if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
       else canvas.renderAll();
 
-      log("INFO", "[canvas-core] Background image set via canvas.backgroundImage", d);
+      log("INFO", "[canvas-core] Background image set", {
+        imgW: imgObj.naturalWidth,
+        imgH: imgObj.naturalHeight,
+        canvasW: canvas.getWidth(),
+        canvasH: canvas.getHeight()
+      });
     });
   } catch (e) {
     log("ERROR", "[canvas-core] Failed to set background via canvas.setBackgroundImage", e);
@@ -423,8 +418,6 @@ function applyBackgroundImage(canvas, url, imgObj) {
 
   // Finally, apply responsive zoom to fit current panel width (if enabled)
   applyResponsiveViewport(canvas, "applyBackgroundImage");
-
-  log("DEBUG", "[canvas-core] applyBackgroundImage EXIT");
 }
 
 /**
@@ -472,9 +465,7 @@ function applyCanvasSizeFromSettings(canvas) {
 
     log("INFO", "[canvas-core] Canvas size applied", {
       width: canvas.getWidth(),
-      height: canvas.getHeight(),
-      retinaScaling: (typeof canvas.getRetinaScaling === 'function') ? canvas.getRetinaScaling() : undefined,
-      objectsCount: canvas.getObjects().length
+      height: canvas.getHeight()
     });
   } catch (e) {
     log("ERROR", "[canvas-core] applyCanvasSizeFromSettings failed", e);
@@ -482,10 +473,6 @@ function applyCanvasSizeFromSettings(canvas) {
 }
 
 export function buildCanvasPanel({ element, title, componentName }) {
-  log("INFO", "[canvas-core] buildCanvasPanel ENTRY", {
-    elementType: element?.tagName, title, componentName
-  });
-
   if (!element) {
     log("ERROR", "[canvas-core] buildCanvasPanel: element is null/undefined");
     return;
@@ -533,11 +520,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
 
   const s0 = getState();
   if (s0.imageURL && s0.imageObj) {
-    log("DEBUG", "[canvas-core] Initial state has image → applying", {
-      url: s0.imageURL,
-      imgComplete: !!s0.imageObj?.complete,
-      imgNatural: { w: s0.imageObj?.naturalWidth, h: s0.imageObj?.naturalHeight }
-    });
     applyBackgroundImage(canvas, s0.imageURL, s0.imageObj);
   }
 
@@ -565,12 +547,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
     try {
       switch (details.type) {
         case "setImage": {
-          log("DEBUG", "[canvas-core] Store: setImage received", {
-            url: state.imageURL,
-            hasImgObj: !!state.imageObj,
-            imgComplete: !!state.imageObj?.complete,
-            imgNatural: { w: state.imageObj?.naturalWidth, h: state.imageObj?.naturalHeight }
-          });
           applyBackgroundImage(canvas, state.imageURL, state.imageObj);
           break;
         }
@@ -637,7 +613,5 @@ export function buildCanvasPanel({ element, title, componentName }) {
   }
   window.addEventListener('beforeunload', cleanup, { once: true });
 
-  log("INFO", "[canvas-core] Canvas panel built and initialized");
-  log("DEBUG", "[canvas-core] buildCanvasPanel EXIT");
+  log("INFO", "[canvas-core] Canvas panel initialized");
 }
-

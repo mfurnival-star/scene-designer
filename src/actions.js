@@ -1,9 +1,9 @@
 /**
  * actions.js
  * -----------------------------------------------------------
- * Scene Designer – Centralized Business Logic for Scene Actions (ESM ONLY, Manifesto-compliant, DEBUG Logging Sweep)
- * - Centralizes all scene actions: add shape, delete, duplicate, lock, unlock, select, reset rotation, etc.
- * - UI (toolbars, keyboard, etc.) emit only intents and never mutate state or selection directly.
+ * Scene Designer – Centralized Business Logic for Scene Actions (ESM ONLY)
+ * - Centralizes scene actions: add, delete, duplicate, lock, unlock, reset rotation, align.
+ * - UI emits intents; no direct state mutation outside this module.
  *
  * Exports:
  *    addShapeOfType,
@@ -14,13 +14,14 @@
  *    resetRotationForSelectedShapes,
  *    alignSelected
  *
- * 2025-09-24 Update:
- * - Added new 'ellipse' shape type support (rotatable, free aspect ratio).
- * - addShapeOfType now creates ellipse via makeEllipseShape (center-based like circle).
- * - duplicateSelectedShapes fallback clone path now handles ellipse.
- * - resetRotationForSelectedShapes now includes ellipse eligibility.
+ * 2025-09-24:
+ * - Ellipse shape support added (free aspect, rotatable).
+ * - Duplicate now handles ellipse fallback path.
  *
- * Logging: All via log.js (levels: ERROR, WARN, INFO, DEBUG).
+ * Logging Policy (reduced noise):
+ * - INFO for user-visible results (added/removed/duplicated/locked/unlocked/reset).
+ * - WARN/ERROR for exceptional cases.
+ * - Minimal DEBUG retained; no large state dumps.
  * -----------------------------------------------------------
  */
 
@@ -36,8 +37,7 @@ import {
   getState,
   addShape,
   removeShape,
-  setShapes,
-  setSelectedShapes
+  setShapes
 } from './state.js';
 import {
   setSelectedShapes as selectionSetSelectedShapes,
@@ -46,12 +46,10 @@ import {
 
 /**
  * Add a shape of the given type, apply business rules (select, stroke width).
- * Handles creation, addition, selection, and stroke width logic.
  * @param {string} type - "point" | "rect" | "circle" | "ellipse"
- * @param {Object} [opts] - Optional settings override (position, etc)
+ * @param {Object} [opts] - Optional settings (x,y overrides)
  */
 export function addShapeOfType(type, opts = {}) {
-  log("DEBUG", "[actions] addShapeOfType ENTRY", { type, opts, stateBefore: { ...getState() } });
   const store = getState();
   const w = store.settings?.defaultRectWidth || 50;
   const h = store.settings?.defaultRectHeight || 30;
@@ -69,71 +67,45 @@ export function addShapeOfType(type, opts = {}) {
   } else if (type === "circle") {
     shape = makeCircleShape(x, y, r);
   } else if (type === "ellipse") {
-    // Ellipse factory expects center (x,y) and full width/height
     shape = makeEllipseShape(x, y, w, h);
   } else if (type === "point") {
     shape = makePointShape(x, y);
   }
 
-  if (shape) {
-    log("DEBUG", "[actions] addShapeOfType: shape created", { type, shape, shapeId: shape._id });
-    addShape(shape);
-    log("DEBUG", "[actions] addShapeOfType: shape added to store", { shapesAfter: getState().shapes.map(s => s._id) });
-
-    // Always select new shape
-    selectionSetSelectedShapes([shape]);
-    log("DEBUG", "[actions] addShapeOfType: selection set", {
-      selectedShape: shape._id,
-      selectedShapes: getState().selectedShapes.map(s => s._id)
-    });
-
-    // Apply stroke width (business rule)
-    const strokeWidth = store.settings?.defaultStrokeWidth ?? 1;
-    setStrokeWidthForSelectedShapes(strokeWidth);
-
-    log("INFO", `[actions] Added ${type} shape`, { id: shape._id });
-  } else {
-    log("WARN", "[actions] addShapeOfType: Failed to create shape", { type, opts });
+  if (!shape) {
+    log("WARN", "[actions] addShapeOfType: failed to create shape", { type });
+    return;
   }
-  log("DEBUG", "[actions] addShapeOfType EXIT", { stateAfter: { ...getState() } });
+
+  addShape(shape);
+  selectionSetSelectedShapes([shape]);
+
+  // Apply default stroke width to the new selection
+  const strokeWidth = store.settings?.defaultStrokeWidth ?? 1;
+  setStrokeWidthForSelectedShapes(strokeWidth);
+
+  log("INFO", "[actions] Shape added", { type, id: shape._id });
 }
 
 /**
  * Delete all currently selected, unlocked shapes.
- * Clears selection and detaches transformer after deletion.
+ * Clears selection after deletion.
  */
 export function deleteSelectedShapes() {
-  log("DEBUG", "[actions] deleteSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => ({
-      _id: s?._id, _type: s?._type, _label: s?._label
-    })),
-    shapesBefore: getState().shapes.map(s => ({
-      _id: s?._id, _type: s?._type, _label: s?._label
-    }))
-  });
   const selected = getState().selectedShapes || [];
   if (!selected.length) {
-    log("INFO", "[actions] deleteSelectedShapes: No shapes selected, nothing to delete.");
-    log("DEBUG", "[actions] deleteSelectedShapes EXIT (no action)", {
-      shapesAfter: getState().shapes.map(s => s._id)
-    });
+    log("INFO", "[actions] deleteSelectedShapes: nothing selected");
     return;
   }
-  const unlockedToDeleteIds = selected.filter(s => !s.locked).map(s => s._id);
-  log("DEBUG", "[actions] deleteSelectedShapes: unlocked shapes to delete", { unlockedToDeleteIds });
-  const newShapes = getState().shapes.filter(s => !unlockedToDeleteIds.includes(s._id));
-  log("DEBUG", "[actions] deleteSelectedShapes: newShapes array after filter", {
-    newShapesIds: newShapes.map(s => s._id)
-  });
+  const unlockedIds = selected.filter(s => !s.locked).map(s => s._id);
+  if (unlockedIds.length === 0) {
+    log("INFO", "[actions] deleteSelectedShapes: all selected shapes are locked");
+    return;
+  }
+  const newShapes = getState().shapes.filter(s => !unlockedIds.includes(s._id));
   setShapes(newShapes);
   deselectAll();
-  log("INFO", "[actions] deleteSelectedShapes: Deleted shapes, selection cleared");
-  log("DEBUG", "[actions] deleteSelectedShapes EXIT", {
-    shapesInStoreAfter: getState().shapes.map(s => ({
-      _id: s._id, _type: s._type, _label: s._label
-    })),
-    selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
-  });
+  log("INFO", "[actions] Deleted shapes", { count: unlockedIds.length, ids: unlockedIds });
 }
 
 /**
@@ -145,31 +117,19 @@ function _newIdFor(type = "shape") {
 
 /**
  * Duplicate all currently selected, unlocked shapes.
- * The new shapes are selected after duplication.
- * - Preserves visual properties (size, rotation, stroke/fill).
- * - Offsets position by a small nudge.
+ * New shapes are selected after duplication.
  */
 export function duplicateSelectedShapes() {
-  log("DEBUG", "[actions] duplicateSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => ({
-      _id: s?._id, _type: s?._type, _label: s?._label
-    })),
-    shapesBefore: getState().shapes.map(s => ({
-      _id: s?._id, _type: s?._type, _label: s?._label
-    }))
-  });
-
   const selected = getState().selectedShapes || [];
-  const unlockedToDuplicate = selected.filter(s => !s.locked);
+  const unlocked = selected.filter(s => !s.locked);
   const offset = 20;
 
-  if (unlockedToDuplicate.length === 0) {
-    log("INFO", "[actions] duplicateSelectedShapes: No unlocked shapes selected");
+  if (unlocked.length === 0) {
+    log("INFO", "[actions] duplicateSelectedShapes: no unlocked shapes selected");
     return;
   }
 
-  const canvas = getState().fabricCanvas;
-  const promises = unlockedToDuplicate.map(orig => new Promise((resolve) => {
+  const promises = unlocked.map(orig => new Promise((resolve) => {
     if (typeof orig.clone === "function") {
       try {
         orig.clone((cloned) => {
@@ -204,10 +164,6 @@ export function duplicateSelectedShapes() {
             }
 
             addShape(cloned);
-            log("DEBUG", "[actions] duplicateSelectedShapes: cloned shape added", {
-              cloneId: cloned._id,
-              type: cloned._type
-            });
             resolve(cloned);
           } catch (e) {
             log("ERROR", "[actions] duplicateSelectedShapes: post-clone adjust failed", e);
@@ -219,7 +175,7 @@ export function duplicateSelectedShapes() {
         resolve(null);
       }
     } else {
-      // Fallback: create via factory (lower fidelity)
+      // Fallback: factory-based (lower fidelity)
       let clone = null;
       if (orig._type === "rect") {
         clone = makeRectShape(orig.left + offset, orig.top + offset, orig.width, orig.height);
@@ -230,7 +186,6 @@ export function duplicateSelectedShapes() {
           orig.radius
         );
       } else if (orig._type === "ellipse") {
-        // Derive width/height from bounding box if available (ellipse group stores width/height)
         const w = orig.width || ((orig.getScaledWidth && orig.getScaledWidth()) || 50);
         const h = orig.height || ((orig.getScaledHeight && orig.getScaledHeight()) || 30);
         const centerX = (orig.left ?? 0) + w / 2 + offset;
@@ -250,11 +205,9 @@ export function duplicateSelectedShapes() {
         clone.lockScalingY = false;
         clone.lockRotation = false;
         clone.hoverCursor = 'move';
-
         addShape(clone);
         log("WARN", "[actions] duplicateSelectedShapes: used fallback factory clone", {
-          cloneId: clone._id,
-          type: clone._type
+          cloneId: clone._id, type: clone._type
         });
       }
       resolve(clone);
@@ -265,33 +218,27 @@ export function duplicateSelectedShapes() {
     const created = newShapes.filter(Boolean);
     if (created.length > 0) {
       selectionSetSelectedShapes(created);
-      log("INFO", "[actions] duplicateSelectedShapes: Duplicated shapes and selected new", {
-        newShapes: created.map(s => s._id)
-      });
+      log("INFO", "[actions] Duplicated shapes", { count: created.length, ids: created.map(s => s._id) });
+    } else {
+      log("INFO", "[actions] duplicateSelectedShapes: no clones created");
     }
-    log("DEBUG", "[actions] duplicateSelectedShapes EXIT", {
-      shapesInStoreAfter: getState().shapes.map(s => ({
-        _id: s._id, _type: s._type, _label: s._label
-      })),
-      selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
-    });
   });
 }
 
 /**
  * Lock all currently selected shapes (selection preserved).
- * Shapes remain selectable for future unlock.
  */
 export function lockSelectedShapes() {
-  log("DEBUG", "[actions] lockSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => ({
-      _id: s?._id, _type: s?._type, _label: s?._label
-    }))
-  });
   const selected = getState().selectedShapes || [];
-  const canvas = getState().fabricCanvas;
+  if (!selected.length) {
+    log("INFO", "[actions] lockSelectedShapes: nothing selected");
+    return;
+  }
 
+  const affected = [];
   selected.forEach(shape => {
+    if (!shape) return;
+    if (shape.locked) return;
     shape.locked = true;
     shape.selectable = true;
     shape.evented = true;
@@ -304,47 +251,42 @@ export function lockSelectedShapes() {
     if (typeof shape.setCoords === "function") {
       try { shape.setCoords(); } catch {}
     }
-    log("DEBUG", "[actions] lockSelectedShapes: shape locked", {
-      shapeId: shape._id,
-      type: shape._type,
-      label: shape._label
-    });
+    affected.push(shape._id);
   });
 
-  selectionSetSelectedShapes(selected.slice());
+  if (!affected.length) {
+    log("INFO", "[actions] lockSelectedShapes: no unlocked shapes to lock");
+    return;
+  }
 
+  // Preserve selection
+  selectionSetSelectedShapes(selected.slice());
+  const canvas = getState().fabricCanvas;
   if (canvas) {
     if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
     else canvas.renderAll();
   }
 
-  log("INFO", "[actions] lockSelectedShapes: Locked shapes (selection preserved)", {
-    lockedShapes: selected.map(s => s._id)
-  });
-  log("DEBUG", "[actions] lockSelectedShapes EXIT", {
-    shapesInStoreAfter: getState().shapes.map(s => ({
-      _id: s._id, _type: s._type, _label: s._label
-    })),
-    selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
-  });
+  log("INFO", "[actions] Locked shapes", { count: affected.length, ids: affected });
 }
 
 /**
  * Unlock selected shapes; if none selected, unlock all locked shapes.
  */
 export function unlockSelectedShapes() {
-  log("DEBUG", "[actions] unlockSelectedShapes ENTRY", {
-    selectedShapes: getState().selectedShapes.map(s => ({
-      _id: s?._id, _type: s?._type, _label: s?._label
-    }))
-  });
   const selected = getState().selectedShapes || [];
-  const canvas = getState().fabricCanvas;
+  const shapes = getState().shapes || [];
 
   const targets = selected.length > 0
     ? selected.filter(Boolean)
-    : (getState().shapes || []).filter(s => s.locked);
+    : shapes.filter(s => s.locked);
 
+  if (!targets.length) {
+    log("INFO", "[actions] unlockSelectedShapes: no shapes to unlock");
+    return;
+  }
+
+  const affected = [];
   targets.forEach(shape => {
     shape.locked = false;
     shape.selectable = true;
@@ -358,63 +300,36 @@ export function unlockSelectedShapes() {
     if (typeof shape.setCoords === "function") {
       try { shape.setCoords(); } catch {}
     }
-    log("DEBUG", "[actions] unlockSelectedShapes: shape unlocked", {
-      shapeId: shape._id,
-      type: shape._type,
-      label: shape._label
-    });
+    affected.push(shape._id);
   });
 
-  if (targets.length === 0) {
-    log("INFO", "[actions] unlockSelectedShapes: No shapes to unlock");
-  } else {
-    const preserve = getState().selectedShapes.slice();
-    selectionSetSelectedShapes(preserve);
-    if (canvas) {
-      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-      else canvas.renderAll();
-    }
-    log("INFO", "[actions] unlockSelectedShapes: Unlocked shapes", {
-      unlockedShapes: targets.map(s => s._id),
-      selectionPreserved: preserve.map(s => s._id)
-    });
+  // Preserve selection as-is (or none if unlocking all locked without selection)
+  const preserve = getState().selectedShapes.slice();
+  selectionSetSelectedShapes(preserve);
+
+  const canvas = getState().fabricCanvas;
+  if (canvas) {
+    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+    else canvas.renderAll();
   }
 
-  log("DEBUG", "[actions] unlockSelectedShapes EXIT", {
-    shapesInStoreAfter: getState().shapes.map(s => ({
-      _id: s._id, _type: s._type, _label: s._label
-    })),
-    selectedShapesAfter: getState().selectedShapes.map(s => s?._id)
-  });
+  log("INFO", "[actions] Unlocked shapes", { count: affected.length, ids: affected });
 }
 
 /**
  * Reset rotation (angle) to 0° for all currently selected, unlocked Rect/Circle/Ellipse shapes.
- * - NOP for Point shapes.
- * - Preserves visual center position (pivot).
+ * NOP for Point shapes.
  */
 export function resetRotationForSelectedShapes() {
-  const stateBefore = getState();
-  const selected = stateBefore.selectedShapes || [];
-  log("DEBUG", "[actions] resetRotationForSelectedShapes ENTRY", {
-    selected: selected.map(s => ({
-      id: s?._id,
-      type: s?._type,
-      locked: s?.locked,
-      angle: s?.angle
-    }))
-  });
-
+  const selected = getState().selectedShapes || [];
   const targets = selected.filter(s =>
     s && !s.locked && (s._type === 'rect' || s._type === 'circle' || s._type === 'ellipse')
   );
 
   if (targets.length === 0) {
-    log("INFO", "[actions] resetRotationForSelectedShapes: No eligible shapes (need unlocked rect/circle/ellipse)");
+    log("INFO", "[actions] resetRotationForSelectedShapes: no eligible shapes (need unlocked rect/circle/ellipse)");
     return;
   }
-
-  const canvas = getState().fabricCanvas;
 
   targets.forEach(shape => {
     try {
@@ -444,38 +359,23 @@ export function resetRotationForSelectedShapes() {
       }
 
       if (typeof shape.setCoords === "function") shape.setCoords();
-      log("DEBUG", "[actions] resetRotationForSelectedShapes: angle reset", {
-        id: shape._id,
-        type: shape._type,
-        center
-      });
     } catch (e) {
       log("ERROR", "[actions] resetRotationForSelectedShapes: failed to reset angle", {
-        shapeId: shape._id,
-        error: e
+        id: shape._id, error: e
       });
     }
   });
 
+  const canvas = getState().fabricCanvas;
   if (canvas) {
     if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
     else canvas.renderAll();
   }
 
-  log("INFO", "[actions] resetRotationForSelectedShapes: Rotation reset to 0°", {
-    ids: targets.map(t => t._id)
-  });
-  log("DEBUG", "[actions] resetRotationForSelectedShapes EXIT", {
-    selectedAfter: getState().selectedShapes.map(s => ({
-      id: s?._id,
-      angle: s?.angle
-    }))
-  });
+  log("INFO", "[actions] Rotation reset to 0°", { ids: targets.map(t => t._id) });
 }
 
 /**
  * Alignment (left/centerX/right/top/middleY/bottom) for selected shapes.
- * Implementation in actions-alignment.js
  */
 export { alignSelected } from './actions-alignment.js';
-
