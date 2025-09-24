@@ -61,7 +61,7 @@ export const settingsRegistry = [
   { key: "shapeStartXPercent", label: "Shape Start X (%)", type: "number", default: 10, min: 0, max: 100, step: 1 },
   { key: "shapeStartYPercent", label: "Shape Start Y (%)", type: "number", default: 5, min: 0, max: 100, step: 1 },
   { key: "toolbarUIScale", label: "Toolbar UI Scale", type: "number", default: 1, min: 0.5, max: 2, step: 0.1 },
-  { key: "showDiagnosticLabels", label: "Show Diagnostic Labels", type: "boolean", default: true },
+  { key: "showDiagnosticLabels", label: "Show Diagnostic Labels", type: "boolean", default: false },
   { key: "multiDragBox", label: "Show Multi-Drag Box", type: "boolean", default: true },
   { key: "reticleSize", label: "Point Reticle Size", type: "number", default: 14, min: 4, max: 60, step: 1 },
   { key: "reticleStyle", label: "Point Reticle Style", type: "select", default: "crosshairHalo", options: [
@@ -86,7 +86,7 @@ export const settingsRegistry = [
     ]
   },
   { key: "INTERCEPT_CONSOLE", label: "Intercept Console", type: "boolean", default: false },
-  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: true },
+  { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: false },
   { key: "showScenarioRunner", label: "Show Scenario Runner Panel", type: "boolean", default: false },
   { key: "canvasResponsive", label: "Responsive Canvas", type: "boolean", default: true }
   // Add more settings here as needed
