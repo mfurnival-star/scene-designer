@@ -1,32 +1,7 @@
-/**
- * toolbar-state.js
- * -----------------------------------------------------------
- * Scene Designer – Toolbar State Sync (ESM ONLY)
- * Purpose:
- * - Derive button enabled/disabled state from the centralized store.
- * - Keep toolbar scale in sync with settings (toolbarUIScale).
- * - No business logic and no event wiring; only UI state updates.
- *
- * Public Exports:
- * - installButtonsStateSync(refs) -> detachFn
- * - installToolbarScaleSync(containerEl) -> detachFn
- *
- * Logging (reduced noise):
- * - INFO only on install/detach and major errors/warnings.
- * - No per-change DEBUG spam inside hot paths.
- * -----------------------------------------------------------
- */
-
 import { getState, sceneDesignerStore } from './state.js';
 import { log } from './log.js';
+import { subscribeHistory, getHistorySnapshot } from './commands/command-bus.js';
 
-/**
- * Utility: Enable/disable a button element, update ARIA and title.
- * @param {HTMLButtonElement} el
- * @param {boolean} enabled
- * @param {string} [disabledTitle]
- * @param {string} [enabledTitle]
- */
 function setEnabled(el, enabled, disabledTitle, enabledTitle) {
   if (!el) return;
   el.disabled = !enabled;
@@ -40,27 +15,22 @@ function setEnabled(el, enabled, disabledTitle, enabledTitle) {
   }
 }
 
-/**
- * Install state-driven button enable/disable updates.
- * Accepts DOM refs returned by renderToolbar().
- * Returns a detach function to unsubscribe.
- */
 export function installButtonsStateSync(refs) {
   const {
-    // Core actions
     deleteBtn,
     duplicateBtn,
     resetRotationBtn,
     selectAllBtn,
     lockBtn,
     unlockBtn,
-    // Alignment controls (no reference dropdown)
     alignLeftBtn,
     alignCenterXBtn,
     alignRightBtn,
     alignTopBtn,
     alignMiddleYBtn,
-    alignBottomBtn
+    alignBottomBtn,
+    undoBtn,
+    redoBtn
   } = refs || {};
 
   function updateButtonsState() {
@@ -70,20 +40,16 @@ export function installButtonsStateSync(refs) {
     const selectedCount = selected.length;
     const shapesCount = shapes.length;
 
-    // Lock/Unlock state derivation
     const anyUnlockedSelected = selected.some(s => s && !s.locked);
     const anyLockedSelected = selected.some(s => s && s.locked);
     const anyLockedInStore = shapes.some(s => s && s.locked);
 
-    // Rotatable eligibility: unlocked rect/circle/ellipse
     const anyRotatableSelected = selected.some(s =>
       s && !s.locked && (s._type === 'rect' || s._type === 'circle' || s._type === 'ellipse')
     );
 
-    // Alignment eligibility: must have 2+ selected
     const canAlign = selectedCount >= 2;
 
-    // Delete
     setEnabled(
       deleteBtn,
       selectedCount > 0,
@@ -91,7 +57,6 @@ export function installButtonsStateSync(refs) {
       "Delete selected shape(s)"
     );
 
-    // Duplicate
     setEnabled(
       duplicateBtn,
       selectedCount > 0,
@@ -99,7 +64,6 @@ export function installButtonsStateSync(refs) {
       "Duplicate selected shape(s)"
     );
 
-    // Reset Rotation
     setEnabled(
       resetRotationBtn,
       anyRotatableSelected,
@@ -107,7 +71,6 @@ export function installButtonsStateSync(refs) {
       "Reset rotation to 0°"
     );
 
-    // Select All (enabled if there is at least one shape)
     setEnabled(
       selectAllBtn,
       shapesCount > 0,
@@ -115,7 +78,6 @@ export function installButtonsStateSync(refs) {
       "Select all shapes"
     );
 
-    // Lock
     setEnabled(
       lockBtn,
       selectedCount > 0 && anyUnlockedSelected,
@@ -123,7 +85,6 @@ export function installButtonsStateSync(refs) {
       "Lock selected shape(s)"
     );
 
-    // Unlock (selected locked OR any locked in store)
     const unlockEnabled =
       (selectedCount > 0 && anyLockedSelected) ||
       (selectedCount === 0 && anyLockedInStore);
@@ -138,7 +99,6 @@ export function installButtonsStateSync(refs) {
       unlockEnabledTitle
     );
 
-    // Alignment buttons (always relative to selection hull)
     setEnabled(
       alignLeftBtn,
       canAlign,
@@ -177,24 +137,33 @@ export function installButtonsStateSync(refs) {
     );
   }
 
-  // Initial run
+  function updateUndoRedoFromSnapshot() {
+    try {
+      const snap = getHistorySnapshot();
+      setEnabled(undoBtn, !!snap.canUndo, "Nothing to undo", "Undo");
+      setEnabled(redoBtn, !!snap.canRedo, "Nothing to redo", "Redo");
+    } catch (e) {
+      log("WARN", "[toolbar-state] Failed to read history snapshot", e);
+    }
+  }
+
   updateButtonsState();
+  updateUndoRedoFromSnapshot();
 
-  // Subscribe to all store changes (selection, shapes, locks, etc.)
-  const unsub = sceneDesignerStore.subscribe(() => updateButtonsState());
+  const unsubStore = sceneDesignerStore.subscribe(() => updateButtonsState());
+  const unsubHistory = subscribeHistory(({ canUndo, canRedo }) => {
+    setEnabled(undoBtn, !!canUndo, "Nothing to undo", "Undo");
+    setEnabled(redoBtn, !!canRedo, "Nothing to redo", "Redo");
+  });
 
-  log("INFO", "[toolbar-state] Button state sync installed");
+  log("INFO", "[toolbar-state] Button state sync installed (incl. undo/redo)");
   return function detach() {
-    try { unsub && unsub(); } catch {}
+    try { unsubStore && unsubStore(); } catch {}
+    try { unsubHistory && unsubHistory(); } catch {}
     log("INFO", "[toolbar-state] Button state sync detached");
   };
 }
 
-/**
- * Keep toolbar scale in sync with settings.toolbarUIScale.
- * @param {HTMLElement} containerEl - The root toolbar container (holds CSS var --toolbar-ui-scale)
- * @returns {function} detach
- */
 export function installToolbarScaleSync(containerEl) {
   if (!containerEl || typeof containerEl.style?.setProperty !== 'function') {
     log("WARN", "[toolbar-state] installToolbarScaleSync: invalid container element");
@@ -204,13 +173,10 @@ export function installToolbarScaleSync(containerEl) {
   const applyScale = () => {
     const scale = getState().settings?.toolbarUIScale ?? 1;
     containerEl.style.setProperty('--toolbar-ui-scale', String(scale));
-    // No per-change DEBUG logging to reduce noise
   };
 
-  // Initial apply
   applyScale();
 
-  // Subscribe for setting changes
   const unsub = sceneDesignerStore.subscribe((state, details) => {
     if (!details) return;
     if (details.type === "setSetting" && details.key === "toolbarUIScale") {

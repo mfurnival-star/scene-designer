@@ -1,25 +1,3 @@
-/**
- * toolbar-handlers.js
- * -----------------------------------------------------------
- * Scene Designer – Toolbar Event Handlers (ESM ONLY)
- * Purpose:
- * - Attach toolbar UI handlers (click/change) to DOM refs returned by renderToolbar().
- * - Dispatch intents to actions.js and selection.js (no business logic here).
- * - Handle image upload/server image selection via state.setImage().
- * - Color controls use Pickr via toolbar-color.js.
- * - Alignment controls dispatch actions.alignSelected(mode) relative to the selection hull.
- * - Debug button triggers a diagnostic snapshot via debug.js (on-demand).
- *
- * Logging (reduced noise):
- * - Keep WARN/ERROR for failures or disabled-clicks.
- * - Minimize INFO for routine successful clicks (UI already shows the effect).
- * - Image operations keep concise INFO since they affect canvas size.
- *
- * Public Export:
- * - attachToolbarHandlers(refs) -> detachFn
- * -----------------------------------------------------------
- */
-
 import { log } from './log.js';
 import { setImage, getState } from './state.js';
 import {
@@ -34,18 +12,13 @@ import {
 import { selectAllShapes } from './selection.js';
 import { installColorPickers } from './toolbar-color.js';
 import { runDebugCapture } from './debug.js';
+import { undo, redo } from './commands/command-bus.js';
 
-/**
- * Resolve an absolute URL for a server image under ./images/
- */
 function resolveServerImageUrl(filename) {
   const base = (typeof window !== 'undefined' ? window.location.href : '');
   return new URL(`./images/${filename}`, base).href;
 }
 
-/**
- * Load an HTMLImageElement from a Blob (fetch response) and invoke cb(imageEl).
- */
 function loadImageFromBlob(blob, cb, canonicalUrl) {
   try {
     const objectUrl = URL.createObjectURL(blob);
@@ -64,11 +37,6 @@ function loadImageFromBlob(blob, cb, canonicalUrl) {
   }
 }
 
-/**
- * Attach all toolbar handlers. Returns a detach() function for cleanup.
- * @param {object} refs - DOM references from renderToolbar()
- * @returns {function} detach
- */
 export function attachToolbarHandlers(refs) {
   if (!refs || typeof refs !== "object") {
     throw new Error("attachToolbarHandlers: refs object is required");
@@ -86,6 +54,9 @@ export function attachToolbarHandlers(refs) {
     selectAllBtn,
     lockBtn,
     unlockBtn,
+    // Undo/Redo
+    undoBtn,
+    redoBtn,
     // Alignment controls
     alignLeftBtn,
     alignCenterXBtn,
@@ -109,11 +80,10 @@ export function attachToolbarHandlers(refs) {
     handlers.push(() => el.removeEventListener(evt, fn, opts || false));
   }
 
-  // --- IMAGE: Upload (local file → data URL) ---
   const onUploadLabelClick = () => {
     try {
       if (!imageUploadInput) return;
-      imageUploadInput.value = ""; // allow same-file reselect
+      imageUploadInput.value = "";
       imageUploadInput.click();
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Upload label click failed", err);
@@ -150,7 +120,6 @@ export function attachToolbarHandlers(refs) {
         }
       };
       reader.readAsDataURL(file);
-      // Clear server select to avoid ambiguity
       if (serverImageSelect) serverImageSelect.value = "";
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Upload input change failed", err);
@@ -158,7 +127,6 @@ export function attachToolbarHandlers(refs) {
   };
   on(imageUploadInput, 'change', onUploadInputChange);
 
-  // --- IMAGE: Server select (fetch preflight → Blob → Image) ---
   const onServerImageChange = async (e) => {
     try {
       const filename = e?.target?.value || "";
@@ -192,7 +160,6 @@ export function attachToolbarHandlers(refs) {
         });
       }, absoluteUrl);
 
-      // Clear any chosen file upload
       if (imageUploadInput) imageUploadInput.value = "";
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Server image select failed", err);
@@ -200,19 +167,16 @@ export function attachToolbarHandlers(refs) {
   };
   on(serverImageSelect, 'change', onServerImageChange);
 
-  // --- ADD SHAPE ---
   const onAddShapeClick = () => {
     try {
       const type = shapeTypeSelect?.value || 'point';
       addShapeOfType(type);
-      // No INFO log; success is visible on canvas
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Add shape failed", err);
     }
   };
   on(addShapeBtn, 'click', onAddShapeClick);
 
-  // --- DELETE ---
   const onDeleteClick = (ev) => {
     try {
       if (!deleteBtn || deleteBtn.disabled) {
@@ -227,7 +191,6 @@ export function attachToolbarHandlers(refs) {
   };
   on(deleteBtn, 'click', onDeleteClick);
 
-  // --- DUPLICATE ---
   const onDuplicateClick = (ev) => {
     try {
       if (!duplicateBtn || duplicateBtn.disabled) {
@@ -242,7 +205,6 @@ export function attachToolbarHandlers(refs) {
   };
   on(duplicateBtn, 'click', onDuplicateClick);
 
-  // --- RESET ROTATION ---
   const onResetRotationClick = (ev) => {
     try {
       if (!resetRotationBtn || resetRotationBtn.disabled) {
@@ -257,7 +219,6 @@ export function attachToolbarHandlers(refs) {
   };
   on(resetRotationBtn, 'click', onResetRotationClick);
 
-  // --- SELECT ALL ---
   const onSelectAllClick = (ev) => {
     try {
       if (!selectAllBtn || selectAllBtn.disabled) {
@@ -272,7 +233,6 @@ export function attachToolbarHandlers(refs) {
   };
   on(selectAllBtn, 'click', onSelectAllClick);
 
-  // --- LOCK / UNLOCK ---
   const onLockClick = (ev) => {
     try {
       if (!lockBtn || lockBtn.disabled) {
@@ -294,14 +254,13 @@ export function attachToolbarHandlers(refs) {
         log("WARN", "[toolbar-handlers] Unlock clicked while disabled");
         return;
       }
-      unlockSelectedShapes(); // selected locked or all locked if none selected
+      unlockSelectedShapes();
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Unlock failed", err);
     }
   };
   on(unlockBtn, 'click', onUnlockClick);
 
-  // --- ALIGNMENT (relative to selection hull) ---
   const hasTwoOrMoreSelected = () => {
     const sel = getState().selectedShapes || [];
     return Array.isArray(sel) && sel.length >= 2;
@@ -331,11 +290,39 @@ export function attachToolbarHandlers(refs) {
   on(alignMiddleYBtn, 'click', handleAlignClick('middleY'));
   on(alignBottomBtn, 'click', handleAlignClick('bottom'));
 
-  // --- Color pickers (Pickr) ---
+  const onUndoClick = (ev) => {
+    try {
+      if (!undoBtn || undoBtn.disabled) {
+        ev && ev.preventDefault && ev.preventDefault();
+        log("WARN", "[toolbar-handlers] Undo clicked while disabled");
+        return;
+      }
+      undo();
+      log("INFO", "[toolbar-handlers] Undo triggered via toolbar button");
+    } catch (e) {
+      log("ERROR", "[toolbar-handlers] Undo failed", e);
+    }
+  };
+  on(undoBtn, 'click', onUndoClick);
+
+  const onRedoClick = (ev) => {
+    try {
+      if (!redoBtn || redoBtn.disabled) {
+        ev && ev.preventDefault && ev.preventDefault();
+        log("WARN", "[toolbar-handlers] Redo clicked while disabled");
+        return;
+      }
+      redo();
+      log("INFO", "[toolbar-handlers] Redo triggered via toolbar button");
+    } catch (e) {
+      log("ERROR", "[toolbar-handlers] Redo failed", e);
+    }
+  };
+  on(redoBtn, 'click', onRedoClick);
+
   try {
     if (strokePickrEl && fillPickrEl) {
       detachPickrs = installColorPickers({ strokePickrEl, fillPickrEl });
-      // Keep one INFO (installed); heavy logs inside pickr handlers are already minimal
       log("INFO", "[toolbar-handlers] Pickr color pickers installed");
     } else {
       log("WARN", "[toolbar-handlers] Pickr hosts missing; color pickers not installed", {
@@ -347,7 +334,6 @@ export function attachToolbarHandlers(refs) {
     log("ERROR", "[toolbar-handlers] Failed to install Pickr color pickers", e);
   }
 
-  // --- Debug button (optional, on-demand) ---
   const onDebugClick = async () => {
     try {
       if (!debugBtn) return;
@@ -357,14 +343,12 @@ export function attachToolbarHandlers(refs) {
 
       const { text, snapshot } = await runDebugCapture({ format: 'json', copy: true, log: false });
 
-      // Visual feedback only; logging is on-demand
       debugBtn.textContent = "Copied ✓";
       setTimeout(() => {
         debugBtn.textContent = origText || "Debug";
         debugBtn.disabled = false;
       }, 1000);
 
-      // Keep a single INFO line (low frequency action)
       log("INFO", "[toolbar-handlers] Debug snapshot captured", {
         copiedToClipboard: !!text,
         sections: snapshot?.meta?.sections || []
@@ -383,8 +367,6 @@ export function attachToolbarHandlers(refs) {
   if (debugBtn) on(debugBtn, 'click', onDebugClick);
 
   log("INFO", "[toolbar-handlers] Toolbar handlers attached");
-
-  // Detach function for cleanup (hot reload, panel destroy)
   return function detach() {
     try {
       handlers.forEach(off => { try { off(); } catch {} });

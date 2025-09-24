@@ -49,9 +49,9 @@ Canvas
 Toolbar
 - toolbar-panel.js            – assemble styles, DOM, handlers, state sync
 - toolbar-styles.js           – injects toolbar CSS (two-row layout)
-- toolbar-dom.js              – renders toolbar DOM; returns element refs (Debug button, Ellipse option)
-- toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot button
-- toolbar-state.js            – enable/disable logic; scale sync
+- toolbar-dom.js              – renders toolbar DOM; returns element refs (Ellipse option, Debug button, Undo/Redo buttons)
+- toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot; Undo/Redo buttons
+- toolbar-state.js            – enable/disable logic; scale sync; subscribes to history for Undo/Redo enabled state
 - toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha)
 
 Selection
@@ -94,6 +94,8 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Option A)
+  - Toolbar: Added Undo/Redo buttons. Handlers wired to command bus. Toolbar state subscribes to history to enable/disable buttons.
 - 2025-09-24 (Phase 2 – Step C.1)
   - keybindings.js: Added Arrow key nudges for selected shapes (1px; Shift=10px) via MOVE_SHAPES_DELTA command.
 - 2025-09-24 (Phase 2 – Step C)
