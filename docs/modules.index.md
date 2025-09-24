@@ -32,7 +32,7 @@ Commands
   - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
 
 Keybindings
-- keybindings.js              – global Ctrl/Cmd+Z (undo) and Ctrl/Cmd+Shift+Z / Ctrl+Y (redo); installed in layout.js
+- keybindings.js              – global Ctrl/Cmd+Z (undo), Ctrl/Cmd+Shift+Z / Ctrl+Y (redo), and Arrow key nudges (Shift=10px); installed in layout.js
 
 Geometry
 - geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
@@ -94,6 +94,8 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Step C.1)
+  - keybindings.js: Added Arrow key nudges for selected shapes (1px; Shift=10px) via MOVE_SHAPES_DELTA command.
 - 2025-09-24 (Phase 2 – Step C)
   - commands/commands.js: added ALIGN_SELECTED (undo via SET_POSITIONS), using centralized selection geometry and clamped deltas.
   - actions-alignment.js: now dispatches ALIGN_SELECTED via the command bus.
