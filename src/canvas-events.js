@@ -124,14 +124,15 @@ export function installFabricSelectionSync(canvas) {
 
   const onCreated = (opt) => {
     const eventToken = selectionSyncToken;
-    // Suppress if this event is echoing a programmatic change (token unchanged since last set)
-    if (eventToken === lastProgrammaticToken) {
-      log("DEBUG", "[canvas-events] selection:created suppressed (token match)", { eventToken, lastProgrammaticToken });
-      return;
-    }
     const selObjs = getSelectedObjectsFromFabric(canvas, opt);
     const nextIds = selObjs.filter(Boolean).map(o => o._id).filter(Boolean);
     const prevIds = (getState().selectedShapes || []).map(s => s._id);
+
+    // Suppress if this event is echoing a programmatic change (token unchanged since last set)
+    if (eventToken === lastProgrammaticToken && sameIdSet(nextIds, prevIds)) {
+      log("DEBUG", "[canvas-events] selection:created suppressed (token match and ids match)", { eventToken, lastProgrammaticToken, nextIds, prevIds });
+      return;
+    }
 
     log("DEBUG", "[canvas-events] selection:created", {
       fabricSelectedCount: selObjs.length,
@@ -153,13 +154,14 @@ export function installFabricSelectionSync(canvas) {
 
   const onUpdated = (opt) => {
     const eventToken = selectionSyncToken;
-    if (eventToken === lastProgrammaticToken) {
-      log("DEBUG", "[canvas-events] selection:updated suppressed (token match)", { eventToken, lastProgrammaticToken });
-      return;
-    }
     const selObjs = getSelectedObjectsFromFabric(canvas, opt);
     const nextIds = selObjs.filter(Boolean).map(o => o._id).filter(Boolean);
     const prevIds = (getState().selectedShapes || []).map(s => s._id);
+
+    if (eventToken === lastProgrammaticToken && sameIdSet(nextIds, prevIds)) {
+      log("DEBUG", "[canvas-events] selection:updated suppressed (token match and ids match)", { eventToken, lastProgrammaticToken, nextIds, prevIds });
+      return;
+    }
 
     log("DEBUG", "[canvas-events] selection:updated", {
       fabricSelectedCount: selObjs.length,
