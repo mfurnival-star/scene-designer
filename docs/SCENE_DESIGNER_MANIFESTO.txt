@@ -1,4 +1,5 @@
 Scene Designer – Engineering & Review Rules
+(Updated 2025-09-24 – Phase 1 Completion: Unified Single‑Shape Geometry + Selection Stability)
 
 1. ES Module Only
 - Use ES module syntax for all imports/exports.
@@ -52,40 +53,125 @@ Scene Designer – Engineering & Review Rules
 --- NEW: Phased Architecture Path for Studio-Grade Flexibility ---
 To ensure Scene Designer remains scalable, maintainable, and professional-grade, we commit to the following phased architecture path. Each phase delivers incremental stability, extensibility, and testability, without requiring a disruptive rewrite.
 
-**Phase 1: Stabilize Selection and Geometry**
-- Use transactional (tokenized) selection sync between Fabric and store to eliminate reentrancy bugs.
-- Centralize geometry computations (absolute rects, bounds, hulls) in shared utilities, adopted by alignment, overlays, and selection logic.
+(See docs/PHASED_ARCHITECTURE_PATH.md for living, detailed progress tracking.)
 
-**Phase 2: Command Layer and History**
-- Introduce a minimal command bus: all core actions (select, align, move, lock, delete, duplicate) become commands with pure signatures.
-- Actions.js delegates to commands; history stack supports undo/redo.
+Phase Summaries
+Phase 1 (COMPLETED 2025-09-24): Stabilize Selection & Geometry
+- Transactional (tokenized) Fabric ↔ Store selection sync with suppression rules.
+- Unified single-shape geometry helper (geometry/shape-rect.js) for bbox, center, aspectRatio, outerRadius.
+- Selection hull & member rect geometry centralized (geometry/selection-rects.js) for overlays/alignment.
+- canvas-constraints.js refactored to use unified geometry for single-shape clamping (ActiveSelection still Fabric hull temporarily).
+- debug.js upgraded to debug-snapshot-5 using direct selection event trace + tolerant bleed metrics + unified geometry fields (aspectRatio, outerRadius, geometrySource).
+- Transformer hardening: defensive uniform scaling enforcement for circles (lockUniScaling + normalization).
+- Stroke width optimization: no longer reapplies on mere selection changes; transform tracking (_pendingStrokeWidthReapply) triggers reapply only after scaling/rotation (modified event).
+- selection-core.js cleaned of redundant stroke normalization logic.
+- Dev sanity tooling: dev/geometry-sanity.js compares unified bbox vs Fabric getBoundingRect(true,true) with tolerance filtering and angle reasons.
+- Idempotent, non-destructive event handler installation in canvas-constraints.js (no clobbering of selection sync).
+- Documentation updates: modules.index.md (Phase 1 completion block), PHASED_ARCHITECTURE_PATH.md (✅ logged), Manifesto (this section).
+RESULT: A deterministic foundation for Phase 2 (Command Layer & History) without mid-flight refactors.
 
-**Phase 3: Model-Driven Selection**
-- Treat the model (store) as the single source of truth for shapes and selection.
-- Fabric becomes a pure input/view adapter: input events dispatch intents, selection is mirrored from model to Fabric.
-- Eliminate double writes and handler suppression for selection.
+Phase 2: Command Layer and History (PLANNED)
+- Introduce command objects/functions for all user-visible mutations (add, delete, duplicate, move, align, lock, transform).
+- History stack (undo/redo) around pure command diffs.
+- actions.js becomes intent dispatcher (thin).
+- Serialization groundwork for reversible transforms.
 
-**Phase 4: Centralize Geometry and Hit-Testing**
-- All modules (alignment, overlays, constraints, marquee) use the shared geometry library, not Fabric's bounding APIs directly.
-- Marquee selection is computed in the model, making hit-testing and selection policies deterministic.
+Phase 3: Model-Driven Selection (PLANNED)
+- Store becomes authoritative selection source.
+- Fabric ActiveSelection becomes a view artifact, recreated from model diff.
+- Eliminate token suppression (no bidirectional contention).
+- Deterministic selection diff supports headless & unit testing.
 
-**Phase 5: Full Domain Model for Shapes**
-- Shapes, transforms, selection set, and scene state are plain objects in the model.
-- The view adapter maps model state to Fabric objects; business logic never depends on Fabric's internal state.
-- Fabric's ActiveSelection used only for visuals.
+Phase 4: Centralize Geometry + Hit-Testing (PLANNED)
+- All bounding, collision, marquee, snap geometry resolved through geometry/ modules (no ad hoc Fabric API calls).
+- Marquee selection implemented in pure model space.
 
-**Phase 6: History, Persistence, and Plugins**
-- All commands support undo/redo.
-- Scenes serialize/deserialize from model, not Fabric.
-- Tool/command registry allows clean plugin/extensibility.
+Phase 5: Full Domain Model for Shapes (PLANNED)
+- POJO scene graph (shapes, transforms, styles, constraints). Fabric purely renders.
+- Easier multi-renderer strategy (e.g., export to SVG/Canvas/Server).
+- ActiveSelection limited to ergonomic dragging visualization.
 
-**Guiding Principle:**  
+Phase 6: History, Persistence, Extensibility (PLANNED)
+- Robust undo/redo across style, geometry, structural commands.
+- Stable scene serialization format (versioned).
+- Plugin registry for shape types, alignment strategies, snapping policies.
+- Foundation for collaborative editing (command log streaming / CRDT exploration).
+
+Guiding Principle  
 At every phase, prioritize testability, separation of concerns, and extensibility.  
 No business logic or state lives in UI or Fabric handlers; all domain logic is centralized and pure.
 
-**Deviation from this path requires explicit engineering review and justification.**
+Deviation from this path requires explicit engineering review and justification.
 
---- End Phased Architecture Section ---
+--- Phase Completion Log ---
+(Keep this concise; full detail lives in PHASED_ARCHITECTURE_PATH.md)
+
+✅ Phase 1 – 2025-09-24
+Core Deliverables:
+- geometry/shape-rect.js (single-shape canonical bbox center aspectRatio outerRadius)
+- canvas-constraints.js single-shape branch migrated to unified geometry
+- debug.js shape summaries now geometry-driven (removed radius heuristics)
+- transformer.js circle uniform scaling defensive guard
+- shapes-core.js transform-based stroke width reapply
+- selection-core.js selection hygiene (removed stroke spam)
+- dev/geometry-sanity.js validation script
+- docs: modules.index.md + PHASED_ARCHITECTURE_PATH.md updated
+
+Quality Outcomes:
+- Deterministic shape geometry across all consumers (constraints, debug, forthcoming history system).
+- Reduced render churn and mutation noise (stroke width fix gating).
+- Safer event layering (no clobbering selection handlers).
+- Instrumented selection pipeline (trace ring buffer) enabling reproducible diagnostics.
+
+--- Geometry Usage Rules (Post Phase 1) ---
+1. For any single shape rectangle/size/center logic use geometry/shape-rect.js helpers:
+   - getShapeBoundingBox(shape)
+   - getShapeCenter(shape)
+   - getShapeAspectRatio(shape)
+   - getShapeOuterRadius(shape)
+2. For selection hull & member boxes use geometry/selection-rects.js (DO NOT call shape.getBoundingRect() directly).
+3. If a new module requires geometry:
+   - Add or extend a helper in geometry/*.
+   - Update PHASED_ARCHITECTURE_PATH.md only if expanding geometry scope (e.g., snap guides or hit-testing).
+4. Fabric’s getBoundingRect(true,true) is TEMPORARY for multi-object hulls only (ActiveSelection path) until Phase 4.
+
+--- Stroke Width Policy (Post Phase 1) ---
+- Default stroke width reapplication must occur ONLY:
+  - After scale or rotation transformations finalize (modified event following scaling/rotating sets a pending flag).
+  - When user explicitly changes stroke width (setStrokeWidthForSelectedShapes).
+- Selection changes alone must never trigger stroke width mutation.
+
+--- Circle Integrity Policy ---
+- Circles must remain visually perfect (uniform scaling).
+- transformer.js forcibly enforces lockUniScaling + reconciles drift.
+- Any future shape-def change that relaxes keepRatio MUST still respect circle guard unless a Phase-level decision revises it.
+
+--- Debug / Diagnostics ---
+- All new debug surface additions must integrate into debug.js snapshot (no bespoke console dumps).
+- For geometry changes: extend dev/geometry-sanity.js if validation heuristics evolve.
+- Selection trace (canvas-events.js ring buffer) remains canonical for selection event chronology.
+
+--- Adding New Shape Types ---
+1. Define shape config in shape-defs.js.
+2. Provide factory in shapes-core.js (or dedicated module if complex).
+3. Add support to actions.js (add/duplicate) & toolbar UI if user-creatable.
+4. Integrate geometry considerations:
+   - If primitive differs (e.g., path-based) add branch in geometry/shape-rect.js.
+5. Update modules.index.md and (if structural) PHASED_ARCHITECTURE_PATH.md.
+
+--- Performance Guardrails ---
+- Avoid repeated getBoundingRect() calls inside high-frequency handlers (object:moving, scaling).
+- Use cached or unified geometry helpers (they are optimized to avoid expensive Fabric calls).
+- Defer expensive recomputation to modified or explicit reflow triggers.
+
+--- Testing & Future Automation (Forward-Looking) ---
+- Phase 2+ will introduce a command bus enabling deterministic replay testing.
+- Geometry helpers should remain side-effect free (pure) to facilitate snapshot tests.
+
+--- End Phased Architecture & Phase 1 Completion Addendum ---
 
 Refer to this file before making foundational changes.  
-Always update this section if the architectural path is revised.
+Always update this section if the architectural path is revised.  
+For detailed chronological progress and checklists see: docs/PHASED_ARCHITECTURE_PATH.md
+
+

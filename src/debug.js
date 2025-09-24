@@ -19,6 +19,12 @@
  * - Narrowed hook patching (no longer forcibly overrides global log each snapshot; interception
  *   is still supported but now secondary to direct trace).
  *
+ * Phase 1 Completion Patch (2025-09-24):
+ * - Unified single-shape geometry: width/height now sourced from geometry/shape-rect.js instead of
+ *   ad-hoc shape.width / shape.getScaledWidth / radius logic.
+ * - Added aspectRatio, outerRadius, geometrySource to shape summaries.
+ * - Ensures future transform model changes (Phase 2+) only need updates in geometry helpers.
+ *
  * Earlier history:
  * - debug-snapshot-4b: force log hook (selectionSyncLog)
  * - debug-snapshot-4: selectionDiagnostics section (order / membership / locks / flags)
@@ -33,16 +39,21 @@
  * Dependencies:
  * - log.js (origLog)
  * - state.js (getState)
- * - canvas-events.js (getSelectionEventTrace)  <-- NEW
+ * - canvas-events.js (getSelectionEventTrace)
+ * - geometry/shape-rect.js (getShapeBoundingBox, getShapeAspectRatio, getShapeOuterRadius)  ← Phase 1 unified geometry
  *
  * NOTE:
- * - We keep legacy interception support (selectionSyncLog) so older sessions that already patched
- *   the logger still yield some event data; new preferred path is the direct ring buffer.
+ * - Legacy interception support retained for backward compatibility.
  */
 
 import { log as origLog } from './log.js';
 import { getState } from './state.js';
 import { getSelectionEventTrace } from './canvas-events.js';
+import {
+  getShapeBoundingBox,
+  getShapeAspectRatio,
+  getShapeOuterRadius
+} from './geometry/shape-rect.js';
 
 /* ---------- Legacy Intercepted Selection Sync Log (fallback) ---------- */
 let legacyInterceptLog = [];
@@ -62,10 +73,10 @@ function ensureLegacyLogHook() {
         const st = getState();
         legacyInterceptLog.push({
           timeISO: new Date().toISOString(),
-            event: msg.includes('created') ? 'selection:created'
-              : msg.includes('updated') ? 'selection:updated'
+          event: msg.includes('created') ? 'selection:created'
+            : msg.includes('updated') ? 'selection:updated'
               : msg.includes('cleared') ? 'selection:cleared'
-              : 'selection:other',
+                : 'selection:other',
           raw: msg,
           idsStore: (st.selectedShapes || []).map(s => s?._id),
           idsAll: (st.shapes || []).map(s => s?._id),
@@ -77,7 +88,6 @@ function ensureLegacyLogHook() {
     return origLog(level, msg, obj);
   }
 
-  // Attach ONLY if window.log still references original; do not overwrite if user replaced already
   if (typeof window !== 'undefined' && window.log === origLog) {
     window.log = patched;
   }
@@ -109,10 +119,13 @@ function safe(val) {
 }
 const round = n => (typeof n === 'number' && Number.isFinite(n)) ? Math.round(n * 100) / 100 : undefined;
 
-/* ---------- Shape summary ---------- */
+/* ---------- Shape summary (Unified Geometry) ---------- */
 function summarizeShape(shape) {
   if (!shape) return null;
   try {
+    const bbox = getShapeBoundingBox(shape);
+    const aspectRatio = getShapeAspectRatio(shape);
+    const outerRadius = getShapeOuterRadius(shape);
     return {
       id: shape._id || null,
       type: shape._type || shape.type || 'unknown',
@@ -122,9 +135,11 @@ function summarizeShape(shape) {
       angle: round(shape.angle),
       left: round(shape.left),
       top: round(shape.top),
-      width: round(shape.width ?? (shape.getScaledWidth ? shape.getScaledWidth() : undefined)),
-      height: round(shape.height ?? (shape.getScaledHeight ? shape.getScaledHeight() : undefined)),
-      radius: round(shape.radius)
+      width: bbox ? round(bbox.width) : undefined,
+      height: bbox ? round(bbox.height) : undefined,
+      geometrySource: bbox ? bbox.source : 'none',
+      aspectRatio: aspectRatio !== null ? round(aspectRatio) : null,
+      outerRadius: outerRadius !== null ? round(outerRadius) : null
     };
   } catch {
     return { id: shape?._id || null, type: shape?._type || shape?.type || 'unknown' };
@@ -455,7 +470,6 @@ function evaluateBleedTolerance(domLayout, responsiveScale) {
       details: { reason: "missing-rects" }
     };
   }
-  // Define tolerances — width difference ≤ 4px, height difference ≤ (40 * (1 - scale) + 6)
   const widthDiff = Math.abs(upper.width - body.width);
   const heightDiff = Math.abs(upper.height - body.height);
   const widthTol = 4;
@@ -478,7 +492,6 @@ function buildMergedSelectionTrace() {
   ensureLegacyLogHook(); // install fallback once (non-invasive)
   const legacy = legacyInterceptLog.slice();
 
-  // Normalize to a common shape
   const normDirect = directTrace.map(e => ({
     source: 'direct',
     timeISO: e.timeISO,
@@ -505,7 +518,6 @@ function buildMergedSelectionTrace() {
 
   const combined = [...normDirect, ...normLegacy];
 
-  // De-duplicate by (timeISO + event + nextIds.join(',') + source priority)
   const seen = new Set();
   const out = [];
   for (const ev of combined.sort((a,b) => a.timeISO.localeCompare(b.timeISO))) {
@@ -515,7 +527,6 @@ function buildMergedSelectionTrace() {
     out.push(ev);
   }
 
-  // Keep last 25 (most recent at end)
   return out.slice(-25);
 }
 

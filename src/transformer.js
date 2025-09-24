@@ -2,20 +2,38 @@
  * transformer.js
  * -----------------------------------------------------------
  * Scene Designer – Fabric.js Transformer Handler (ESM ONLY, Reentrancy-Safe)
- * - Pure transformer logic: attach, detach, update for all shape types.
- * - Only called by selection-core.js (never by canvas.js or sidebar.js).
- * - All config from shape-defs.js.
- * - Resize/rotate controls per shape type and locked state.
- * - Enforces per-shape enabledAnchors (circle now only 4 corners) and rotation flag.
- * - Maintains aspect lock for circle via lockUniScaling.
- * - Logging via log.js.
- * - Reentrancy-safe: avoids redundant discard/setActive cycles and log spam.
+ * Purpose:
+ * - Attach / detach / update Fabric "controls" (transform handles) for a SINGLE selected shape.
+ * - Enforce per-shape edit capabilities defined in shape-defs.js (anchors, rotation enable, ratio lock).
+ * - Hide all controls for multi-selection (handled visually via overlay painter).
+ * - Remain idempotent and avoid unnecessary churn (discard/setActive only when needed).
  *
- * 2025-09-24 Update:
- * - Added applyControlsForDef(): honors SHAPE_DEFS.enabledAnchors and rotateEnabled.
- * - Circle now shows only 4 corner anchors (tl,tr,bl,br) and no rotation handle.
- * - Ellipse / Rect retain all 8 anchors + rotation (if rotateEnabled).
- * - Point shapes still get no controls (handled by selection logic & defs).
+ * Exports:
+ * - attachTransformerForShape(shape)
+ * - detachTransformer()
+ * - updateTransformer()
+ *
+ * Dependencies:
+ * - state.js (getState – provides fabricCanvas, selection info)
+ * - log.js (log)
+ * - shape-defs.js (getShapeDef for per-shape config)
+ *
+ * 2025-09-24 Updates:
+ * - Added applyControlsForDef(): central logic to honor SHAPE_DEFS.enabledAnchors & rotateEnabled.
+ * - Circle: only 4 corner anchors (tl,tr,bl,br) + no rotation handle.
+ * - Ellipse / Rect: all 8 anchors + rotation (if rotateEnabled).
+ * - Point: no controls (handled by defs + selection logic).
+ *
+ * Phase 1 Completion Patch (2025-09-24):
+ * - Added DEFENSIVE circle uniform-scaling guard:
+ *     Regardless of shape-defs keepRatio, a circle selection re-applies lockUniScaling = true and
+ *     normalizes scaleX/scaleY if they differ (tolerates minor float drift).
+ *     This ensures future accidental unlocks / external mutations cannot distort circles.
+ * - Added DEBUG log for any enforced normalization event.
+ *
+ * Notes:
+ * - We do NOT handle multi-selection here; multi-select hull logic is in selection-core + overlays.
+ * - This module purposefully does NOT read boundingRect geometry (Phase 1 single-shape geometry is centralized elsewhere).
  * -----------------------------------------------------------
  */
 
@@ -48,16 +66,15 @@ function getActiveObject() {
  * Apply per-shape control visibility & rotation handle based on def + lock state.
  * - Hides all controls first, then enables only those listed in def.enabledAnchors.
  * - Rotation handle (mtr) only if def.rotateEnabled AND shape not locked.
- * - If shape.resizable === false (or def.resizable false) all scaling handles hidden.
+ * - If def.resizable === false OR shape.locked → all scaling handles hidden.
  */
 function applyControlsForDef(shape, def) {
   if (!shape || !def) return;
 
-  // Fabric control keys we manage
   const visibility = {
     tl: false, tr: false, bl: false, br: false,
     ml: false, mt: false, mr: false, mb: false,
-    mtr: false // rotate
+    mtr: false // rotation handle
   };
 
   if (def.resizable && !shape.locked) {
@@ -69,7 +86,6 @@ function applyControlsForDef(shape, def) {
     });
   }
 
-  // Rotation handle
   if (def.rotateEnabled && !shape.locked) {
     visibility.mtr = true;
   }
@@ -78,7 +94,7 @@ function applyControlsForDef(shape, def) {
     if (typeof shape.setControlsVisibility === 'function') {
       shape.setControlsVisibility(visibility);
     } else if (shape.controls) {
-      // Fallback (shouldn't be needed in current Fabric versions)
+      // Fallback (older Fabric versions)
       Object.keys(visibility).forEach(k => {
         if (shape.controls[k]) {
           shape.controls[k].visible = visibility[k];
@@ -89,7 +105,6 @@ function applyControlsForDef(shape, def) {
     log("WARN", "[transformer] applyControlsForDef: setControlsVisibility failed", e);
   }
 
-  // Ensure coords updated after visibility changes
   if (typeof shape.setCoords === "function") {
     try { shape.setCoords(); } catch {}
   }
@@ -102,10 +117,49 @@ function applyControlsForDef(shape, def) {
 }
 
 /**
+ * DEFENSIVE: Ensure circle remains uniformly scaled.
+ * - lockUniScaling must stay true.
+ * - If scaleX / scaleY differ beyond epsilon, normalize them (choose min to avoid visual blow‑up).
+ */
+function enforceCircleUniformScaling(shape) {
+  if (!shape || shape._type !== 'circle') return;
+  try {
+    // Force lockUniScaling hard regardless of def (belt + suspenders).
+    shape.lockUniScaling = true;
+
+    const sx = typeof shape.scaleX === 'number' ? shape.scaleX : 1;
+    const sy = typeof shape.scaleY === 'number' ? shape.scaleY : 1;
+    const EPS = 0.001;
+    if (Math.abs(sx - sy) > EPS) {
+      const uniform = Math.min(sx, sy); // choose the smaller to prevent unexpected growth
+      shape.scaleX = uniform;
+      shape.scaleY = uniform;
+      if (typeof shape.setCoords === 'function') {
+        try { shape.setCoords(); } catch {}
+      }
+      log("DEBUG", "[transformer] enforceCircleUniformScaling: normalized non-uniform circle scale", {
+        id: shape._id,
+        prev: { sx, sy },
+        newScale: uniform
+      });
+    } else {
+      log("DEBUG", "[transformer] enforceCircleUniformScaling: already uniform", {
+        id: shape._id, sx, sy
+      });
+    }
+  } catch (e) {
+    log("WARN", "[transformer] enforceCircleUniformScaling failed (non-fatal)", {
+      id: shape?._id,
+      error: e
+    });
+  }
+}
+
+/**
  * Attach Fabric.js controls to a shape (single selection only).
  * - Idempotent: if already active, just update control flags.
  * - Minimal churn: only discards previous active if it differs.
- * @param {Object} shape
+ * @param {Object} shape - Fabric group (our wrapped shape), not a primitive child
  */
 export function attachTransformerForShape(shape) {
   log("DEBUG", "[transformer] attachTransformerForShape entry", {
@@ -125,7 +179,6 @@ export function attachTransformerForShape(shape) {
     return null;
   }
 
-  // Get per-shape config from shape-defs.js
   const def = getShapeDef(shape);
   if (!def) {
     log("WARN", "[transformer] No shape definition found", { type: shape._type });
@@ -135,7 +188,7 @@ export function attachTransformerForShape(shape) {
 
   const active = getActiveObject();
 
-  // If a different object is active, discard it first; otherwise skip
+  // If a different object is active, discard it first
   if (active && active !== shape) {
     canvas.discardActiveObject();
   }
@@ -145,29 +198,36 @@ export function attachTransformerForShape(shape) {
     canvas.setActiveObject(shape);
   }
 
-  // Update base transform/lock properties
+  // Core transform flags
   shape.set({
     hasControls: def.resizable && !shape.locked,
     hasBorders: true,
     lockScalingX: shape.locked,
     lockScalingY: shape.locked,
     lockRotation: !def.rotateEnabled || shape.locked,
-    lockUniScaling: shape._type === "circle" && !!def.keepRatio,
+    lockUniScaling: shape._type === "circle" ? true : !!def.keepRatio,
     selectable: true
   });
+
+  // Additional defensive enforcement for circle uniformity
+  if (shape._type === 'circle') {
+    enforceCircleUniformScaling(shape);
+  }
 
   // Apply per-anchor control visibility & rotation handle
   applyControlsForDef(shape, def);
 
-  // Render with minimal cost
+  // Render minimal
   if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
   else canvas.renderAll();
 
   log("DEBUG", "[transformer] Controls attached/updated", {
+    id: shape._id,
     type: shape._type,
     resizable: def.resizable,
     rotateEnabled: def.rotateEnabled,
-    keepRatio: def.keepRatio
+    keepRatio: def.keepRatio,
+    circleUniformGuard: shape._type === 'circle'
   });
 
   return shape;
@@ -226,4 +286,3 @@ export function updateTransformer() {
   attachTransformerForShape(shape);
   log("DEBUG", "[transformer] updateTransformer exit (attached/updated)");
 }
-

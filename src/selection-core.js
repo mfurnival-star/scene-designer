@@ -6,24 +6,29 @@
  * - Manage single/multi-shape selection state for Fabric.js objects.
  * - Own the transformer lifecycle (attach/detach/update) using transformer.js.
  * - Integrate shape-state.js and shape-defs.js for per-shape behavior.
- * - Multi-select dashed outlines are rendered by the overlay painter installed in canvas-core.js.
+ * - Multi-select dashed outlines are rendered by the overlay painter (selection-outlines.js).
  *
- * Exports (public API):
+ * Public API Exports (re-exported via selection.js facade):
  * - setSelectedShape(shape|null)
  * - setSelectedShapes(arrayOfShapes)
  * - selectAllShapes()
  * - deselectAll()
- * - attachSelectionHandlers(shape)
+ * - attachSelectionHandlers(shape)  (currently NO-OP, kept for compatibility)
  * - isShapeSelected(shape) : boolean
  * - getSelectedShapes() : array
  * - getSelectedShape() : shape|null
+ *
+ * Phase 1 Completion Patch (2025-09-24):
+ * - Removed unconditional stroke width reapplication on selection changes.
+ *   (shapes-core.js now performs stroke width normalization only after actual
+ *    scale/rotate gestures via transform tracking + 'modified' event.)
+ * - This reduces redundant writes and render cycles when simply changing selection.
  *
  * Dependencies:
  * - log.js (log)
  * - transformer.js (attachTransformerForShape, detachTransformer)
  * - shape-state.js (setShapeState, selectShape, deselectShape, setMultiSelected)
  * - shape-defs.js (getShapeDef)
- * - shapes.js (fixStrokeWidthAfterTransform)
  * - state.js (sceneDesignerStore, getState)
  * - fabric-wrapper.js (default fabric namespace for ActiveSelection)
  * -----------------------------------------------------------
@@ -33,7 +38,6 @@ import { log } from './log.js';
 import { attachTransformerForShape, detachTransformer } from './transformer.js';
 import { setShapeState, selectShape, deselectShape, setMultiSelected } from './shape-state.js';
 import { getShapeDef } from './shape-defs.js';
-import { fixStrokeWidthAfterTransform } from './shapes.js';
 import {
   sceneDesignerStore,
   getState
@@ -76,13 +80,11 @@ function ensureFabricActiveSelection(shapes) {
   }
 
   try {
-    // Discard anything currently active to avoid mixed states
     if (typeof canvas.discardActiveObject === 'function') canvas.discardActiveObject();
 
-    // Build a fresh ActiveSelection with the exact members
     const sel = new fabric.ActiveSelection(shapes, { canvas });
 
-    // UX: hull visible, but no transform controls for group drag
+    // UX: hull visible, no transform controls for group drag (overlay handles visuals)
     sel.set({
       hasControls: false,
       hasBorders: true,
@@ -91,7 +93,6 @@ function ensureFabricActiveSelection(shapes) {
 
     canvas.setActiveObject(sel);
 
-    // Update coords to keep aCoords fresh for overlay
     if (typeof sel.setCoords === 'function') sel.setCoords();
     shapes.forEach(s => { if (typeof s.setCoords === 'function') s.setCoords(); });
 
@@ -115,7 +116,7 @@ export function setSelectedShape(shape) {
 
   const canonicalShape = getCanonicalShapeById(shape);
 
-  // Deselect any previously selected single
+  // Deselect previous single if any
   if (getState().selectedShape) {
     deselectShape(getState().selectedShape);
   }
@@ -134,11 +135,11 @@ export function setSelectedShape(shape) {
     selectShape(canonicalShape);
     const def = getShapeDef(canonicalShape);
     if (def && def.editable && !canonicalShape.locked) {
-      attachTransformerForShape(canonicalShape); // sets Fabric active object
+      attachTransformerForShape(canonicalShape);
     } else {
       detachTransformer();
     }
-    fixStrokeWidthAfterTransform();
+    // (Removed stroke width reapply here – now transform-driven only)
   } else {
     detachTransformer();
   }
@@ -154,6 +155,7 @@ export function setSelectedShape(shape) {
  * Set the current selection (array of shapes).
  * - Single selection: attach transformer and set Fabric active object.
  * - Multi selection: ensure Fabric ActiveSelection exists (so group drag works).
+ * - None: detach transformer.
  */
 export function setSelectedShapes(arr) {
   log("DEBUG", "[selection-core] setSelectedShapes ENTRY", {
@@ -182,26 +184,23 @@ export function setSelectedShapes(arr) {
     selectedShape: newArr.length === 1 ? newArr[0] : null
   });
 
-  // Update per-shape state machine flags
+  // Update per-shape state flags
   newArr.forEach(shape => {
     setMultiSelected(shape, newArr.length > 1);
     if (newArr.length === 1) selectShape(shape);
   });
 
   if (newArr.length === 1 && newArr[0] && !newArr[0].locked) {
-    // Single selection → attach transformer (sets Fabric active object)
     const def = getShapeDef(newArr[0]);
     if (def && def.editable) {
       attachTransformerForShape(newArr[0]);
     } else {
       detachTransformer();
     }
-    fixStrokeWidthAfterTransform();
+    // (Removed stroke width reapply here – transform lifecycle handles it now)
   } else if (newArr.length > 1) {
-    // Multi selection → ensure a Fabric ActiveSelection exists
     ensureFabricActiveSelection(newArr);
   } else {
-    // None selected
     detachTransformer();
   }
 
@@ -237,13 +236,13 @@ export function deselectAll() {
     selectedShapes: []
   });
 
-  detachTransformer(); // discards any Fabric active/selection hull
+  detachTransformer();
   notifySelectionChanged();
   log("DEBUG", "[selection-core] deselectAll EXIT");
 }
 
 /**
- * Currently unused; kept for compatibility.
+ * Currently unused; kept for compatibility and future hook injection.
  */
 export function attachSelectionHandlers(shape) {
   log("DEBUG", "[selection-core] attachSelectionHandlers NO-OP", {
@@ -287,3 +286,4 @@ if (typeof window !== "undefined") {
     getSelectedShapes
   };
 }
+

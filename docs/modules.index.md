@@ -19,12 +19,16 @@ Facades (public import paths)
 Core Modules
 - log.js                      – central logger (ESM)
 - state.js                    – Zustand-style store and mutators
-- fabric-wrapper.js           – ESM wrapper for Fabric constructors (now exports Ellipse)
+- fabric-wrapper.js           – ESM wrapper for Fabric constructors (exports Ellipse)
+
+Geometry
+- geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
+- geometry/shape-rect.js      – (NEW) unified single-shape bounding box + center + aspectRatio + outerRadius (Phase 1)
 
 Canvas
 - canvas-core.js              – Fabric canvas creation, image, sync, overlays (MiniLayout resize API)
 - canvas-events.js            – Fabric selection sync → store selection (ring buffer trace)
-- canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, non-clobbering)
+- canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, now uses unified single-shape geometry)
 - selection-outlines.js       – overlay painter for multi-select hull/boxes
 
 Toolbar
@@ -36,12 +40,12 @@ Toolbar
 - toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha)
 
 Selection
-- selection-core.js           – single/multi selection; transformer lifecycle
-- transformer.js              – attach/detach/update Fabric controls
-- geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
+- selection-core.js           – single/multi selection; transformer lifecycle (stroke fix removed – now transform driven)
+- transformer.js              – attach/detach/update Fabric controls (circle uniform scaling defensive guard added)
+- (uses geometry helpers indirectly via consuming modules)
 
 Shapes
-- shapes-core.js              – rect / circle / ellipse factories; colors; stroke width; labels; initial placement clamp
+- shapes-core.js              – rect / circle / ellipse factories; colors; stroke width; labels; initial placement clamp; transform-based stroke normalization
 - shapes-point.js             – point reticle factory and variants
 - shape-defs.js               – per-shape transform/edit capabilities (ellipse added; circle aspect-lock clarified)
 - shape-state.js              – per-shape state machine (selected/dragging/locked)
@@ -58,8 +62,9 @@ Layout / Panels / Diagnostics
 - layout.js                   – MiniLayout bootstrap, panel wiring
 - errorlog.js                 – passive Error Log panel (Console.Re streaming in use)
 - global-errors.js            – window error/unhandledrejection → logger
-- debug.js                    – Debug Snapshot Collector (direct selection trace + tolerant bleed)
+- debug.js                    – Debug Snapshot Collector (direct selection trace + tolerant bleed + unified geometry)
 - scenario-runner.js          – scriptable scenarios for dev/QA
+- dev/geometry-sanity.js      – (DEV) compares unified geometry vs Fabric boundingRect for validation
 
 MiniLayout (split)
 - minilayout-core.js          – layout engine (panel resizing API)
@@ -74,7 +79,16 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
-- 2025-09-24
+- 2025-09-24 (Phase 1 Completion – Geometry & Selection Stability)
+  - GEO-UNIFY: Added geometry/shape-rect.js – single source for bounding box, center, aspectRatio, outerRadius.
+  - CONSTRAINTS-GEOM: canvas-constraints.js now uses getShapeBoundingBox for single shapes (ActiveSelection hull still Fabric fallback).
+  - DEBUG-GEOM: debug.js shape summaries now reference unified geometry (adds aspectRatio, outerRadius, geometrySource).
+  - CIRCLE-GUARD: transformer.js defensive uniform scaling guard for circle (lockUniScaling + scale normalization).
+  - STROKE-OPT: shapes-core.js + selection-core.js reworked so stroke width reapplies only after actual scale/rotate (transform tracking via _pendingStrokeWidthReapply).
+  - SEL-CLEAN: selection-core.js removed unconditional stroke normalization on selection changes.
+  - DEV-SANITY: dev/geometry-sanity.js script validates unified geometry vs Fabric boundingRect (tolerance-based diff logging).
+  - Phase 1 officially marked COMPLETE (see PHASED_ARCHITECTURE_PATH.md progress section).
+- 2025-09-24 (earlier same day)
   - EVT-TRACE: canvas-events.js ring buffer (selectionEventTrace) for created/updated/cleared + blank clears (suppression flags, tokens, prev/next IDs) with enforced ActiveSelection visuals (hasControls=false).
   - DBG-05: debug.js → debug-snapshot-5 (direct trace ingestion, legacy merge, scaled dimensions, tolerant bleed evaluation, unified selectionTrace).
   - SHP-CLAMP: shapes-core.js clamps initial Rect/Circle placement (now also Ellipse) to non-negative coordinates.

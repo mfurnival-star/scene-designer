@@ -15,6 +15,19 @@
  * - Added Ellipse shape (freely resizable & rotatable – defined in shape-defs.js).
  * - Circle remains aspect-locked & non-rotatable (handled in shape-defs + transformer).
  *
+ * Phase 1 Completion Patch (2025-09-24 – Stroke Width Optimization):
+ * - Stroke width re-application is now event-driven and only occurs after actual
+ *   scale or rotation transforms finish (on 'modified'), instead of on every
+ *   selection change.
+ * - Added lightweight transform tracking:
+ *     * On 'scaling' / 'rotating', set _pendingStrokeWidthReapply = true.
+ *     * On 'modified', if that flag is true and the shape is rect/circle/ellipse,
+ *       reapply default stroke width uniformly to primitive children and clear flag.
+ * - fixStrokeWidthAfterTransform() kept for backward compatibility, but now only
+ *   reapplies widths for shapes that still have _pendingStrokeWidthReapply set
+ *   (normally none unless a consumer calls it mid-transform).
+ * - Moves no longer trigger unnecessary stroke width normalization.
+ *
  * Exports:
  * - Public:
  *    setStrokeWidthForSelectedShapes,
@@ -58,11 +71,9 @@ export function getDefaultStrokeWidth() {
   return val > 0 ? val : 1;
 }
 export function getStrokeColor() {
-  // Stored format: #RRGGBB or #RRGGBBAA; we keep as-is for stroke
   return getState().settings?.defaultStrokeColor ?? '#2176ff';
 }
 export function getFillColor() {
-  // Stored format: #RRGGBB or #RRGGBBAA; factories convert to rgba() when needed
   return getState().settings?.defaultFillColor ?? '#00000000';
 }
 export function getShowDiagnosticLabels() {
@@ -83,7 +94,6 @@ function hexToRGBA(hex) {
   if (!h.startsWith('#')) return { r: 0, g: 0, b: 0, a: 1 };
   h = h.slice(1);
   if (h.length === 3) {
-    // #rgb → #rrggbb
     h = h.split('').map(c => c + c).join('');
   }
   if (h.length === 6) {
@@ -124,28 +134,33 @@ export function setStrokeWidthForSelectedShapes(width = 1) {
   (getState().selectedShapes || []).forEach(shape => {
     setShapeStrokeWidth(shape, w);
   });
-  const canvas = getState().fabricCanvas;
-  if (canvas) {
-    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-    else canvas.renderAll();
-  }
+  requestCanvasRender();
   log("DEBUG", "[shapes] setStrokeWidthForSelectedShapes EXIT");
 }
 
+/**
+ * Backward compatibility (kept export):
+ * Re-apply stroke width ONLY for shapes that have a pending transform flag.
+ * (Normally this will be handled automatically on 'modified'; this function
+ *  is now a safe no-op unless called mid-transform.)
+ */
 export function fixStrokeWidthAfterTransform() {
   const w = getDefaultStrokeWidth();
+  const selected = (getState().selectedShapes || []);
+  const eligible = selected.filter(s => s && s._pendingStrokeWidthReapply);
+  if (!eligible.length) {
+    log("DEBUG", "[shapes] fixStrokeWidthAfterTransform: no pending shapes; noop");
+    return;
+  }
   log("DEBUG", "[shapes] fixStrokeWidthAfterTransform ENTRY", {
     width: w,
-    selectedShapes: (getState().selectedShapes || []).map(s => s?._id)
+    pendingIds: eligible.map(s => s._id)
   });
-  (getState().selectedShapes || []).forEach(shape => {
+  eligible.forEach(shape => {
     setShapeStrokeWidth(shape, w);
+    shape._pendingStrokeWidthReapply = false;
   });
-  const canvas = getState().fabricCanvas;
-  if (canvas) {
-    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-    else canvas.renderAll();
-  }
+  requestCanvasRender();
   log("DEBUG", "[shapes] fixStrokeWidthAfterTransform EXIT");
 }
 
@@ -164,9 +179,8 @@ export function setShapeStrokeWidth(shape, width = 1) {
 
   if (shape._objects && Array.isArray(shape._objects)) {
     shape._objects.forEach(obj => {
+      if (obj._isDiagnosticLabel) return;
       if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'line' || obj.type === 'ellipse') {
-        // Skip diagnostic labels
-        if (obj._isDiagnosticLabel) return;
         applyToObj(obj);
       }
     });
@@ -175,11 +189,6 @@ export function setShapeStrokeWidth(shape, width = 1) {
 }
 
 // ---------- New: stroke/fill color application ----------
-/**
- * Apply stroke color to all unlocked selected shapes.
- * - Rect/Circle/Ellipse: stroke on main primitive; strokeUniform true.
- * - Point handled separately in shapes-point.js.
- */
 export function setStrokeColorForSelectedShapes(hexColor) {
   const color = typeof hexColor === "string" ? hexColor : "#000000";
   const selected = (getState().selectedShapes || []).filter(s => s && !s.locked);
@@ -198,18 +207,12 @@ export function setStrokeColorForSelectedShapes(hexColor) {
     });
   });
 
-  const canvas = getState().fabricCanvas;
-  if (canvas) (typeof canvas.requestRenderAll === "function" ? canvas.requestRenderAll() : canvas.renderAll());
+  requestCanvasRender();
   log("INFO", "[shapes] Stroke color applied to selection", {
     color, count: selected.length
   });
 }
 
-/**
- * Apply fill color (with alpha) to all unlocked selected shapes.
- * - Rect/Circle/Ellipse: set fill to rgba(...) computed from hex + alpha slider value.
- * - Point: handled by shapes-point.js (only halo elements).
- */
 export function setFillColorForSelectedShapes(hexColor, alphaPercent = null) {
   const rgba = rgbaStringFromHex(hexColor || "#000000", alphaPercent);
   const selected = (getState().selectedShapes || []).filter(s => s && !s.locked);
@@ -220,23 +223,17 @@ export function setFillColorForSelectedShapes(hexColor, alphaPercent = null) {
   selected.forEach(shape => {
     if (!Array.isArray(shape._objects)) return;
     const isPoint = shape._type === 'point';
-
     shape._objects.forEach(obj => {
       if (!obj || obj._isDiagnosticLabel) return;
-
       if (!isPoint) {
-        // Rect/Circle/Ellipse shapes: set fill on main primitive(s)
         if ((obj.type === 'rect' || obj.type === 'circle' || obj.type === 'ellipse') && 'fill' in obj) {
           obj.set({ fill: rgba });
         }
-      } else {
-        // (Point handled elsewhere; skip here.)
       }
     });
   });
 
-  const canvas = getState().fabricCanvas;
-  if (canvas) (typeof canvas.requestRenderAll === "function" ? canvas.requestRenderAll() : canvas.renderAll());
+  requestCanvasRender();
   log("INFO", "[shapes] Fill color applied to selection", {
     rgba, count: selected.length
   });
@@ -303,10 +300,7 @@ export function setGroupDiagnosticLabelVisible(group, visible) {
     }
   }
 
-  if (canvas) {
-    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-    else canvas.renderAll();
-  }
+  if (canvas) requestCanvasRender();
 }
 
 export function applyDiagnosticLabelsVisibility(visible) {
@@ -330,16 +324,57 @@ export function generateShapeId(type = "shape") {
   return id;
 }
 
-// Shared modification handler for shapes to re-apply stroke width
-function installModifiedHandler(group) {
-  group.on("modified", () => {
-    setShapeStrokeWidth(group, getDefaultStrokeWidth());
-    const canvas = getState().fabricCanvas;
-    if (canvas) {
-      if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
-      else canvas.renderAll();
+// ---------- Stroke Width Transform Tracking (Phase 1 Completion) ----------
+/**
+ * Install transform listeners to mark when a shape needs stroke width reapply.
+ * - On 'scaling' / 'rotating' → set _pendingStrokeWidthReapply = true
+ * - On 'modified' → if flag set and eligible type, reapply then clear.
+ */
+function installTransformTracking(group) {
+  const eligible = (t) => t === 'rect' || t === 'circle' || t === 'ellipse';
+
+  const onScaling = () => {
+    if (eligible(group._type)) {
+      group._pendingStrokeWidthReapply = true;
+      log("DEBUG", "[shapes] scaling → mark pending stroke width reapply", { id: group._id, type: group._type });
     }
-  });
+  };
+  const onRotating = () => {
+    if (eligible(group._type)) {
+      group._pendingStrokeWidthReapply = true;
+      log("DEBUG", "[shapes] rotating → mark pending stroke width reapply", { id: group._id, type: group._type });
+    }
+  };
+  const onModified = () => {
+    try {
+      if (group._pendingStrokeWidthReapply && eligible(group._type)) {
+        const width = getDefaultStrokeWidth();
+        setShapeStrokeWidth(group, width);
+        group._pendingStrokeWidthReapply = false;
+        log("DEBUG", "[shapes] modified → stroke width reapplied", {
+          id: group._id,
+          type: group._type,
+          width
+        });
+        requestCanvasRender();
+      }
+    } catch (e) {
+      log("WARN", "[shapes] onModified stroke width reapply failed", { id: group._id, error: e });
+    }
+  };
+
+  group.on("scaling", onScaling);
+  group.on("rotating", onRotating);
+  group.on("modified", onModified);
+}
+
+/**
+ * (Legacy) Previously always re-applied stroke width on modified regardless of change.
+ * Now replaced by installTransformTracking which only reapplies when flagged by scaling/rotating.
+ * Kept minimal so point module reuse not broken.
+ */
+function installModifiedHandler(group) {
+  installTransformTracking(group);
 }
 
 // Clamp top-left if negative
@@ -358,6 +393,15 @@ function clampInitialPlacement(group, label) {
       from: { left: originalLeft, top: originalTop },
       to: { left: clampedLeft, top: clampedTop }
     });
+  }
+}
+
+// Canvas render helper
+function requestCanvasRender() {
+  const canvas = getState().fabricCanvas;
+  if (canvas) {
+    if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
+    else canvas.renderAll();
   }
 }
 
@@ -400,6 +444,7 @@ export function makeRectShape(x, y, w, h) {
   group.locked = false;
   group._id = rectId;
   group._diagLabel = labelObj;
+  group._pendingStrokeWidthReapply = false;
 
   if (!showLabels) {
     setGroupDiagnosticLabelVisible(group, false);
@@ -451,6 +496,7 @@ export function makeCircleShape(x, y, r) {
   group.locked = false;
   group._id = circleId;
   group._diagLabel = labelObj;
+  group._pendingStrokeWidthReapply = false;
 
   if (!showLabels) {
     setGroupDiagnosticLabelVisible(group, false);
@@ -471,10 +517,6 @@ export function makeCircleShape(x, y, r) {
  * @param {number} y - center Y
  * @param {number} w - width of ellipse
  * @param {number} h - height of ellipse
- *
- * NOTE:
- * - Fabric Ellipse uses rx / ry, with left/top typically at the bounding box origin.
- * - We normalize so caller passes center (x,y) like circle; we offset left/top by w/2,h/2.
  */
 export function makeEllipseShape(x, y, w, h) {
   const strokeW = getDefaultStrokeWidth();
@@ -517,6 +559,7 @@ export function makeEllipseShape(x, y, w, h) {
   group.locked = false;
   group._id = ellipseId;
   group._diagLabel = labelObj;
+  group._pendingStrokeWidthReapply = false;
 
   if (!showLabels) {
     setGroupDiagnosticLabelVisible(group, false);

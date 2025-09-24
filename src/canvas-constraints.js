@@ -11,25 +11,27 @@
  * Public Exports:
  * - installCanvasConstraints(canvas) -> detachFn
  *
- * IMPORTANT (2025-09-24 PATCH):
- * - Previously this module called canvas.off('selection:*') before attaching its own handlers,
- *   which unintentionally removed selection sync handlers installed by canvas-events.js.
- * - That broke store/Fabric selection synchronization (multi-select never synced).
- * - This patch:
- *     * Removes global off() calls for selection events.
- *     * Tracks ONLY its own handlers in a private symbol/property so reinstallation
- *       or teardown is safe and non-destructive to other modules.
- *     * Idempotent: calling installCanvasConstraints multiple times will first
- *       detach only the handlers it previously registered.
+ * Phase 1 Completion (2025-09-24):
+ * - Single-shape geometry no longer uses target.getBoundingRect().
+ *   Instead we consume geometry/shape-rect.getShapeBoundingBox() for width/height.
+ * - ActiveSelection (multi-object) still uses Fabric getBoundingRect(true,true) as an
+ *   interim step; multi-object hull geometry will be unified in a later phase.
+ * - Added explicit branch comments for future migration points.
+ *
+ * IMPORTANT (2025-09-24 PATCH from earlier commit):
+ * - Removed blanket canvas.off('selection:*') calls (non‑destructive install).
+ * - Tracks ONLY its own handlers so other modules’ handlers are preserved.
  *
  * Dependencies:
  * - state.js (getState)
  * - log.js (log)
+ * - geometry/shape-rect.js (getShapeBoundingBox)  ← Phase 1 unified single-shape geometry
  * -----------------------------------------------------------
  */
 
 import { getState } from './state.js';
 import { log } from './log.js';
+import { getShapeBoundingBox } from './geometry/shape-rect.js';
 
 /**
  * True if the Fabric object is an ActiveSelection (multi-select drag hull).
@@ -47,31 +49,72 @@ function anyLockedInSelection(activeSel) {
 }
 
 /**
- * Clamp a target's bounding rect to the background image bounds.
+ * Clamp a target within the background image.
+ * - Single Shape: uses unified geometry helper (getShapeBoundingBox) (Phase 1 requirement).
+ * - ActiveSelection: still uses Fabric getBoundingRect(true,true) for aggregated hull (temporary).
+ *
+ * Returns true if clamped (position adjusted), false if no change.
  */
 function clampTargetWithinImage(target, img) {
   if (!target || !img) return false;
 
+  // MULTI: ActiveSelection (temporary path until multi-geometry unified)
+  if (isActiveSelection(target)) {
+    try {
+      const rect = target.getBoundingRect(true, true); // OK for group hull (temporary)
+      let dx = 0;
+      let dy = 0;
+
+      if (rect.left < 0) dx = -rect.left;
+      if (rect.top < 0) dy = -rect.top;
+      if (rect.left + rect.width > img.width) dx = img.width - (rect.left + rect.width);
+      if (rect.top + rect.height > img.height) dy = img.height - (rect.top + rect.height);
+
+      if (dx !== 0 || dy !== 0) {
+        target.set({
+          left: (target.left ?? 0) + dx,
+          top: (target.top ?? 0) + dy
+        });
+        if (typeof target.setCoords === 'function') target.setCoords();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      log("WARN", "[canvas-constraints] clampTargetWithinImage (ActiveSelection hull) failed", e);
+      return false;
+    }
+  }
+
+  // SINGLE: unified geometry
   try {
-    const rect = target.getBoundingRect(true, true);
+    const bbox = getShapeBoundingBox(target);
+    if (!bbox) return false;
+
     let dx = 0;
     let dy = 0;
 
-    if (rect.left < 0) dx = -rect.left;
-    if (rect.top < 0) dy = -rect.top;
-    if (rect.left + rect.width > img.width) dx = img.width - (rect.left + rect.width);
-    if (rect.top + rect.height > img.height) dy = img.height - (rect.top + rect.height);
+    if (bbox.left < 0) dx = -bbox.left;
+    if (bbox.top < 0) dy = -bbox.top;
+    if (bbox.left + bbox.width > img.width) dx = img.width - (bbox.left + bbox.width);
+    if (bbox.top + bbox.height > img.height) dy = img.height - (bbox.top + bbox.height);
 
     if (dx !== 0 || dy !== 0) {
       target.set({
-        left: (target.left ?? 0) + dx,
-        top: (target.top ?? 0) + dy
+        left: (target.left ?? bbox.left) + dx,
+        top: (target.top ?? bbox.top) + dy
       });
       if (typeof target.setCoords === 'function') target.setCoords();
-      return true; // clamped
+      log("DEBUG", "[canvas-constraints] Single-shape clamp applied", {
+        id: target._id,
+        type: target._type,
+        dx,
+        dy,
+        bboxSource: bbox.source
+      });
+      return true;
     }
   } catch (e) {
-    log("WARN", "[canvas-constraints] clampTargetWithinImage: getBoundingRect failed", e);
+    log("WARN", "[canvas-constraints] clampTargetWithinImage (single) failed", e);
   }
   return false;
 }
@@ -81,12 +124,10 @@ function clampTargetWithinImage(target, img) {
  */
 function recordMoveStartPosition(target) {
   if (!target) return;
-  // Only record once per drag gesture; if missing, set now
   if (target._moveStartLeft === undefined || target._moveStartTop === undefined) {
     target._moveStartLeft = target.left ?? 0;
     target._moveStartTop = target.top ?? 0;
   }
-  // Always keep a rolling previous for incremental deltas if needed
   target._prevLeft = target.left ?? 0;
   target._prevTop = target.top ?? 0;
 }
@@ -100,7 +141,6 @@ function applyGroupMoveLockState(activeSel) {
   activeSel.lockMovementX = locked;
   activeSel.lockMovementY = locked;
   activeSel.hoverCursor = locked ? 'not-allowed' : 'move';
-  // Record origin whenever we set the state so we can snap back if needed
   try {
     recordMoveStartPosition(activeSel);
   } catch {}
@@ -125,7 +165,7 @@ export function installCanvasConstraints(canvas) {
     return () => {};
   }
 
-  // If we previously installed handlers, detach them first (NON-destructive to other modules)
+  // Detach our prior handlers only (non-destructive)
   try {
     if (canvas[HANDLERS_KEY] && Array.isArray(canvas[HANDLERS_KEY])) {
       canvas[HANDLERS_KEY].forEach(({ event, fn }) => {
@@ -137,10 +177,7 @@ export function installCanvasConstraints(canvas) {
     log("WARN", "[canvas-constraints] Failed detaching prior handlers (safe to ignore)", e);
   }
 
-  // Local registry for new handlers
   const localHandlers = [];
-
-  // Helper to attach and record
   function on(event, fn) {
     canvas.on(event, fn);
     localHandlers.push({ event, fn });
@@ -150,8 +187,6 @@ export function installCanvasConstraints(canvas) {
     try {
       const active = typeof canvas.getActiveObject === "function" ? canvas.getActiveObject() : null;
       if (!isActiveSelection(active)) return;
-
-      // Ensure coords are up-to-date and then apply lock state
       if (typeof active.setCoords === "function") {
         try { active.setCoords(); } catch {}
       }
@@ -167,7 +202,6 @@ export function installCanvasConstraints(canvas) {
     try {
       const active = typeof canvas.getActiveObject === "function" ? canvas.getActiveObject() : null;
       if (active) {
-        // Clear any cached move-start state
         active._moveStartLeft = undefined;
         active._moveStartTop = undefined;
         active._prevLeft = undefined;
@@ -180,7 +214,6 @@ export function installCanvasConstraints(canvas) {
     try {
       const active = typeof canvas.getActiveObject === "function" ? canvas.getActiveObject() : null;
       if (!active) return;
-      // Record origin at the start of a drag gesture
       recordMoveStartPosition(active);
     } catch {}
   };
@@ -191,23 +224,19 @@ export function installCanvasConstraints(canvas) {
       if (!target) return;
 
       const img = getState().bgFabricImage;
-      // If no background image → allow movement (no clamping)
-      // We still enforce group lock below even without an image.
       const isGroup = isActiveSelection(target);
       const anyLocked = isGroup && anyLockedInSelection(target);
 
-      // Secondary guard: if any selected is locked, block movement immediately.
+      // Block ActiveSelection drag if any locked member present
       if (isGroup && anyLocked) {
-        // Snap back to the recorded origin (if available), else keep current but do not progress
         const backLeft = (target._moveStartLeft !== undefined) ? target._moveStartLeft : (target._prevLeft ?? target.left);
         const backTop = (target._moveStartTop !== undefined) ? target._moveStartTop : (target._prevTop ?? target.top);
 
         if (typeof target.set === "function") {
-            target.set({ left: backLeft, top: backTop });
-            if (typeof target.setCoords === 'function') target.setCoords();
+          target.set({ left: backLeft, top: backTop });
+          if (typeof target.setCoords === 'function') target.setCoords();
         }
 
-        // Re-assert lock on the group so Fabric stops processing further drags
         target.lockMovementX = true;
         target.lockMovementY = true;
         target.hoverCursor = 'not-allowed';
@@ -219,22 +248,20 @@ export function installCanvasConstraints(canvas) {
         return;
       }
 
-      // Normal path: clamp within background image bounds
+      // Clamp if background image present
       if (img) {
         const didClamp = clampTargetWithinImage(target, img);
         if (didClamp) {
           if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
           else canvas.renderAll();
           log("DEBUG", "[canvas-constraints] Movement clamped within image bounds", {
-            left: target.left, top: target.top
+            left: target.left, top: target.top, id: target._id, type: target._type
           });
         }
       }
 
-      // Persist previous position for revert logic
       target._prevLeft = target.left;
       target._prevTop = target.top;
-      // Only set moveStart if not set yet (start of gesture)
       if (target._moveStartLeft === undefined || target._moveStartTop === undefined) {
         recordMoveStartPosition(target);
       }
@@ -243,17 +270,16 @@ export function installCanvasConstraints(canvas) {
     }
   };
 
-  // Attach ONLY our handlers (non-destructive)
+  // Attach handlers
   on('selection:created', onSelectionCreatedOrUpdated);
   on('selection:updated', onSelectionCreatedOrUpdated);
   on('selection:cleared', onSelectionCleared);
   on('mouse:down', onMouseDown);
   on('object:moving', onObjectMoving);
 
-  // Persist registry on canvas for safe future re-install
   canvas[HANDLERS_KEY] = localHandlers;
 
-  log("INFO", "[canvas-constraints] Installed constraints (selection guards + object:moving clamp/lock) without clobbering external selection handlers");
+  log("INFO", "[canvas-constraints] Installed constraints (single-shape bbox unified, ActiveSelection hull temporary)");
 
   return function detach() {
     try {
@@ -269,4 +295,3 @@ export function installCanvasConstraints(canvas) {
     }
   };
 }
-

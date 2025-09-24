@@ -6,63 +6,87 @@ All engineering decisions should align with these phases unless a justified devi
 
 ---
 
-## Phase 1: Stabilize Selection and Geometry
+## Phase 1: Stabilize Selection and Geometry  ✅ (Completed 2025-09-24)
 
-- **Transactional Selection Sync:**  
-  Use a tokenized (transactional) approach for syncing selection between Fabric and the domain store. This eliminates reentrancy bugs and stale UI states.
-- **Centralized Geometry Utilities:**  
-  Move all geometry (absolute rects, hulls, bounds) to a shared module.  
-  Alignment, overlays, and selection logic must consume these utilities—never query Fabric’s bounding APIs directly at call sites.
+FOCUS AREAS (Delivered):
+- Transactional (tokenized) Fabric ↔ Store selection sync (canvas-events.js) with suppression rules and structured event trace ring buffer.
+- Centralized geometry:
+  - geometry/selection-rects.js (selection hull + member rects for overlays & alignment).
+  - NEW: geometry/shape-rect.js (single-shape canonical bbox, center, aspectRatio, outerRadius).
+- Consumers updated to use unified geometry:
+  - canvas-constraints.js (single-shape movement clamping now uses getShapeBoundingBox).
+  - debug.js (shape summaries now include aspectRatio, outerRadius, geometrySource).
+- Transformer hardening:
+  - Defensive circle uniform scaling guard (lockUniScaling + post-normalization if scaleX ≠ scaleY).
+- Stroke width optimization:
+  - Removed unconditional reapplication on selection changes.
+  - Added transform tracking (_pendingStrokeWidthReapply) in shapes-core.js; stroke width reapplied only after actual scaling/rotation (modified event).
+- Selection cleanliness:
+  - selection-core.js no longer triggers redundant stroke normalization.
+- Dev diagnostics:
+  - dev/geometry-sanity.js compares unified geometry vs Fabric getBoundingRect() (tolerance-based).
+  - debug-snapshot-5 integrates direct selection event trace + tolerant bleed evaluation.
+- Stability patches:
+  - canvas-constraints.js made idempotent and non-clobbering (no global canvas.off('selection:*')).
+  - Multi-select deletion & ActiveSelection visuals stabilized (hasControls=false enforced).
+- Documentation:
+  - modules.index.md updated (Phase 1 completion section).
+  - This file updated with completion summary & checklist below.
 
----
-
-## Phase 2: Command Layer and History
-
-- **Command Bus:**  
-  Introduce a minimal command bus to route all core actions—select, align, move, lock, delete, duplicate—through commands with pure signatures.
-- **Undo/Redo:**  
-  Actions.js delegates to commands; a history stack supports undo/redo out of the box.
-
----
-
-## Phase 3: Model-Driven Selection
-
-- **Single Source of Truth:**  
-  Treat the domain model/store as authoritative for shapes and selection.  
-  Fabric becomes a pure input/view adapter: input events dispatch intents, selection is mirrored from model to Fabric.
-- **No Double Writes:**  
-  Handler suppression for selection is eliminated; the model owns selection, and Fabric is a visual reflection.
-
----
-
-## Phase 4: Centralize Geometry and Hit-Testing
-
-- **Shared Geometry Library:**  
-  All modules—alignment, overlays, constraints, marquee—use the geometry utility, ensuring hit-testing and selection policies are deterministic.
-- **Model-Driven Marquee:**  
-  Marquee selection is computed in the model, making selection policies extensible and reliable.
+RESULT: Geometry and selection layers are consistent and instrumented, enabling Phase 2 (Command Layer / History) without mid-flight refactors.
 
 ---
 
-## Phase 5: Full Domain Model for Shapes
+## Phase 2: Command Layer and History (PLANNED)
 
-- **POJO Scene State:**  
-  Shapes, transforms, selection sets, and scene state live as plain objects in the model.
-- **Pure View Adapter:**  
-  The adapter maps model state to Fabric visuals; business logic never depends on Fabric’s internal state.
-- **ActiveSelection for Visuals Only:**  
-  Fabric’s ActiveSelection (or equivalent) is used for rendering, not for business logic.
+Goals:
+- Introduce a minimal command bus: every core action (add, delete, duplicate, lock, unlock, select, align, transform) becomes a Command object or pure function with metadata.
+- History stack (undo/redo) capturing reversible deltas.
+- Actions.js becomes a thin intent-to-command dispatcher.
+- Begin shaping serialization format for future persistence.
+
+Success Criteria:
+- All user-visible mutations reversible via undo/redo.
+- No UI module directly mutates state (already enforced; will be formally codified via commands).
 
 ---
 
-## Phase 6: History, Persistence, and Plugins
+## Phase 3: Model-Driven Selection (PLANNED)
 
-- **Undo/Redo Completeness:**  
-  All commands support undo/redo and can be serialized.
-- **Stable Scene Serialization:**  
-  Scenes serialize/deserialize from the domain model, not Fabric.
-- **Extensible Tool/Command Registry:**  
-  The architecture allows plugins and new tools without modifying the core.
+Goals:
+- Store is the single source of truth for the selection set.
+- Fabric ActiveSelection becomes a purely visual reflection (built from the model), never an authoritative source.
+- Eliminate tokenized suppression (no need when flow is unidirectional).
+- Deterministic selection diffing → easier test harnesses.
+
+---
+
+## Phase 4: Centralize Geometry + Hit-Testing (PLANNED)
+
+Goals:
+- All geometry (including future marquee hit-testing, snap guides, collision) flows through geometry module(s).
+- No direct Fabric boundingRect calls from business logic.
+- Marquee selection computed in the model.
+
+---
+
+## Phase 5: Full Domain Model for Shapes (PLANNED)
+
+Goals:
+- Pure POJO scene graph: shapes, transforms, selection, constraints.
+- Fabric adapter layer renders POJO graph → Fabric objects (one-way).
+- Easier headless testing & server-side rendering scenarios.
+- ActiveSelection only for visual hull / drag ergonomics.
+
+---
+
+## Phase 6: History, Persistence, Extensibility (PLANNED)
+
+Goals:
+- Full undo/redo across all command types (transform, geometry, style, structural).
+- Stable serialization/deserialization (shape schema versioning).
+- Plugin/extension registry for new tools, alignment modes, or constraint policies.
+- Optional multi-user sync groundwork (structural CRDT or command log stream).
 
 ---
 
@@ -82,6 +106,37 @@ All engineering decisions should align with these phases unless a justified devi
 
 ## Progress Tracking
 
-Each phase should be checked off (with a date and summary) in this file as completed.
-For onboarding, always read the latest version of this document and SCENE_DESIGNER_MANIFESTO.txt.
+| Phase | Status | Date | Summary |
+|-------|--------|------|---------|
+| 1 – Stabilize Selection & Geometry | ✅ Complete | 2025-09-24 | Tokenized selection sync; unified geometry (shape + selection); circle uniform scaling guard; stroke width transform optimization; constraints & debug refactors; dev sanity tooling. |
+| 2 – Command Layer & History | ⏳ Pending | — | Define Command API + history stack; migrate actions.js. |
+| 3 – Model-Driven Selection | ⏳ Pending | — | Store as authoritative; Fabric becomes passive renderer for selection. |
+| 4 – Central Geometry & Hit-Testing | ⏳ Pending | — | Consolidate all bbox & hit logic; model-driven marquee. |
+| 5 – Domain Model Adapter | ⏳ Pending | — | POJO scene graph; Fabric adapter only. |
+| 6 – History, Persistence, Plugins | ⏳ Pending | — | Full undo/redo, serialization, plugin registry. |
+
+Checklist (Phase 1 Detailed):
+- [x] Transactional selection event tokenization
+- [x] Selection trace ring buffer (canvas-events.js)
+- [x] Unified single-shape geometry helper (geometry/shape-rect.js)
+- [x] Consumers refactored (canvas-constraints.js, debug.js)
+- [x] Circle scaling guard (transformer.js)
+- [x] Stroke width transform-based reapplication
+- [x] Selection-core cleanup (remove redundant stroke fixes)
+- [x] Dev geometry sanity script
+- [x] Documentation + manifest updates
+- [x] Debug snapshot v5 integration (direct trace, tolerant bleed)
+
+---
+
+## Onboarding Note
+
+Before implementing anything in Phase 2+, read:
+1. SCENE_DESIGNER_MANIFESTO.txt (engineering rules)
+2. docs/modules.index.md (module map)
+3. geometry/shape-rect.js & geometry/selection-rects.js (current geometry surface)
+
+All new geometry-dependent features MUST use the geometry helpers—not ad hoc Fabric APIs.
+
+---
 
