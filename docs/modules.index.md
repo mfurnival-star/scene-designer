@@ -30,6 +30,8 @@ Canvas
 - canvas-events.js            – Fabric selection sync → store selection (ring buffer trace)
 - canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, now uses unified single-shape geometry)
 - selection-outlines.js       – overlay painter for multi-select hull/boxes
+- loupe.js                    – magnifier overlay (independent overlay canvas; DPR/zoom-aware)
+- loupe-controller.js         – attaches loupe to selected Point center via settings (loupeEnabled/size/magnification/crosshair)
 
 Toolbar
 - toolbar-panel.js            – assemble styles, DOM, handlers, state sync
@@ -56,6 +58,7 @@ Actions
 
 Settings
 - settings-core.js            – registry, persistence, side effects (logging, console)
+  - Includes loupe controls: loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair
 - settings-ui.js              – Tweakpane panel binding to settings
 
 Layout / Panels / Diagnostics
@@ -79,13 +82,17 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Loupe Overlay)
+  - Added loupe.js (DPR/zoom-aware magnifier overlay) and loupe-controller.js (anchors to selected Point via settings).
+  - settings-core.js: added loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair.
+  - canvas-core.js: wires loupe-controller during panel init/cleanup.
 - 2025-09-24 (Phase 1 Completion – Geometry & Selection Stability)
   - GEO-UNIFY: Added geometry/shape-rect.js – single source for bounding box, center, aspectRatio, outerRadius.
   - CONSTRAINTS-GEOM: canvas-constraints.js now uses getShapeBoundingBox for single shapes (ActiveSelection hull still Fabric fallback).
   - DEBUG-GEOM: debug.js shape summaries now reference unified geometry (adds aspectRatio, outerRadius, geometrySource).
   - CIRCLE-GUARD: transformer.js defensive uniform scaling guard for circle (lockUniScaling + scale normalization).
   - STROKE-OPT: shapes-core.js + selection-core.js reworked so stroke width reapplies only after actual scale/rotate (transform tracking via _pendingStrokeWidthReapply).
-  - SEL-CLEAN: selection-core.js removed unconditional stroke normalization on selection changes.
+  - SEL-CLEAN: selection-core.js removed unconditional stroke normalization logic.
   - DEV-SANITY: dev/geometry-sanity.js script validates unified geometry vs Fabric boundingRect (tolerance-based diff logging).
   - Phase 1 officially marked COMPLETE (see PHASED_ARCHITECTURE_PATH.md progress section).
 - 2025-09-24 (earlier same day)
@@ -96,18 +103,7 @@ Recent Changes (brief)
   - MULTI-DELETE-FIX: Store/Fabric selection sync stabilized—Delete removes exactly the visually selected set.
   - SHP-ELLIPSE: Added Ellipse shape (rotatable, free aspect, 8 anchors) – fabric-wrapper.js exports Ellipse, shape-defs.js entry, shapes-core.js factory makeEllipseShape(), actions.js add/duplicate support, toolbar-dom.js option.
   - SHP-CIRCLE-LOCK: Circle behavior clarified/enforced (non-rotatable, aspect-ratio locked, 4 corner anchors only).
-- 2025-09-23
-  - ALN-01: Alignment wired with six buttons relative to selection hull only; removed reference dropdown.
-  - PHASE-01: geometry/selection-rects.js added (centralized geometry for overlays & alignment).
-  - MINILAYOUT-API: Panel resizing API added to minilayout-core.js; canvas auto-resizes to image.
-  - DBG-01: Initial debug.js + Debug toolbar button (snapshot + clipboard).
-- 2025-09-22
-  - STY-01: Pickr color pickers (toolbar-color.js); toolbar split into panel/styles/dom/handlers/state.
-  - Selection overlays moved to top-context painter (selection-outlines.js).
-  - Movement clamping + multi-drag lock guard (canvas-constraints.js).
-  - iOS double‑tap zoom suppression in canvas-core.js.
 
 How to add here
 - When you add/rename/remove a module: update the relevant section above and keep the line short.
 - If you add a new facade, list it in “Facades (public import paths)”.
-

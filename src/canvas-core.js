@@ -18,6 +18,7 @@
  * - fabric-wrapper.js ({ Canvas, Image })
  * - state.js
  * - canvas-events.js, canvas-constraints.js, selection-outlines.js
+ * - loupe-controller.js (loupe overlay anchored to selected Point via settings)
  * - minilayout.js (for panel resizing API)
  *
  * Logging Policy (reduced noise):
@@ -39,6 +40,7 @@ import {
 import { installFabricSelectionSync } from './canvas-events.js';
 import { installCanvasConstraints } from './canvas-constraints.js';
 import { installSelectionOutlines } from './selection-outlines.js';
+import { installLoupeController } from './loupe-controller.js';
 import { MiniLayout } from './minilayout.js';
 
 /**
@@ -511,9 +513,11 @@ export function buildCanvasPanel({ element, title, componentName }) {
 
   setFabricCanvas(canvas);
 
+  // Install integrations
   installFabricSelectionSync(canvas);
   const detachConstraints = installCanvasConstraints(canvas);
   const detachOutlines = installSelectionOutlines(canvas);
+  const detachLoupe = installLoupeController(canvas); // Loupe overlay controlled by settings + selection (Point anchor)
 
   // Apply initial sizing from settings (and enforce clipping/stacking)
   applyCanvasSizeFromSettings(canvas);
@@ -601,6 +605,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
     try { unsub && unsub(); } catch {}
     try { detachConstraints && detachConstraints(); } catch {}
     try { detachOutlines && detachOutlines(); } catch {}
+    try { detachLoupe && detachLoupe(); } catch {}
     try {
       window.removeEventListener('resize', onWindowResize);
       window.removeEventListener('orientationchange', onWindowResize);
