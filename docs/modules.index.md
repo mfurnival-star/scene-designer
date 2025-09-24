@@ -32,7 +32,7 @@ Commands
   - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
 
 Keybindings
-- keybindings.js              – global Ctrl/Cmd+Z (undo), Ctrl/Cmd+Shift+Z / Ctrl+Y (redo), and Arrow key nudges (Shift=10px); installed in layout.js
+- keybindings.js              – global Ctrl/Cmd+Z (undo), Ctrl/Cmd+Shift+Z / Ctrl+Y (redo), Arrow key nudges (Shift=10px), Delete/Backspace (delete selection), Ctrl/Cmd+D (duplicate), Ctrl/Cmd+L (lock), Ctrl/Cmd+Shift+L (unlock), R (reset rotation); installed in layout.js
 
 Geometry
 - geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
@@ -95,6 +95,8 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Keybindings Expansion)
+  - keybindings.js: Added Delete/Backspace (delete selection), Ctrl/Cmd+D (duplicate), Ctrl/Cmd+L (lock), Ctrl/Cmd+Shift+L (unlock), and R (reset rotation). All guarded for editable inputs and routed through the command bus.
 - 2025-09-24 (Phase 2 – Style Commands)
   - commands/commands.js: added SET_STROKE_COLOR and SET_FILL_COLOR (batch, undoable per-id; inverse captures previous colors).
   - actions.js: added setStrokeColorForSelected(color) and setFillColorForSelected(fill) that dispatch the new commands for unlocked selection.
