@@ -1,33 +1,3 @@
-/**
- * actions-alignment.js
- * -----------------------------------------------------------
- * Scene Designer – Alignment Actions (ESM ONLY, Manifesto-compliant, Phase 1 Geometry Refactor)
- * Purpose:
- * - Provide alignment operations for selected shapes:
- *     left, centerX, right, top, middleY, bottom
- * - Reference modes:
- *     - "selection" (default): aligns to the selection set (locked contribute but don't move)
- *     - "canvas": aligns to canvas/image bounds (bgFabricImage)
- * - Behavior:
- *     - Requires 2+ selected shapes (INFO no-op otherwise).
- *     - Locked shapes are not moved (but still contribute to reference calculation).
- *     - Only the aligned axis is changed (X for left/centerX/right, Y for top/middleY/bottom).
- *     - Clamps resulting motion to image bounds on the changed axis if a background image exists.
- *
- * Export:
- * - alignSelected(mode, ref = 'selection')
- *
- * Dependencies:
- * - state.js (getState)
- * - log.js (log)
- * - geometry/selection-rects.js (absolute rects for selection)
- *
- * Notes:
- * - All bounding-box logic now uses geometry/selection-rects.js for robust, centralized geometry.
- * - No local getBoundingRect calls; all geometry logic is unified.
- * -----------------------------------------------------------
- */
-
 import { getState } from './state.js';
 import { log } from './log.js';
 import {

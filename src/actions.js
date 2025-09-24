@@ -1,30 +1,3 @@
-/**
- * actions.js
- * -----------------------------------------------------------
- * Scene Designer – Centralized Business Logic for Scene Actions (ESM ONLY)
- * - Centralizes scene actions: add, delete, duplicate, lock, unlock, reset rotation, align.
- * - UI emits intents; no direct state mutation outside this module.
- *
- * Exports:
- *    addShapeOfType,
- *    deleteSelectedShapes,
- *    duplicateSelectedShapes,
- *    lockSelectedShapes,
- *    unlockSelectedShapes,
- *    resetRotationForSelectedShapes,
- *    alignSelected
- *
- * 2025-09-24:
- * - Ellipse shape support added (free aspect, rotatable).
- * - Duplicate now handles ellipse fallback path.
- *
- * Logging Policy (reduced noise):
- * - INFO for user-visible results (added/removed/duplicated/locked/unlocked/reset).
- * - WARN/ERROR for exceptional cases.
- * - Minimal DEBUG retained; no large state dumps.
- * -----------------------------------------------------------
- */
-
 import { log } from './log.js';
 import {
   makePointShape,
