@@ -36,17 +36,17 @@ import { installSelectionOutlines } from './selection-outlines.js';
 import { MiniLayout } from './minilayout.js';
 
 /**
- * Remove all child <canvas> elements from the parent panel element.
- * Ensures only one Fabric canvas is ever present per panel.
+ * Remove all previous canvas DOM elements and containers from the panel.
+ * Ensures only one Fabric canvas and wrapper exist per panel.
  */
 function removeAllCanvasElements(element) {
   if (!element) return;
-  const canvases = element.querySelectorAll('canvas');
-  canvases.forEach(c => {
-    if (c && c.parentNode) {
-      c.parentNode.removeChild(c);
-    }
-  });
+  // Remove canvases
+  element.querySelectorAll('canvas').forEach(c => c.parentNode && c.parentNode.removeChild(c));
+  // Remove Fabric wrappers
+  element.querySelectorAll('.canvas-container').forEach(div => div.parentNode && div.parentNode.removeChild(div));
+  // Remove clip hosts
+  element.querySelectorAll('.canvas-clip-host').forEach(div => div.parentNode && div.parentNode.removeChild(div));
 }
 
 /**
@@ -491,7 +491,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
     return;
   }
 
-  // Remove all previous canvas elements to guarantee only one canvas per panel
+  // Remove all previous canvas elements, wrappers, and clip hosts to guarantee only one canvas per panel
   removeAllCanvasElements(element);
 
   // Root of this panel body
