@@ -17,15 +17,21 @@
  * - Non-destructive: tracks its own subscription and overlay; detaches cleanly.
  * - Anchoring:
  *   - Prefers selected Point shape (first Point in selectedShapes).
- *   - For Point shapes, uses group.left/top directly as the center (since Point
- *     groups are center-positioned), instead of unified bbox center.
- *   - For non-Point (future) fallback, uses geometry/shape-rect.getShapeCenter().
+ *   - Anchor center is resolved via unified geometry getShapeCenter() for ALL shapes.
+ *     This avoids relying on group.left/top semantics which may represent the top-left
+ *     of the group bounding box (the previous assumption caused the observed top-left
+ *     anchoring offset for Point shapes).
  *
  * Dependencies:
  * - state.js (getState, sceneDesignerStore)
  * - log.js (log)
  * - loupe.js (installLoupe)
  * - geometry/shape-rect.js (getShapeCenter)
+ *
+ * 2025-09-24 Fix:
+ * - Anchor center now uses getShapeCenter(shape) for all shapes (including Point).
+ *   This fixes the bug where the loupe center appeared at the top-left of the point's
+ *   bounding square due to assuming group.left/top was the center.
  * -----------------------------------------------------------
  */
 
@@ -65,17 +71,23 @@ function findFirstSelectedPoint() {
   return null;
 }
 
-// Compute anchor center for a shape
+// Compute anchor center for a shape (geometry-driven for correctness)
 function resolveShapeCenter(shape) {
   if (!shape) return null;
-  // Points use center-positioned groups (left/top already at center)
-  if (shape._type === 'point') {
-    const x = Number.isFinite(shape.left) ? shape.left : 0;
-    const y = Number.isFinite(shape.top) ? shape.top : 0;
-    return { x, y };
+  const center = getShapeCenter(shape);
+  if (center && Number.isFinite(center.x) && Number.isFinite(center.y)) {
+    return center;
   }
-  // Fallback to unified bbox center for other types
-  return getShapeCenter(shape);
+  // Fallback: estimate from group box if geometry helper could not resolve
+  const left = Number.isFinite(shape.left) ? shape.left : 0;
+  const top = Number.isFinite(shape.top) ? shape.top : 0;
+  const w = typeof shape.getScaledWidth === 'function'
+    ? Number(shape.getScaledWidth()) || 0
+    : (Number(shape.width) || 0);
+  const h = typeof shape.getScaledHeight === 'function'
+    ? Number(shape.getScaledHeight()) || 0
+    : (Number(shape.height) || 0);
+  return { x: left + w / 2, y: top + h / 2 };
 }
 
 function applyVisualSettingsToLoupe(meta, settings) {
