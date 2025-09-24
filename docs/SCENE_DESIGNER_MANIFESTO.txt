@@ -1,180 +1,121 @@
-Scene Designer – Engineering & Review Rules
-(Updated 2025-09-24 – Phase 1 Completion: Unified Single‑Shape Geometry + Selection Stability)
+# Scene Designer – Module Manifest (Concise)
 
-1. ES Module Only
-- Use ES module syntax for all imports/exports.
-- No window.*, no global variables, no CDN/global scripts.
-- External dependencies (e.g. Fabric.js, Pickr, Tweakpane) must be installed via npm and imported.
+Purpose
+- Curated, human-readable list of modules and facades in this repo.
+- Keep it short: what exists, where to import from, and recent changes.
+- For rules/philosophy, see SCENE_DESIGNER_MANIFESTO.txt.
 
-1A. Remote Logging Exception
-- For remote log streaming: inject Console.Re connector.js CDN script in <head>.
-- Only for remote logging; remove when Console.Re provides an ES module export.
-- Do not use legacy console-remote-client except for old builds.
-- Document this exception in build/deploy scripts.
+Update Policy
+- Edit this file when modules are added/removed/renamed.
+- Keep entries brief; link to source when needed.
 
-2. Import/Export Consistency
-- Every import must match a real export in the source file.
-- Update source or imports to ensure consistency.
-- No importing non-exported symbols.
+**Comment Policy:**  
+- During development, header and function-level comments may be omitted from source files to reduce file size and speed iteration.  
+- Before production/release, restore concise summary headers and key function comments as per engineering rules.
 
-3. File Delivery and Review
-- Deliver complete files only, one at a time, in numbered order.
-- Do not deliver code snippets, partial code blocks, or fragments. Only deliver the complete content of the requested file.
-- After each file, state the next file and wait for confirmation ("next"/"ready").
-- Keep a running list of remaining files.
-- After all files, state completion.
-- Update src/modules.index.md when adding/removing/renaming modules.
+Facades (public import paths)
+- ./canvas.js → buildCanvasPanel (delegates to canvas-core.js)
+- ./toolbar.js → buildCanvasToolbarPanel (delegates to toolbar-panel.js)
+- ./selection.js → public selection API (from selection-core.js)
+- ./settings.js → core + UI (from settings-core.js, settings-ui.js)
+- ./shapes.js → shape helpers/factories (from shapes-core.js, shapes-point.js)
 
-4. File Size/Splitting
-- No file over ~500 lines; split large files into logical modules.
-- Prefer splitting by concern (core, UI, helpers, etc).
-- Each module starts with a summary comment.
-- Update imports/exports and src/modules.index.md after splitting.
+Core Modules
+- log.js                      – central logger (ESM)
+- state.js                    – Zustand-style store and mutators
+- fabric-wrapper.js           – ESM wrapper for Fabric constructors (exports Ellipse)
 
-5. Logging/Documentation
-- Use log() from log.js with levels: ERROR, WARN, INFO, DEBUG.
-- TRACE is deprecated; use DEBUG for verbose logs.
-- No direct console.log except inside logger.
+Commands
+- commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
+- commands/commands.js        – core command implementations (add/delete/duplicate/selection)
 
-- **Comment Policy: Development vs Production**
-    - During development: Header comments and function-level comments may be omitted from source files to reduce file size and cognitive overhead. All logic and code must remain clear and maintainable without comment blocks. Logging and variable/function naming should remain descriptive to aid understanding.
-    - Before production/release: All source files must restore a concise header summary comment (purpose, exports, dependencies). Key functions (especially public API, complex logic, or business rules) must include summary comments explaining intent, parameters, and edge cases. Code review must include a check for proper documentation in headers and functions.
-    - This staged policy ensures rapid iteration during development and maintainability for long-term support.
+Geometry
+- geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
+- geometry/shape-rect.js      – (NEW) unified single-shape bounding box + center + aspectRatio + outerRadius (Phase 1)
 
-6. State Management
-- Use exported functions/store object from state.js (Zustand-style).
-- No AppState singletons.
-- Use getState(), mutators, and sceneDesignerStore.subscribe(fn).
+Canvas
+- canvas-core.js              – Fabric canvas creation, image, sync, overlays (MiniLayout resize API)
+- canvas-events.js            – Fabric selection sync → store selection (ring buffer trace)
+- canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, now uses unified single-shape geometry)
+- selection-outlines.js       – overlay painter for multi-select hull/boxes
+- loupe.js                    – magnifier overlay (independent overlay canvas; DPR/zoom-aware)
+- loupe-controller.js         – attaches loupe to selected Point center via settings (loupeEnabled/size/magnification/crosshair)
 
-7. Separation of Concerns
-- UI emits intents/actions only; no direct state mutation.
-- All business logic for scene actions (add, delete, duplicate, lock, unlock, etc) is in actions.js.
-- Cross-module communication via ES module imports/exports.
+Toolbar
+- toolbar-panel.js            – assemble styles, DOM, handlers, state sync
+- toolbar-styles.js           – injects toolbar CSS (two-row layout)
+- toolbar-dom.js              – renders toolbar DOM; returns element refs (Debug button, Ellipse option)
+- toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot button
+- toolbar-state.js            – enable/disable logic; scale sync
+- toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha)
 
-8. Manifest/Documentation
-- Update src/modules.index.md for all module changes.
+Selection
+- selection-core.js           – single/multi selection; transformer lifecycle (stroke fix removed – now transform driven)
+- transformer.js              – attach/detach/update Fabric controls (circle uniform scaling defensive guard added)
+- (uses geometry helpers indirectly via consuming modules)
 
---- NEW: Phased Architecture Path for Studio-Grade Flexibility ---
-To ensure Scene Designer remains scalable, maintainable, and professional-grade, we commit to the following phased architecture path. Each phase delivers incremental stability, extensibility, and testability, without requiring a disruptive rewrite.
+Shapes
+- shapes-core.js              – rect / circle / ellipse factories; colors; stroke width; labels; initial placement clamp; transform-based stroke normalization
+- shapes-point.js             – point reticle factory and variants
+- shape-defs.js               – per-shape transform/edit capabilities (ellipse added; circle aspect-lock clarified)
+- shape-state.js              – per-shape state machine (selected/dragging/locked)
 
-(See docs/PHASED_ARCHITECTURE_PATH.md for living, detailed progress tracking.)
+Actions
+- actions.js                  – intent dispatcher for add/delete/duplicate via command bus; other actions unchanged
+- actions-alignment.js        – alignSelected(mode) relative to selection hull only
 
-Phase Summaries
-Phase 1 (COMPLETED 2025-09-24): Stabilize Selection & Geometry
-- Transactional (tokenized) Fabric ↔ Store selection sync with suppression rules.
-- Unified single-shape geometry helper (geometry/shape-rect.js) for bbox, center, aspectRatio, outerRadius.
-- Selection hull & member rect geometry centralized (geometry/selection-rects.js) for overlays/alignment.
-- canvas-constraints.js refactored to use unified geometry for single-shape clamping (ActiveSelection still Fabric hull temporarily).
-- debug.js upgraded to debug-snapshot-5 using direct selection event trace + tolerant bleed metrics + unified geometry fields (aspectRatio, outerRadius, geometrySource).
-- Transformer hardening: defensive uniform scaling enforcement for circles (lockUniScaling + normalization).
-- Stroke width optimization: no longer reapplies on mere selection changes; transform tracking (_pendingStrokeWidthReapply) triggers reapply only after scaling/rotation (modified event).
-- selection-core.js cleaned of redundant stroke normalization logic.
-- Dev sanity tooling: dev/geometry-sanity.js compares unified bbox vs Fabric getBoundingRect(true,true) with tolerance filtering and angle reasons.
-- Idempotent, non-destructive event handler installation in canvas-constraints.js (no clobbering of selection sync).
-- Documentation updates: modules.index.md (Phase 1 completion block), PHASED_ARCHITECTURE_PATH.md (✅ logged), Manifesto (this section).
-RESULT: A deterministic foundation for Phase 2 (Command Layer & History) without mid-flight refactors.
+Settings
+- settings-core.js            – registry, persistence, side effects (logging, console)
+  - Includes loupe controls: loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair
+- settings-ui.js              – Tweakpane panel binding to settings
 
-Phase 2: Command Layer and History (PLANNED)
-- Introduce command objects/functions for all user-visible mutations (add, delete, duplicate, move, align, lock, transform).
-- History stack (undo/redo) around pure command diffs.
-- actions.js becomes intent dispatcher (thin).
-- Serialization groundwork for reversible transforms.
+Layout / Panels / Diagnostics
+- layout.js                   – MiniLayout bootstrap, panel wiring
+- errorlog.js                 – passive Error Log panel (Console.Re streaming in use)
+- global-errors.js            – window error/unhandledrejection → logger
+- debug.js                    – Debug Snapshot Collector (direct selection trace + tolerant bleed + unified geometry)
+- scenario-runner.js          – scriptable scenarios for dev/QA
+- dev/geometry-sanity.js      – (DEV) compares unified geometry vs Fabric boundingRect for validation
 
-Phase 3: Model-Driven Selection (PLANNED)
-- Store becomes authoritative selection source.
-- Fabric ActiveSelection becomes a view artifact, recreated from model diff.
-- Eliminate token suppression (no bidirectional contention).
-- Deterministic selection diff supports headless & unit testing.
+MiniLayout (split)
+- minilayout-core.js          – layout engine (panel resizing API)
+- minilayout-splitter-persist.js – splitter + size persistence
+- minilayout.js               – facade export { MiniLayout }
+- minilayout-ui.js            – advanced UI helpers (splitters/tabs/ARIA)
+- minilayout.css              – base styles
+- minilayout.DOCS.md          – docs
 
-Phase 4: Centralize Geometry + Hit-Testing (PLANNED)
-- All bounding, collision, marquee, snap geometry resolved through geometry/ modules (no ad hoc Fabric API calls).
-- Marquee selection implemented in pure model space.
+Other Notes
+- Console.Re remote logging is documented in README and Manifesto (temporary CDN exception).
+- Index.html should inject the Console.Re connector only if remote logging is desired.
 
-Phase 5: Full Domain Model for Shapes (PLANNED)
-- POJO scene graph (shapes, transforms, styles, constraints). Fabric purely renders.
-- Easier multi-renderer strategy (e.g., export to SVG/Canvas/Server).
-- ActiveSelection limited to ergonomic dragging visualization.
+Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Step A kickoff)
+  - Added commands/command-bus.js (dispatch, undo/redo, subscribers).
+  - Added commands/commands.js (ADD_SHAPE/ADD_SHAPES/DELETE_SHAPES/DUPLICATE_SHAPES/SET_SELECTION).
+  - actions.js now dispatches commands for add/delete/duplicate.
+- 2025-09-24 (Loupe Overlay)
+  - Added loupe.js (DPR/zoom-aware magnifier overlay) and loupe-controller.js (anchors to selected Point via settings).
+  - settings-core.js: added loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair.
+  - canvas-core.js: wires loupe-controller during panel init/cleanup.
+- 2025-09-24 (Phase 1 Completion – Geometry & Selection Stability)
+  - GEO-UNIFY: Added geometry/shape-rect.js – single source for bounding box, center, aspectRatio, outerRadius.
+  - CONSTRAINTS-GEOM: canvas-constraints.js now uses getShapeBoundingBox for single shapes (ActiveSelection hull still Fabric fallback).
+  - DEBUG-GEOM: debug.js shape summaries now reference unified geometry (adds aspectRatio, outerRadius, geometrySource).
+  - CIRCLE-GUARD: transformer.js defensive uniform scaling guard for circle (lockUniScaling + scale normalization).
+  - STROKE-OPT: shapes-core.js + selection-core.js reworked so stroke width reapplies only after actual scale/rotate (transform tracking via _pendingStrokeWidthReapply).
+  - SEL-CLEAN: selection-core.js removed unconditional stroke normalization logic.
+  - DEV-SANITY: dev/geometry-sanity.js script validates unified geometry vs Fabric boundingRect (tolerance-based diff logging).
+  - Phase 1 officially marked COMPLETE (see PHASED_ARCHITECTURE_PATH.md progress section).
+- 2025-09-24 (earlier same day)
+  - EVT-TRACE: canvas-events.js ring buffer (selectionEventTrace) for created/updated/cleared + blank clears (suppression flags, tokens, prev/next IDs) with enforced ActiveSelection visuals (hasControls=false).
+  - DBG-05: debug.js → debug-snapshot-5 (direct trace ingestion, legacy merge, scaled dimensions, tolerant bleed evaluation, unified selectionTrace).
+  - SHP-CLAMP: shapes-core.js clamps initial Rect/Circle placement (now also Ellipse) to non-negative coordinates.
+  - CONSTRAINTS-PATCH: canvas-constraints.js idempotent/non-destructive (no blanket canvas.off('selection:*')), fixing multi-select deletion mismatch.
+  - MULTI-DELETE-FIX: Store/Fabric selection sync stabilized—Delete removes exactly the visually selected set.
+  - SHP-ELLIPSE: Added Ellipse shape (rotatable, free aspect, 8 anchors) – fabric-wrapper.js exports Ellipse, shape-defs.js entry, shapes-core.js factory makeEllipseShape(), actions.js add/duplicate support, toolbar-dom.js option.
+  - SHP-CIRCLE-LOCK: Circle behavior clarified/enforced (non-rotatable, aspect-ratio locked).
 
-Phase 6: History, Persistence, Extensibility (PLANNED)
-- Robust undo/redo across style, geometry, structural commands.
-- Stable scene serialization format (versioned).
-- Plugin registry for shape types, alignment strategies, snapping policies.
-- Foundation for collaborative editing (command log streaming / CRDT exploration).
-
-Guiding Principle  
-At every phase, prioritize testability, separation of concerns, and extensibility.  
-No business logic or state lives in UI or Fabric handlers; all domain logic is centralized and pure.
-
-Deviation from this path requires explicit engineering review and justification.
-
---- Phase Completion Log ---
-(Keep this concise; full detail lives in PHASED_ARCHITECTURE_PATH.md)
-
-✅ Phase 1 – 2025-09-24
-Core Deliverables:
-- geometry/shape-rect.js (single-shape canonical bbox center aspectRatio outerRadius)
-- canvas-constraints.js single-shape branch migrated to unified geometry
-- debug.js shape summaries now geometry-driven (removed radius heuristics)
-- transformer.js circle uniform scaling defensive guard
-- shapes-core.js transform-based stroke width reapply
-- selection-core.js selection hygiene (removed stroke spam)
-- dev/geometry-sanity.js validation script
-- docs: modules.index.md + PHASED_ARCHITECTURE_PATH.md updated
-
-Quality Outcomes:
-- Deterministic shape geometry across all consumers (constraints, debug, forthcoming history system).
-- Reduced render churn and mutation noise (stroke width fix gating).
-- Safer event layering (no clobbering selection handlers).
-- Instrumented selection pipeline (trace ring buffer) enabling reproducible diagnostics.
-
---- Geometry Usage Rules (Post Phase 1) ---
-1. For any single shape rectangle/size/center logic use geometry/shape-rect.js helpers:
-   - getShapeBoundingBox(shape)
-   - getShapeCenter(shape)
-   - getShapeAspectRatio(shape)
-   - getShapeOuterRadius(shape)
-2. For selection hull & member boxes use geometry/selection-rects.js (DO NOT call shape.getBoundingRect() directly).
-3. If a new module requires geometry:
-   - Add or extend a helper in geometry/*.
-   - Update PHASED_ARCHITECTURE_PATH.md only if expanding geometry scope (e.g., snap guides or hit-testing).
-4. Fabric’s getBoundingRect(true,true) is TEMPORARY for multi-object hulls only (ActiveSelection path) until Phase 4.
-
---- Stroke Width Policy (Post Phase 1) ---
-- Default stroke width reapplication must occur ONLY:
-  - After scale or rotation transformations finalize (modified event following scaling/rotating sets a pending flag).
-  - When user explicitly changes stroke width (setStrokeWidthForSelectedShapes).
-- Selection changes alone must never trigger stroke width mutation.
-
---- Circle Integrity Policy ---
-- Circles must remain visually perfect (uniform scaling).
-- transformer.js forcibly enforces lockUniScaling + reconciles drift.
-- Any future shape-def change that relaxes keepRatio MUST still respect circle guard unless a Phase-level decision revises it.
-
---- Debug / Diagnostics ---
-- All new debug surface additions must integrate into debug.js snapshot (no bespoke console dumps).
-- For geometry changes: extend dev/geometry-sanity.js if validation heuristics evolve.
-- Selection trace (canvas-events.js ring buffer) remains canonical for selection event chronology.
-
---- Adding New Shape Types ---
-1. Define shape config in shape-defs.js.
-2. Provide factory in shapes-core.js (or dedicated module if complex).
-3. Add support to actions.js (add/duplicate) & toolbar UI if user-creatable.
-4. Integrate geometry considerations:
-   - If primitive differs (e.g., path-based) add branch in geometry/shape-rect.js.
-5. Update modules.index.md and (if structural) PHASED_ARCHITECTURE_PATH.md.
-
---- Performance Guardrails ---
-- Avoid repeated getBoundingRect() calls inside high-frequency handlers (object:moving, scaling).
-- Use cached or unified geometry helpers (they are optimized to avoid expensive Fabric calls).
-- Defer expensive recomputation to modified or explicit reflow triggers.
-
---- Testing & Future Automation (Forward-Looking) ---
-- Phase 2+ will introduce a command bus enabling deterministic replay testing.
-- Geometry helpers should remain side-effect free (pure) to facilitate snapshot tests.
-
---- End Phased Architecture & Phase 1 Completion Addendum ---
-
-Refer to this file before making foundational changes.  
-Always update this section if the architectural path is revised.  
-For detailed chronological progress and checklists see: docs/PHASED_ARCHITECTURE_PATH.md
-
+How to add here
+- When you add/rename/remove a module: update the relevant section above and keep the line short.
+- If you add a new facade, list it in “Facades (public import paths)”.
