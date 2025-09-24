@@ -9,8 +9,8 @@ Update Policy
 - Edit this file when modules are added/removed/renamed.
 - Keep entries brief; link to source when needed.
 
-**Comment Policy:**  
-- During development, header and function-level comments may be omitted from source files to reduce file size and speed iteration.  
+Comment Policy:
+- During development, header and function-level comments may be omitted from source files to reduce file size and speed iteration.
 - Before production/release, restore concise summary headers and key function comments as per engineering rules.
 
 Facades (public import paths)
@@ -25,17 +25,24 @@ Core Modules
 - state.js                    – Zustand-style store and mutators
 - fabric-wrapper.js           – ESM wrapper for Fabric constructors (exports Ellipse)
 
+Commands
+- commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
+- commands/commands.js        – core command implementations (add/delete/duplicate/selection)
+
+Keybindings
+- keybindings.js              – global Ctrl/Cmd+Z (undo) and Ctrl/Cmd+Shift+Z / Ctrl+Y (redo); installs in layout.js
+
 Geometry
 - geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
-- geometry/shape-rect.js      – (NEW) unified single-shape bounding box + center + aspectRatio + outerRadius (Phase 1)
+- geometry/shape-rect.js      – unified single-shape bounding box + center + aspectRatio + outerRadius
 
 Canvas
 - canvas-core.js              – Fabric canvas creation, image, sync, overlays (MiniLayout resize API)
 - canvas-events.js            – Fabric selection sync → store selection (ring buffer trace)
-- canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, now uses unified single-shape geometry)
+- canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, unified single-shape geometry)
 - selection-outlines.js       – overlay painter for multi-select hull/boxes
 - loupe.js                    – magnifier overlay (independent overlay canvas; DPR/zoom-aware)
-- loupe-controller.js         – attaches loupe to selected Point center via settings (loupeEnabled/size/magnification/crosshair)
+- loupe-controller.js         – attaches loupe to selected Point via settings (loupeEnabled/size/magnification/crosshair)
 
 Toolbar
 - toolbar-panel.js            – assemble styles, DOM, handlers, state sync
@@ -46,9 +53,8 @@ Toolbar
 - toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha)
 
 Selection
-- selection-core.js           – single/multi selection; transformer lifecycle (stroke fix removed – now transform driven)
-- transformer.js              – attach/detach/update Fabric controls (circle uniform scaling defensive guard added)
-- (uses geometry helpers indirectly via consuming modules)
+- selection-core.js           – single/multi selection; transformer lifecycle
+- transformer.js              – attach/detach/update Fabric controls (circle uniform scaling defensive guard)
 
 Shapes
 - shapes-core.js              – rect / circle / ellipse factories; colors; stroke width; labels; initial placement clamp; transform-based stroke normalization
@@ -57,7 +63,7 @@ Shapes
 - shape-state.js              – per-shape state machine (selected/dragging/locked)
 
 Actions
-- actions.js                  – centralized business logic (add/delete/dup/lock/etc) (ellipse support)
+- actions.js                  – centralized business logic; now dispatches add/delete/duplicate via command bus
 - actions-alignment.js        – alignSelected(mode) relative to selection hull only
 
 Settings
@@ -66,7 +72,7 @@ Settings
 - settings-ui.js              – Tweakpane panel binding to settings
 
 Layout / Panels / Diagnostics
-- layout.js                   – MiniLayout bootstrap, panel wiring
+- layout.js                   – MiniLayout bootstrap; installs global undo/redo keybindings
 - errorlog.js                 – passive Error Log panel (Console.Re streaming in use)
 - global-errors.js            – window error/unhandledrejection → logger
 - debug.js                    – Debug Snapshot Collector (direct selection trace + tolerant bleed + unified geometry)
@@ -86,6 +92,12 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Step B)
+  - keybindings.js added (global undo/redo). layout.js now installs/uninstalls keybindings during app lifecycle.
+- 2025-09-24 (Phase 2 – Step A)
+  - Added commands/command-bus.js (dispatch, undo/redo, subscribers).
+  - Added commands/commands.js (ADD_SHAPE/ADD_SHAPES/DELETE_SHAPES/DUPLICATE_SHAPES/SET_SELECTION).
+  - actions.js now dispatches commands for add/delete/duplicate.
 - 2025-09-24 (Loupe Overlay)
   - Added loupe.js (DPR/zoom-aware magnifier overlay) and loupe-controller.js (anchors to selected Point via settings).
   - settings-core.js: added loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair.
@@ -98,17 +110,14 @@ Recent Changes (brief)
   - STROKE-OPT: shapes-core.js + selection-core.js reworked so stroke width reapplies only after actual scale/rotate (transform tracking via _pendingStrokeWidthReapply).
   - SEL-CLEAN: selection-core.js removed unconditional stroke normalization logic.
   - DEV-SANITY: dev/geometry-sanity.js script validates unified geometry vs Fabric boundingRect (tolerance-based diff logging).
-  - Phase 1 officially marked COMPLETE (see PHASED_ARCHITECTURE_PATH.md progress section).
 - 2025-09-24 (earlier same day)
-  - EVT-TRACE: canvas-events.js ring buffer (selectionEventTrace) for created/updated/cleared + blank clears (suppression flags, tokens, prev/next IDs) with enforced ActiveSelection visuals (hasControls=false).
-  - DBG-05: debug.js → debug-snapshot-5 (direct trace ingestion, legacy merge, scaled dimensions, tolerant bleed evaluation, unified selectionTrace).
-  - SHP-CLAMP: shapes-core.js clamps initial Rect/Circle placement (now also Ellipse) to non-negative coordinates.
-  - CONSTRAINTS-PATCH: canvas-constraints.js idempotent/non-destructive (no blanket canvas.off('selection:*')), fixing multi-select deletion mismatch.
+  - EVT-TRACE: canvas-events.js ring buffer (selectionEventTrace) for created/updated/cleared + blank clears with suppression tokens; ActiveSelection visuals enforced.
+  - SHP-CLAMP: shapes-core.js clamps initial Rect/Circle placement (now also Ellipse).
+  - CONSTRAINTS-PATCH: canvas-constraints.js idempotent/non-destructive install.
   - MULTI-DELETE-FIX: Store/Fabric selection sync stabilized—Delete removes exactly the visually selected set.
-  - SHP-ELLIPSE: Added Ellipse shape (rotatable, free aspect, 8 anchors) – fabric-wrapper.js exports Ellipse, shape-defs.js entry, shapes-core.js factory makeEllipseShape(), actions.js add/duplicate support, toolbar-dom.js option.
-  - SHP-CIRCLE-LOCK: Circle behavior clarified/enforced (non-rotatable, aspect-ratio locked, 4 corner anchors only).
+  - SHP-ELLIPSE: Ellipse shape added across wrapper/defs/factories/UI.
+  - SHP-CIRCLE-LOCK: Circle behavior clarified/enforced (non-rotatable, aspect-ratio locked).
 
 How to add here
 - When you add/rename/remove a module: update the relevant section above and keep the line short.
 - If you add a new facade, list it in “Facades (public import paths)”.
-
