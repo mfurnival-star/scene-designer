@@ -602,6 +602,122 @@ function cmdSetTransforms(payload) {
   return { type: 'SET_TRANSFORMS', payload: { items: prev } };
 }
 
+function isDrawableChild(obj) {
+  return !!obj && !obj._isDiagnosticLabel && (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'ellipse' || obj.type === 'line');
+}
+function getFirstChildStroke(shape) {
+  if (!shape || !Array.isArray(shape._objects)) return null;
+  const child = shape._objects.find(isDrawableChild);
+  if (!child) return null;
+  return ('stroke' in child) ? child.stroke : null;
+}
+function getFirstChildFill(shape) {
+  if (!shape || !Array.isArray(shape._objects)) return null;
+  const child = shape._objects.find(o => isDrawableChild(o) && (o.type === 'rect' || o.type === 'circle' || o.type === 'ellipse'));
+  if (!child) return null;
+  return ('fill' in child) ? child.fill : null;
+}
+function applyStrokeColorToShape(shape, color) {
+  if (!shape || shape.locked || !Array.isArray(shape._objects)) return;
+  shape._objects.forEach(obj => {
+    if (!isDrawableChild(obj)) return;
+    if ('stroke' in obj) obj.set({ stroke: color });
+    if ('strokeUniform' in obj) obj.set({ strokeUniform: true });
+  });
+  if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
+}
+function applyFillColorToShape(shape, rgba) {
+  if (!shape || shape.locked || shape._type === 'point' || !Array.isArray(shape._objects)) return;
+  shape._objects.forEach(obj => {
+    if (!isDrawableChild(obj)) return;
+    if (obj.type === 'line') return;
+    if ('fill' in obj) obj.set({ fill: rgba });
+  });
+  if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
+}
+
+function cmdSetStrokeColor(payload) {
+  const items = Array.isArray(payload?.items) ? payload.items.filter(i => i && i.id != null && typeof i.color === 'string') : null;
+  const color = typeof payload?.color === 'string' ? payload.color : null;
+
+  let targets = [];
+  if (items && items.length) {
+    const byId = new Map((getState().shapes || []).map(s => [s._id, s]));
+    targets = items.map(i => {
+      const s = byId.get(i.id);
+      return s && !s.locked ? { shape: s, color: i.color } : null;
+    }).filter(Boolean);
+  } else {
+    const ids = Array.isArray(payload?.ids) && payload.ids.length ? payload.ids : getSelectedIds();
+    if (!ids.length || !color) {
+      log("INFO", "[commands] SET_STROKE_COLOR: no targets or color");
+      return null;
+    }
+    targets = getShapesByIds(ids).filter(s => s && !s.locked).map(s => ({ shape: s, color }));
+  }
+
+  if (!targets.length) {
+    log("INFO", "[commands] SET_STROKE_COLOR: nothing to apply");
+    return null;
+  }
+
+  const prev = [];
+  targets.forEach(({ shape, color: c }) => {
+    try {
+      const before = getFirstChildStroke(shape);
+      prev.push({ id: shape._id, color: before });
+      applyStrokeColorToShape(shape, c);
+    } catch (e) {
+      log("WARN", "[commands] SET_STROKE_COLOR: apply failed", { id: shape?._id, error: e });
+    }
+  });
+
+  requestRender();
+  log("INFO", "[commands] Stroke color applied", { count: targets.length });
+  return { type: 'SET_STROKE_COLOR', payload: { items: prev } };
+}
+
+function cmdSetFillColor(payload) {
+  const items = Array.isArray(payload?.items) ? payload.items.filter(i => i && i.id != null && typeof i.fill === 'string') : null;
+  const fill = typeof payload?.fill === 'string' ? payload.fill : null;
+
+  let targets = [];
+  if (items && items.length) {
+    const byId = new Map((getState().shapes || []).map(s => [s._id, s]));
+    targets = items.map(i => {
+      const s = byId.get(i.id);
+      return s && !s.locked ? { shape: s, fill: i.fill } : null;
+    }).filter(Boolean);
+  } else {
+    const ids = Array.isArray(payload?.ids) && payload.ids.length ? payload.ids : getSelectedIds();
+    if (!ids.length || !fill) {
+      log("INFO", "[commands] SET_FILL_COLOR: no targets or fill");
+      return null;
+    }
+    targets = getShapesByIds(ids).filter(s => s && !s.locked && s._type !== 'point').map(s => ({ shape: s, fill }));
+  }
+
+  if (!targets.length) {
+    log("INFO", "[commands] SET_FILL_COLOR: nothing to apply");
+    return null;
+  }
+
+  const prev = [];
+  targets.forEach(({ shape, fill: f }) => {
+    try {
+      const before = getFirstChildFill(shape);
+      prev.push({ id: shape._id, fill: before });
+      applyFillColorToShape(shape, f);
+    } catch (e) {
+      log("WARN", "[commands] SET_FILL_COLOR: apply failed", { id: shape?._id, error: e });
+    }
+  });
+
+  requestRender();
+  log("INFO", "[commands] Fill color applied", { count: targets.length });
+  return { type: 'SET_FILL_COLOR', payload: { items: prev } };
+}
+
 export function executeCommand(cmd) {
   if (!cmd || typeof cmd.type !== 'string') {
     log("WARN", "[commands] executeCommand: invalid cmd", { cmd });
@@ -642,6 +758,11 @@ export function executeCommand(cmd) {
 
     case 'SET_TRANSFORMS':
       return cmdSetTransforms(p);
+
+    case 'SET_STROKE_COLOR':
+      return cmdSetStrokeColor(p);
+    case 'SET_FILL_COLOR':
+      return cmdSetFillColor(p);
 
     default:
       log("WARN", "[commands] Unknown command type", { type: t });

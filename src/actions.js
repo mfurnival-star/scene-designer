@@ -2,11 +2,6 @@ import { log } from './log.js';
 import { getState } from './state.js';
 import { dispatch } from './commands/command-bus.js';
 
-/**
- * Add a shape via command bus.
- * @param {string} type - "point" | "rect" | "circle" | "ellipse"
- * @param {Object} [opts] - Optional settings (x,y overrides)
- */
 export function addShapeOfType(type, opts = {}) {
   const valid = new Set(["point", "rect", "circle", "ellipse"]);
   const shapeType = valid.has(type) ? type : "point";
@@ -17,9 +12,6 @@ export function addShapeOfType(type, opts = {}) {
   });
 }
 
-/**
- * Delete all currently selected, unlocked shapes using the command bus.
- */
 export function deleteSelectedShapes() {
   const selected = getState().selectedShapes || [];
   if (!selected.length) {
@@ -38,10 +30,6 @@ export function deleteSelectedShapes() {
   });
 }
 
-/**
- * Duplicate all currently selected, unlocked shapes via command bus.
- * New shapes are selected after duplication.
- */
 export function duplicateSelectedShapes() {
   const selected = getState().selectedShapes || [];
   const unlockedIds = selected.filter(s => s && !s.locked).map(s => s._id);
@@ -57,9 +45,6 @@ export function duplicateSelectedShapes() {
   });
 }
 
-/**
- * Lock all currently selected, unlocked shapes (selection preserved).
- */
 export function lockSelectedShapes() {
   const selected = getState().selectedShapes || [];
   if (!selected.length) {
@@ -79,9 +64,6 @@ export function lockSelectedShapes() {
   });
 }
 
-/**
- * Unlock selected shapes; if none selected, unlock all locked shapes.
- */
 export function unlockSelectedShapes() {
   const selected = getState().selectedShapes || [];
   if (selected.length > 0) {
@@ -95,15 +77,10 @@ export function unlockSelectedShapes() {
       payload: { ids: lockedIds }
     });
   } else {
-    // No selection: let command unlock all locked shapes
     dispatch({ type: 'UNLOCK_SHAPES' });
   }
 }
 
-/**
- * Reset rotation (angle) to 0° for all currently selected, unlocked Rect/Circle/Ellipse shapes.
- * NOP for Point shapes.
- */
 export function resetRotationForSelectedShapes() {
   const selected = getState().selectedShapes || [];
   const targets = selected.filter(s =>
@@ -121,7 +98,38 @@ export function resetRotationForSelectedShapes() {
   });
 }
 
-/**
- * Alignment (left/centerX/right/top/middleY/bottom) for selected shapes.
- */
+export function setStrokeColorForSelected(color) {
+  const selected = getState().selectedShapes || [];
+  const ids = selected.filter(s => s && !s.locked).map(s => s._id);
+  if (!ids.length) {
+    log("INFO", "[actions] setStrokeColorForSelected: no unlocked shapes selected");
+    return;
+  }
+  if (typeof color !== 'string' || !color) {
+    log("WARN", "[actions] setStrokeColorForSelected: invalid color");
+    return;
+  }
+  dispatch({
+    type: 'SET_STROKE_COLOR',
+    payload: { ids, color }
+  });
+}
+
+export function setFillColorForSelected(fill) {
+  const selected = getState().selectedShapes || [];
+  const ids = selected.filter(s => s && !s.locked).map(s => s._id);
+  if (!ids.length) {
+    log("INFO", "[actions] setFillColorForSelected: no unlocked shapes selected");
+    return;
+  }
+  if (typeof fill !== 'string' || !fill) {
+    log("WARN", "[actions] setFillColorForSelected: invalid fill");
+    return;
+  }
+  dispatch({
+    type: 'SET_FILL_COLOR',
+    payload: { ids, fill }
+  });
+}
+
 export { alignSelected } from './actions-alignment.js';

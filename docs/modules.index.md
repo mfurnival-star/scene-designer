@@ -28,7 +28,7 @@ Core Modules
 Commands
 - commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
 - commands/commands.js        – core command implementations:
-  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED, SET_TRANSFORMS
+  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED, SET_TRANSFORMS, SET_STROKE_COLOR, SET_FILL_COLOR
   - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
 
 Keybindings
@@ -53,7 +53,7 @@ Toolbar
 - toolbar-dom.js              – renders toolbar DOM; returns element refs (Ellipse option, Debug button, Undo/Redo buttons)
 - toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot; Undo/Redo buttons
 - toolbar-state.js            – enable/disable logic; scale sync; subscribes to history for Undo/Redo enabled state
-- toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha)
+- toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha) using command bus; debounced live updates
 
 Selection
 - selection-core.js           – single/multi selection; transformer lifecycle
@@ -66,7 +66,7 @@ Shapes
 - shape-state.js              – per-shape state machine (selected/dragging/locked)
 
 Actions
-- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation/align via command bus
+- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation/align via command bus; style intents setStrokeColorForSelected and setFillColorForSelected dispatch SET_STROKE_COLOR / SET_FILL_COLOR
 - actions-alignment.js        – dispatches ALIGN_SELECTED command (alignSelected(mode, ref))
 
 Settings
@@ -95,6 +95,10 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Style Commands)
+  - commands/commands.js: added SET_STROKE_COLOR and SET_FILL_COLOR (batch, undoable per-id; inverse captures previous colors).
+  - actions.js: added setStrokeColorForSelected(color) and setFillColorForSelected(fill) that dispatch the new commands for unlocked selection.
+  - toolbar-color.js: switched to actions-based dispatch through the command bus; debounced live changes; when no selection, updates defaults in settings.
 - 2025-09-24 (Phase 2 – Option B)
   - commands/commands.js: added SET_TRANSFORMS to set {left, top, scaleX, scaleY, angle} per id and return inverse for undo.
   - canvas-transform-history.js: new module that snapshots pre/post transforms and dispatches a single SET_TRANSFORMS on gesture end (object:modified/mouse:up).

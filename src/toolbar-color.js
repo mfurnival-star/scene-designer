@@ -1,50 +1,16 @@
-/**
- * toolbar-color.js
- * -----------------------------------------------------------
- * Scene Designer – Toolbar Color Pickers (Pickr integration, ESM ONLY)
- * Purpose:
- * - Replace native <input type="color"> and alpha slider with Pickr-based color pickers.
- * - Two pickers:
- *    - Stroke: hex only (no opacity slider)
- *    - Fill: hex + opacity
- * - Behavior:
- *    - If shapes are selected: apply to unlocked selected shapes live as the user changes.
- *    - If none selected: update defaults in settings (persisted).
- *
- * Public Exports:
- * - installColorPickers(refs) -> detachFn
- *   - refs must include: { strokePickrEl, fillPickrEl }
- *
- * Dependencies:
- * - @simonwep/pickr (ESM)
- * - log.js (logging)
- * - state.js (getState)
- * - settings-core.js (setSettingAndSave)
- * - shapes.js (setStrokeColorForSelectedShapes, setFillColorForSelectedShapes)
- * -----------------------------------------------------------
- */
-
 import Pickr from '@simonwep/pickr';
 import '@simonwep/pickr/dist/themes/classic.min.css';
 
 import { log } from './log.js';
 import { getState } from './state.js';
 import { setSettingAndSave } from './settings-core.js';
-import {
-  setStrokeColorForSelectedShapes,
-  setFillColorForSelectedShapes
-} from './shapes.js';
+import { setStrokeColorForSelected, setFillColorForSelected } from './actions.js';
 
-/** --- Helpers for color parsing/formatting --- */
-
-// Ensure string starts with '#'
 function ensureHash(hex) {
   if (typeof hex !== "string") return "#000000";
   const s = hex.trim();
   return s.startsWith("#") ? s : ("#" + s);
 }
-
-// Get #RRGGBB from #RRGGBB or #RRGGBBAA (fallback #000000)
 function toHex6(hex) {
   const h = ensureHash(hex).toLowerCase();
   if (h.length === 7) return h;
@@ -54,8 +20,6 @@ function toHex6(hex) {
   }
   return "#000000";
 }
-
-// Convert alpha percent (0–100) to AA hex (00–FF)
 function alphaPctToAA(percent) {
   let p = Number(percent);
   if (!Number.isFinite(p)) p = 100;
@@ -64,41 +28,29 @@ function alphaPctToAA(percent) {
   const v = Math.round((p / 100) * 255);
   return v.toString(16).padStart(2, "0");
 }
-
-// Extract alpha percent (0–100) from #RRGGBBAA or default (100 if missing)
 function alphaPctFromHex(hex, defaultPct = 100) {
   const h = ensureHash(hex);
   if (h.length === 9) {
     const aa = h.slice(7, 9);
     const v = parseInt(aa, 16);
-    if (Number.isFinite(v)) {
-      return Math.round((v / 255) * 100);
-    }
+    if (Number.isFinite(v)) return Math.round((v / 255) * 100);
   }
   return defaultPct;
 }
-
-// Compose #RRGGBBAA from #RRGGBB and alpha percent
 function makeHex8(hex6, alphaPercent) {
   return toHex6(hex6) + alphaPctToAA(alphaPercent);
 }
-
 function hasSelection() {
   const sel = getState().selectedShapes || [];
   return Array.isArray(sel) && sel.length > 0;
 }
-
-// Convert Pickr color to #RRGGBB
 function pickrColorToHex6(color) {
-  // toHEXA() returns array of hex strings ['rr','gg','bb','aa']
   const arr = color.toHEXA();
   const hex6 = '#' + arr.slice(0, 3).map(h => (typeof h === 'string' ? h.padStart(2, '0') : String(h).padStart(2, '0'))).join('').toLowerCase();
   return hex6;
 }
-
-// Convert Pickr color to alpha percent (0–100)
 function pickrColorToAlphaPct(color) {
-  const rgba = color.toRGBA(); // [r,g,b,a]
+  const rgba = color.toRGBA();
   const a = Array.isArray(rgba) ? (rgba[3] ?? 1) : 1;
   let pct = Math.round(Number(a) * 100);
   if (!Number.isFinite(pct)) pct = 100;
@@ -106,11 +58,22 @@ function pickrColorToAlphaPct(color) {
   if (pct > 100) pct = 100;
   return pct;
 }
+function rgbaStringFromHex6(hex6, alphaPercent) {
+  const h = toHex6(hex6).slice(1);
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const a = Math.max(0, Math.min(1, Number(alphaPercent) / 100));
+  return `rgba(${r},${g},${b},${a})`;
+}
+function debounce(fn, wait = 120) {
+  let t = null;
+  return (...args) => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
 
-/**
- * Create and install Pickr-based color pickers.
- * Returns a detach function that destroys the pickers.
- */
 export function installColorPickers(refs) {
   const { strokePickrEl, fillPickrEl } = refs || {};
   if (!strokePickrEl || !fillPickrEl) {
@@ -118,25 +81,21 @@ export function installColorPickers(refs) {
     return () => {};
   }
 
-  // Initialize defaults from settings
   const settings = getState().settings || {};
   const defaultStrokeHex6 = toHex6(settings.defaultStrokeColor || "#000000ff");
   const defaultFillHex8 = ensureHash(settings.defaultFillColor || "#00000000");
   const defaultFillHex6 = toHex6(defaultFillHex8);
   const defaultFillAlphaPct = alphaPctFromHex(defaultFillHex8, 0);
 
-  // Common options
   const common = {
     theme: 'classic',
     useAsButton: true,
     position: 'bottom-start',
     appClass: 'scene-designer-pickr',
     components: {
-      // Main components
       preview: true,
-      opacity: true, // may override per-instance
+      opacity: true,
       hue: true,
-      // Input / interaction
       interaction: {
         input: true,
         hex: true,
@@ -155,73 +114,83 @@ export function installColorPickers(refs) {
     }
   };
 
-  // Stroke: hex only, no opacity slider
   const strokePickr = Pickr.create({
     ...common,
     el: strokePickrEl,
     default: defaultStrokeHex6,
-    components: {
-      ...common.components,
-      opacity: false // disable for stroke
-    }
+    components: { ...common.components, opacity: false }
   });
 
-  // Fill: hex + opacity
   const fillPickr = Pickr.create({
     ...common,
     el: fillPickrEl,
     default: makeHex8(defaultFillHex6, defaultFillAlphaPct)
   });
 
-  // Apply stroke on change (live)
-  const onStrokeChange = (color /*, instance */) => {
+  const applyStroke = (hex6) => {
     try {
-      if (!color) return;
-      const hex6 = pickrColorToHex6(color);
       if (hasSelection()) {
-        setStrokeColorForSelectedShapes(hex6);
+        setStrokeColorForSelected(hex6);
         log("INFO", "[toolbar-color] Applied stroke to selection", { hex6 });
       } else {
-        // Persist with opaque alpha
         const hex8 = makeHex8(hex6, 100);
         setSettingAndSave("defaultStrokeColor", hex8);
         log("INFO", "[toolbar-color] Updated defaultStrokeColor", { hex8 });
       }
     } catch (e) {
-      log("ERROR", "[toolbar-color] Stroke change error", e);
+      log("ERROR", "[toolbar-color] applyStroke error", e);
     }
   };
-
-  // Apply fill on change (live)
-  const onFillChange = (color /*, instance */) => {
+  const applyFill = (hex6, alphaPct) => {
     try {
-      if (!color) return;
-      const hex6 = pickrColorToHex6(color);
-      const alphaPct = pickrColorToAlphaPct(color);
-
       if (hasSelection()) {
-        setFillColorForSelectedShapes(hex6, alphaPct);
-        log("INFO", "[toolbar-color] Applied fill to selection", { hex6, alphaPct });
+        const rgba = rgbaStringFromHex6(hex6, alphaPct);
+        setFillColorForSelected(rgba);
+        log("INFO", "[toolbar-color] Applied fill to selection", { rgba });
       } else {
         const hex8 = makeHex8(hex6, alphaPct);
         setSettingAndSave("defaultFillColor", hex8);
         log("INFO", "[toolbar-color] Updated defaultFillColor", { hex8 });
       }
     } catch (e) {
-      log("ERROR", "[toolbar-color] Fill change error", e);
+      log("ERROR", "[toolbar-color] applyFill error", e);
     }
   };
 
-  // Wire events (live update)
+  const debouncedStroke = debounce(applyStroke, 140);
+  const debouncedFill = debounce(applyFill, 140);
+
+  const onStrokeChange = (color) => {
+    if (!color) return;
+    const hex6 = pickrColorToHex6(color);
+    debouncedStroke(hex6);
+  };
+  const onStrokeSwatch = (color) => {
+    if (!color) return;
+    const hex6 = pickrColorToHex6(color);
+    applyStroke(hex6);
+  };
+
+  const onFillChange = (color) => {
+    if (!color) return;
+    const hex6 = pickrColorToHex6(color);
+    const alphaPct = pickrColorToAlphaPct(color);
+    debouncedFill(hex6, alphaPct);
+  };
+  const onFillSwatch = (color) => {
+    if (!color) return;
+    const hex6 = pickrColorToHex6(color);
+    const alphaPct = pickrColorToAlphaPct(color);
+    applyFill(hex6, alphaPct);
+  };
+
   strokePickr.on('change', onStrokeChange);
-  strokePickr.on('swatchselect', onStrokeChange);
+  strokePickr.on('swatchselect', onStrokeSwatch);
 
   fillPickr.on('change', onFillChange);
-  fillPickr.on('swatchselect', onFillChange);
+  fillPickr.on('swatchselect', onFillSwatch);
 
   log("INFO", "[toolbar-color] Pickr color pickers installed");
-
-  // Detach / destroy
   return function detach() {
     try {
       strokePickr && strokePickr.destroyAndRemove();
@@ -236,4 +205,3 @@ export function installColorPickers(refs) {
     log("INFO", "[toolbar-color] Pickr color pickers detached");
   };
 }
-
