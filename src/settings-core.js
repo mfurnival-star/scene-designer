@@ -96,7 +96,11 @@ export const settingsRegistry = [
   { key: "loupeEnabled", label: "Loupe (Enable)", type: "boolean", default: false },
   { key: "loupeSizePx", label: "Loupe Size (px)", type: "number", default: 160, min: 40, max: 400, step: 10 },
   { key: "loupeMagnification", label: "Loupe Magnification", type: "number", default: 2, min: 1, max: 8, step: 0.5 },
-  { key: "loupeCrosshair", label: "Loupe Crosshair", type: "boolean", default: true }
+  { key: "loupeCrosshair", label: "Loupe Crosshair", type: "boolean", default: true },
+  { key: "loupeOffsetXPx", label: "Loupe Offset X (px)", type: "number", default: 140, min: -800, max: 800, step: 10 },
+  { key: "loupeOffsetYPx", label: "Loupe Offset Y (px)", type: "number", default: -140, min: -800, max: 800, step: 10 },
+  { key: "loupeSmartTether", label: "Loupe Smart Tether", type: "boolean", default: true },
+  { key: "loupeShowTether", label: "Loupe Show Tether", type: "boolean", default: true }
 
   // Add more settings here as needed
 ];

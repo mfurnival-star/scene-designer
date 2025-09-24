@@ -7,7 +7,7 @@
  * - Manage the loupe (magnifier) overlay lifecycle based on settings and selection.
  * - When enabled via settings.loupeEnabled, the loupe attaches to the currently
  *   selected Point shape's center. If no Point is selected, loupe is hidden.
- * - Reacts to settings changes (size/magnification/crosshair), selection changes,
+ * - Reacts to settings changes (size/magnification/crosshair/offset/tether), selection changes,
  *   and live point movement (Fabric object:moving/modified).
  *
  * Public Export:
@@ -78,7 +78,7 @@ function resolveShapeCenter(shape) {
   return getShapeCenter(shape);
 }
 
-function applySettingsToLoupe(meta, settings) {
+function applyVisualSettingsToLoupe(meta, settings) {
   if (!meta) return;
   const size = Number(settings?.loupeSizePx) || 160;
   const mag = Number(settings?.loupeMagnification) || 2;
@@ -87,6 +87,23 @@ function applySettingsToLoupe(meta, settings) {
   if (typeof meta.setSize === 'function') meta.setSize(size);
   if (typeof meta.setMagnification === 'function') meta.setMagnification(mag);
   if (typeof meta.setCrosshair === 'function') meta.setCrosshair(cross);
+}
+
+function applyOffsetAndTetherToLoupe(meta, settings) {
+  if (!meta) return;
+  const offX = Number.isFinite(settings?.loupeOffsetXPx) ? Number(settings.loupeOffsetXPx) : 140;
+  const offY = Number.isFinite(settings?.loupeOffsetYPx) ? Number(settings.loupeOffsetYPx) : -140;
+  const smart = settings?.loupeSmartTether !== false; // default true
+  const showTether = settings?.loupeShowTether !== false; // default true
+
+  if (typeof meta.setOffset === 'function') meta.setOffset(offX, offY);
+  if (typeof meta.setSmartTether === 'function') meta.setSmartTether(!!smart);
+  if (typeof meta.setShowTether === 'function') meta.setShowTether(!!showTether);
+}
+
+function applyAllLoupeSettings(meta, settings) {
+  applyVisualSettingsToLoupe(meta, settings);
+  applyOffsetAndTetherToLoupe(meta, settings);
 }
 
 let warnedNoAnchorOnce = false;
@@ -118,15 +135,24 @@ export function installLoupeController(canvas) {
   }
 
   // Initial apply
-  const initialEnabled = !!getState().settings?.loupeEnabled;
+  const s0 = getState().settings || {};
+  const initialEnabled = !!s0.loupeEnabled;
   if (initialEnabled) {
     const meta = ensureLoupeInstalled(canvas, {
       enabled: true,
-      sizePx: Number(getState().settings?.loupeSizePx) || 160,
-      magnification: Number(getState().settings?.loupeMagnification) || 2,
-      showCrosshair: getState().settings?.loupeCrosshair !== false
+      sizePx: Number(s0.loupeSizePx) || 160,
+      magnification: Number(s0.loupeMagnification) || 2,
+      showCrosshair: s0.loupeCrosshair !== false,
+      // If loupe.js supports these options (new version), they will be honored:
+      offsetXPx: Number.isFinite(s0.loupeOffsetXPx) ? Number(s0.loupeOffsetXPx) : 140,
+      offsetYPx: Number.isFinite(s0.loupeOffsetYPx) ? Number(s0.loupeOffsetYPx) : -140,
+      smartTether: s0.loupeSmartTether !== false,
+      showTether: s0.loupeShowTether !== false
     });
     if (meta) {
+      // Also apply via setters for backwards compatibility
+      applyAllLoupeSettings(meta, s0);
+
       // Anchor if a Point is selected
       const point = findFirstSelectedPoint();
       if (point) {
@@ -171,13 +197,15 @@ export function installLoupeController(canvas) {
         return;
       }
 
-      // Only update for the selected point (or just refresh if target not present)
+      // Only update when the point is the moving target; otherwise, just ensure it's enabled
       const target = opt?.target;
       if (target && target !== point) {
-        // If a non-point or other object is moving, we can skip anchoring update
-        // to reduce churn. However, if the selected point is moving, update center.
+        // Non-point or other object moving – we can skip anchor update to reduce churn
         if (target._type !== 'point') return;
       }
+
+      // Re-apply offsets and tethers if settings changed mid-drag (cheap)
+      applyOffsetAndTetherToLoupe(meta, settings);
 
       const center = resolveShapeCenter(point);
       if (center && typeof meta.setAnchorCanvasPoint === 'function') {
@@ -218,9 +246,14 @@ export function installLoupeController(canvas) {
               enabled: true,
               sizePx: Number(settings.loupeSizePx) || 160,
               magnification: Number(settings.loupeMagnification) || 2,
-              showCrosshair: settings.loupeCrosshair !== false
+              showCrosshair: settings.loupeCrosshair !== false,
+              offsetXPx: Number.isFinite(settings.loupeOffsetXPx) ? Number(settings.loupeOffsetXPx) : 140,
+              offsetYPx: Number.isFinite(settings.loupeOffsetYPx) ? Number(settings.loupeOffsetYPx) : -140,
+              smartTether: settings.loupeSmartTether !== false,
+              showTether: settings.loupeShowTether !== false
             });
             if (m) {
+              applyAllLoupeSettings(m, settings);
               const point = findFirstSelectedPoint();
               if (point) {
                 const center = resolveShapeCenter(point);
@@ -246,17 +279,17 @@ export function installLoupeController(canvas) {
           return; // handled
         }
 
-        // Visual tweaks: size/magnification/crosshair
-        if (meta) {
-          const relevant =
-            (details.type === 'setSetting' &&
-              (details.key === 'loupeSizePx' ||
-               details.key === 'loupeMagnification' ||
-               details.key === 'loupeCrosshair')) ||
-            details.type === 'setSettings';
-          if (relevant) {
-            applySettingsToLoupe(meta, settings);
-          }
+        // Visual + offset/tether tweaks when any relevant setting changes
+        const relevantKeys = new Set([
+          'loupeSizePx', 'loupeMagnification', 'loupeCrosshair',
+          'loupeOffsetXPx', 'loupeOffsetYPx', 'loupeSmartTether', 'loupeShowTether'
+        ]);
+        const isRelevant =
+          (details.type === 'setSetting' && relevantKeys.has(details.key)) ||
+          details.type === 'setSettings';
+
+        if (isRelevant && meta) {
+          applyAllLoupeSettings(meta, settings);
         }
       }
 
@@ -272,9 +305,16 @@ export function installLoupeController(canvas) {
           enabled: true,
           sizePx: Number(settings.loupeSizePx) || 160,
           magnification: Number(settings.loupeMagnification) || 2,
-          showCrosshair: settings.loupeCrosshair !== false
+          showCrosshair: settings.loupeCrosshair !== false,
+          offsetXPx: Number.isFinite(settings.loupeOffsetXPx) ? Number(settings.loupeOffsetXPx) : 140,
+          offsetYPx: Number.isFinite(settings.loupeOffsetYPx) ? Number(settings.loupeOffsetYPx) : -140,
+          smartTether: settings.loupeSmartTether !== false,
+          showTether: settings.loupeShowTether !== false
         });
         if (!m) return;
+
+        // Always ensure settings are applied (cheap idempotent)
+        applyAllLoupeSettings(m, settings);
 
         const point = findFirstSelectedPoint();
         if (point) {

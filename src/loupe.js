@@ -10,42 +10,42 @@
  * - Renders on an independent overlay canvas stacked above Fabric's upperCanvasEl.
  * - Samples pixels from Fabric's lowerCanvasEl (full scene render) and magnifies them.
  * - Fully DPI- and responsive-zoom aware.
+ * - Tethered display: lens can be offset from the sampled point (e.g., away from finger).
+ *   Smart-tether keeps the lens fully on-screen by flipping/clamping near edges.
+ *   Optional tether line connects lens rim back to the sample point.
  *
  * Public Export:
  * - installLoupe(canvas, options?) -> detachFn
  *
  * Options (all optional):
  * {
- *   enabled: boolean             // default true
- *   sizePx: number               // lens diameter in CSS px (default 160)
- *   magnification: number        // scale factor (default 2.0)
- *   showCrosshair: boolean       // draw a crosshair in the lens (default true)
- *   borderColor: string          // CSS color for lens border (default '#2176ff')
- *   borderWidthPx: number        // lens border width in CSS px (default 2)
- *   shadow: boolean              // lens shadow (default true)
+ *   enabled: boolean                 // default true
+ *   sizePx: number                   // lens diameter in CSS px (default 160)
+ *   magnification: number            // scale factor (default 2.0)
+ *   showCrosshair: boolean           // draw a crosshair in the lens (default true)
+ *   borderColor: string              // CSS color for lens border (default '#2176ff')
+ *   borderWidthPx: number            // lens border width in CSS px (default 2)
+ *   shadow: boolean                  // lens shadow (default true)
  *   anchorMode: 'pointer'|'canvasPoint' // default 'pointer'
  *   anchor: { x: number, y: number }    // canvas-space point (used when anchorMode='canvasPoint')
+ *   offsetXPx: number                // display offset X (CSS px) from sample point (default 140)
+ *   offsetYPx: number                // display offset Y (CSS px) from sample point (default -140)
+ *   smartTether: boolean             // auto-flip offsets to keep lens in view (default true)
+ *   showTether: boolean              // draw a tether line from lens rim to sample (default true)
  * }
  *
- * Runtime Controls (via returned meta on canvas):
- * - canvas.__sceneDesignerLoupe__:
- *    .detach()                          → remove loupe
- *    .setEnabled(boolean)
- *    .setSize(numberPx)
- *    .setMagnification(number)
- *    .setCrosshair(boolean)
- *    .setStyle({ borderColor, borderWidthPx, shadow })
- *    .setAnchorPointer()                → switch to pointer tracking
- *    .setAnchorCanvasPoint(x, y)        → switch to canvas point anchoring
- *
- * Behavior:
- * - Pointer tracking attaches to Fabric wrapper (.canvas-container), not the overlay
- *   (overlay has pointer-events:none so Fabric interactions pass through).
- * - Uses getBoundingClientRect() to convert client (CSS) coords to device px source coords
- *   in lowerCanvasEl, accounting for retina scaling safely.
- * - Uses requestAnimationFrame for smooth redraws without spamming on every mouse event.
- * - Non-destructive install: tracks its own listeners and DOM node; multiple calls will
- *   detach any prior loupe before attaching anew.
+ * Runtime Controls (via meta on canvas.__sceneDesignerLoupe__):
+ *   detach()                          → remove loupe
+ *   setEnabled(boolean)
+ *   setSize(numberPx)
+ *   setMagnification(number)
+ *   setCrosshair(boolean)
+ *   setStyle({ borderColor, borderWidthPx, shadow })
+ *   setAnchorPointer()                → switch to pointer tracking
+ *   setAnchorCanvasPoint(x, y)        → switch to canvas point anchoring
+ *   setOffset(dx, dy)                 → set display offset (CSS px)
+ *   setSmartTether(boolean)           → enable/disable smart tethering
+ *   setShowTether(boolean)            → show/hide tether line
  *
  * Dependencies:
  * - log.js (log)
@@ -90,7 +90,11 @@ export function installLoupe(canvas, options = {}) {
     borderWidthPx = 2,
     shadow = true,
     anchorMode = 'pointer',
-    anchor = null
+    anchor = null,
+    offsetXPx = 140,
+    offsetYPx = -140,
+    smartTether = true,
+    showTether = true
   } = options || {};
 
   if (!canvas) {
@@ -140,6 +144,12 @@ export function installLoupe(canvas, options = {}) {
   let lensBorderWidth = Math.max(0, Number(borderWidthPx) || 2);
   let lensShadow = !!shadow;
 
+  // Offsets and tether behavior
+  let lensOffsetX = Number.isFinite(offsetXPx) ? offsetXPx : 140;
+  let lensOffsetY = Number.isFinite(offsetYPx) ? offsetYPx : -140;
+  let useSmartTether = !!smartTether;
+  let drawTether = !!showTether;
+
   // Anchor state
   let mode = anchorMode === 'canvasPoint' ? 'canvasPoint' : 'pointer';
   let anchorX = (anchor && Number.isFinite(anchor.x)) ? Number(anchor.x) : 0; // canvas-space
@@ -181,8 +191,9 @@ export function installLoupe(canvas, options = {}) {
     }
   } catch {}
 
-  function computeLensCenterCSS() {
-    // Return [cx, cy] in CSS px relative to overlay/clipHost
+  // Compute sample center in CSS px relative to clipHost
+  function computeSampleCenterCSS() {
+    // Returns [sx, sy, rectLower, rectHost]
     const rect = lower.getBoundingClientRect();
     const hostRect = clipHost.getBoundingClientRect();
 
@@ -192,20 +203,50 @@ export function installLoupe(canvas, options = {}) {
     }
 
     // Canvas point anchoring: convert canvas-space (anchorX,anchorY) → CSS px
-    // Given viewportTransform normalized to scale-only (applyResponsiveViewport ensures zero translation),
+    // Given viewportTransform normalized to scale-only (applyResponsiveViewport sets zero translation),
     // CSS position relative to lower rect's top-left ≈ (anchorX * scale, anchorY * scale)
     const scale = getScale(canvas);
     const relX = anchorX * scale;
     const relY = anchorY * scale;
 
     // Convert to clipHost-relative CSS px
-    const cx = (rect.left - hostRect.left) + relX;
-    const cy = (rect.top - hostRect.top) + relY;
+    const sx = (rect.left - hostRect.left) + relX;
+    const sy = (rect.top - hostRect.top) + relY;
 
-    return [cx, cy, rect, hostRect];
+    return [sx, sy, rect, hostRect];
   }
 
-  // Helpers: draw the lens at current center
+  // Determine lens center from sample center with offset and smart tethering
+  function computeLensCenterFromOffset(sx, sy, hostWidth, hostHeight) {
+    const r = lensSize / 2;
+
+    // Candidate centers by quadrant flipping
+    const candidates = [
+      { cx: sx + lensOffsetX, cy: sy + lensOffsetY },               // default
+      { cx: sx - lensOffsetX, cy: sy + lensOffsetY },               // flip X
+      { cx: sx + lensOffsetX, cy: sy - lensOffsetY },               // flip Y
+      { cx: sx - lensOffsetX, cy: sy - lensOffsetY }                // flip both
+    ];
+
+    // Check if lens circle fully inside [0..hostWidth, 0..hostHeight]
+    function fits(c) {
+      return c.cx - r >= 0 && c.cy - r >= 0 && c.cx + r <= hostWidth && c.cy + r <= hostHeight;
+    }
+
+    if (useSmartTether) {
+      for (const cand of candidates) {
+        if (fits(cand)) return cand;
+      }
+    }
+
+    // Fallback: clamp to keep lens fully visible
+    return {
+      cx: Math.min(Math.max(sx + lensOffsetX, r), Math.max(r, hostWidth - r)),
+      cy: Math.min(Math.max(sy + lensOffsetY, r), Math.max(r, hostHeight - r))
+    };
+  }
+
+  // Helpers: draw the lens at computed center, sampling around sample center
   function drawLens() {
     rafId = 0;
     if (!ctx) return;
@@ -218,24 +259,27 @@ export function installLoupe(canvas, options = {}) {
 
     if (!liveEnabled) return;
 
-    const [cx, cy, rect] = computeLensCenterCSS();
+    const [sx, sy, rect] = computeSampleCenterCSS();
 
     // If pointer mode but cursor is outside host, hide lens
     if (mode === 'pointer') {
       if (!inside) return;
       // Clamp for safety
-      if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+      if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
     }
+
+    // Compute lens center with offset and smart tether
+    const { cx, cy } = computeLensCenterFromOffset(sx, sy, wCss, hCss);
 
     // Compute mapping: CSS to device px for lower canvas
     const scaleX = rect.width > 0 ? (lower.width / rect.width) : 1;
     const scaleY = rect.height > 0 ? (lower.height / rect.height) : 1;
 
-    // relX/Y: center relative to lower's CSS box
-    const relX = cx - (rect.left - clipHost.getBoundingClientRect().left);
-    const relY = cy - (rect.top - clipHost.getBoundingClientRect().top);
+    // relX/Y: sample center relative to lower's CSS box
+    const relX = sx - (rect.left - clipHost.getBoundingClientRect().left);
+    const relY = sy - (rect.top - clipHost.getBoundingClientRect().top);
 
-    // Convert to device pixels (source coords)
+    // Convert to device pixels (source coords) centered at sample point
     const srcX = Math.round(relX * scaleX);
     const srcY = Math.round(relY * scaleY);
 
@@ -243,11 +287,11 @@ export function installLoupe(canvas, options = {}) {
     const srcW = Math.max(1, Math.round(lensSize / mag * scaleX));
     const srcH = Math.max(1, Math.round(lensSize / mag * scaleY));
 
-    // Source top-left (device px), centered on the computed center
-    const sx = Math.max(0, Math.min(lower.width - srcW, Math.round(srcX - srcW / 2)));
-    const sy = Math.max(0, Math.min(lower.height - srcH, Math.round(srcY - srcH / 2)));
+    // Source top-left (device px), centered on the sample
+    const sx0 = Math.max(0, Math.min(lower.width - srcW, Math.round(srcX - srcW / 2)));
+    const sy0 = Math.max(0, Math.min(lower.height - srcH, Math.round(srcY - srcH / 2)));
 
-    // Destination rect (CSS px) for the lens content (centered at cx,cy)
+    // Destination rect (CSS px) for the lens content (centered at lens center)
     const dx = Math.round(cx - lensSize / 2);
     const dy = Math.round(cy - lensSize / 2);
     const dw = Math.round(lensSize);
@@ -275,10 +319,10 @@ export function installLoupe(canvas, options = {}) {
       ctx.closePath();
       ctx.clip();
 
-      // Draw the magnified source into the clipped area
-      ctx.drawImage(lower, sx, sy, srcW, srcH, dx, dy, dw, dh);
+      // Draw the magnified source into the clipped area (sample center aligns to lens center)
+      ctx.drawImage(lower, sx0, sy0, srcW, srcH, dx, dy, dw, dh);
 
-      // Optional crosshair
+      // Optional crosshair (inside the lens, centered)
       if (crosshair) {
         ctx.save();
         ctx.strokeStyle = 'rgba(255,255,255,0.85)';
@@ -293,20 +337,48 @@ export function installLoupe(canvas, options = {}) {
         ctx.stroke();
         ctx.restore();
       }
-
-      // Border ring (outside the clip; re-stroke path)
-      ctx.restore(); // remove clip + shadow for clean border
-      if (lensBorderWidth > 0) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(cx, cy, lensSize / 2, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.strokeStyle = lensBorderColor;
-        ctx.lineWidth = lensBorderWidth;
-        ctx.stroke();
-        ctx.restore();
-      }
     } catch (e) {
+      // Ensure we restore even if drawImage fails
+    } finally {
+      ctx.restore();
+    }
+
+    // Border ring (outside the clip)
+    if (lensBorderWidth > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, lensSize / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.strokeStyle = lensBorderColor;
+      ctx.lineWidth = lensBorderWidth;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Optional tether line from lens rim to sample point (outside the clip)
+    if (drawTether) {
+      const dxv = sx - cx;
+      const dyv = sy - cy;
+      const len = Math.hypot(dxv, dyv) || 1;
+      const r = lensSize / 2;
+      // Tangent point on lens rim toward the sample point
+      const tx = cx + (dxv / len) * r;
+      const ty = cy + (dyv / len) * r;
+
+      ctx.save();
+      // Tether styling: subtle, readable over varied backgrounds
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(sx, sy);
+      ctx.stroke();
+
+      // Small sample dot (for clarity when finger obscures point)
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2.0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
   }
@@ -367,7 +439,7 @@ export function installLoupe(canvas, options = {}) {
     },
     setAnchorPointer() {
       mode = 'pointer';
-      // pointer mode uses inside flag to show/hide
+      // pointer mode uses 'inside' flag to show/hide
       queueDraw();
     },
     setAnchorCanvasPoint(x, y) {
@@ -377,6 +449,19 @@ export function installLoupe(canvas, options = {}) {
       // canvasPoint mode always paints if enabled (ignore 'inside')
       inside = true;
       queueDraw();
+    },
+    setOffset(dx, dy) {
+      if (Number.isFinite(dx)) lensOffsetX = dx;
+      if (Number.isFinite(dy)) lensOffsetY = dy;
+      queueDraw();
+    },
+    setSmartTether(v) {
+      useSmartTether = !!v;
+      queueDraw();
+    },
+    setShowTether(v) {
+      drawTether = !!v;
+      queueDraw();
     }
   };
   canvas[META_KEY] = meta;
@@ -385,7 +470,11 @@ export function installLoupe(canvas, options = {}) {
     sizePx: lensSize,
     magnification: mag,
     crosshair,
-    anchorMode: mode
+    anchorMode: mode,
+    offsetXPx: lensOffsetX,
+    offsetYPx: lensOffsetY,
+    smartTether: useSmartTether,
+    showTether: drawTether
   });
 
   // Initial draw
