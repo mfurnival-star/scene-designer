@@ -3,17 +3,37 @@
  * -----------------------------------------------------------
  * Scene Designer – Fabric.js Transformer Handler (ESM ONLY, Reentrancy-Safe)
  * - Pure transformer logic: attach, detach, update for all shape types.
- * - Only called by selection.js (never by canvas.js or sidebar.js).
+ * - Only called by selection-core.js (never by canvas.js or sidebar.js).
  * - All config from shape-defs.js.
  * - Resize/rotate controls per shape type and locked state.
+ * - Enforces per-shape enabledAnchors (circle now only 4 corners) and rotation flag.
+ * - Maintains aspect lock for circle via lockUniScaling.
  * - Logging via log.js.
  * - Reentrancy-safe: avoids redundant discard/setActive cycles and log spam.
+ *
+ * 2025-09-24 Update:
+ * - Added applyControlsForDef(): honors SHAPE_DEFS.enabledAnchors and rotateEnabled.
+ * - Circle now shows only 4 corner anchors (tl,tr,bl,br) and no rotation handle.
+ * - Ellipse / Rect retain all 8 anchors + rotation (if rotateEnabled).
+ * - Point shapes still get no controls (handled by selection logic & defs).
  * -----------------------------------------------------------
  */
 
 import { getState } from './state.js';
 import { log } from './log.js';
 import { getShapeDef } from './shape-defs.js';
+
+// Mapping from our logical anchor tokens → Fabric control keys
+const ANCHOR_TO_FABRIC_KEY = {
+  'top-left': 'tl',
+  'top-center': 'mt',
+  'top-right': 'tr',
+  'middle-left': 'ml',
+  'middle-right': 'mr',
+  'bottom-left': 'bl',
+  'bottom-center': 'mb',
+  'bottom-right': 'br'
+};
 
 /**
  * Internal: safe accessor for current Fabric active object.
@@ -22,6 +42,63 @@ function getActiveObject() {
   const canvas = getState().fabricCanvas;
   if (!canvas || typeof canvas.getActiveObject !== "function") return null;
   return canvas.getActiveObject();
+}
+
+/**
+ * Apply per-shape control visibility & rotation handle based on def + lock state.
+ * - Hides all controls first, then enables only those listed in def.enabledAnchors.
+ * - Rotation handle (mtr) only if def.rotateEnabled AND shape not locked.
+ * - If shape.resizable === false (or def.resizable false) all scaling handles hidden.
+ */
+function applyControlsForDef(shape, def) {
+  if (!shape || !def) return;
+
+  // Fabric control keys we manage
+  const visibility = {
+    tl: false, tr: false, bl: false, br: false,
+    ml: false, mt: false, mr: false, mb: false,
+    mtr: false // rotate
+  };
+
+  if (def.resizable && !shape.locked) {
+    (def.enabledAnchors || []).forEach(anchor => {
+      const key = ANCHOR_TO_FABRIC_KEY[anchor];
+      if (key && key in visibility) {
+        visibility[key] = true;
+      }
+    });
+  }
+
+  // Rotation handle
+  if (def.rotateEnabled && !shape.locked) {
+    visibility.mtr = true;
+  }
+
+  try {
+    if (typeof shape.setControlsVisibility === 'function') {
+      shape.setControlsVisibility(visibility);
+    } else if (shape.controls) {
+      // Fallback (shouldn't be needed in current Fabric versions)
+      Object.keys(visibility).forEach(k => {
+        if (shape.controls[k]) {
+          shape.controls[k].visible = visibility[k];
+        }
+      });
+    }
+  } catch (e) {
+    log("WARN", "[transformer] applyControlsForDef: setControlsVisibility failed", e);
+  }
+
+  // Ensure coords updated after visibility changes
+  if (typeof shape.setCoords === "function") {
+    try { shape.setCoords(); } catch {}
+  }
+
+  log("DEBUG", "[transformer] applyControlsForDef", {
+    id: shape._id,
+    type: shape._type,
+    visibility
+  });
 }
 
 /**
@@ -68,7 +145,7 @@ export function attachTransformerForShape(shape) {
     canvas.setActiveObject(shape);
   }
 
-  // Update control flags every time (in case lock/def changed)
+  // Update base transform/lock properties
   shape.set({
     hasControls: def.resizable && !shape.locked,
     hasBorders: true,
@@ -78,6 +155,9 @@ export function attachTransformerForShape(shape) {
     lockUniScaling: shape._type === "circle" && !!def.keepRatio,
     selectable: true
   });
+
+  // Apply per-anchor control visibility & rotation handle
+  applyControlsForDef(shape, def);
 
   // Render with minimal cost
   if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
@@ -116,7 +196,6 @@ export function detachTransformer() {
   if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
   else canvas.renderAll();
 
-  // Reduce log verbosity here to avoid spam during programmatic clears
   log("DEBUG", "[transformer] Controls detached");
   log("DEBUG", "[transformer] detachTransformer exit");
 }
@@ -147,3 +226,4 @@ export function updateTransformer() {
   attachTransformerForShape(shape);
   log("DEBUG", "[transformer] updateTransformer exit (attached/updated)");
 }
+
