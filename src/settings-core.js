@@ -72,6 +72,8 @@ export const settingsRegistry = [
       { value: "target", label: "Target (ring + cross)" }
     ]
   },
+
+  // --- Logging / Diagnostics ---
   { key: "DEBUG_LOG_LEVEL", label: "Debug Log Level", type: "select", default: "Info", options: [
       { value: "Silent", label: "Silent" },
       { value: "Error", label: "Error" },
@@ -88,7 +90,14 @@ export const settingsRegistry = [
   { key: "INTERCEPT_CONSOLE", label: "Intercept Console", type: "boolean", default: false },
   { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: false },
   { key: "showScenarioRunner", label: "Show Scenario Runner Panel", type: "boolean", default: false },
-  { key: "canvasResponsive", label: "Responsive Canvas", type: "boolean", default: true }
+  { key: "canvasResponsive", label: "Responsive Canvas", type: "boolean", default: true },
+
+  // --- Loupe (Magnifier) Settings ---
+  { key: "loupeEnabled", label: "Loupe (Enable)", type: "boolean", default: false },
+  { key: "loupeSizePx", label: "Loupe Size (px)", type: "number", default: 160, min: 40, max: 400, step: 10 },
+  { key: "loupeMagnification", label: "Loupe Magnification", type: "number", default: 2, min: 1, max: 8, step: 0.5 },
+  { key: "loupeCrosshair", label: "Loupe Crosshair", type: "boolean", default: true }
+
   // Add more settings here as needed
 ];
 
