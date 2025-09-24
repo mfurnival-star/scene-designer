@@ -15,6 +15,9 @@
  * PHASE 1 FIX:
  * - Correctly unwrap ActiveSelection (Fabric) so that multi-select (marquee or ctrl+click)
  *   always sets selectedShapes to ALL selected shapes, not just the last one.
+ * - **2025-09-24**: Selection suppression logic updated:
+ *      - Only suppress selection events if both token matches AND selected IDs match.
+ *      - Always sync selection if IDs differ, no matter the token.
  */
 
 import { log } from './log.js';
@@ -128,28 +131,26 @@ export function installFabricSelectionSync(canvas) {
     const nextIds = selObjs.filter(Boolean).map(o => o._id).filter(Boolean);
     const prevIds = (getState().selectedShapes || []).map(s => s._id);
 
-    // Suppress if this event is echoing a programmatic change (token unchanged since last set)
+    log("DEBUG", "[canvas-events] selection:created event received", {
+      eventToken, lastProgrammaticToken, nextIds, prevIds
+    });
+
+    // Only suppress if both token matches AND IDs match (no change)
     if (eventToken === lastProgrammaticToken && sameIdSet(nextIds, prevIds)) {
       log("DEBUG", "[canvas-events] selection:created suppressed (token match and ids match)", { eventToken, lastProgrammaticToken, nextIds, prevIds });
       return;
     }
 
-    log("DEBUG", "[canvas-events] selection:created", {
-      fabricSelectedCount: selObjs.length,
-      nextIds,
-      prevIds,
-      eventToken,
-      lastProgrammaticToken
-    });
-
-    if (sameIdSet(nextIds, prevIds)) {
+    // Always sync selection if IDs differ
+    if (!sameIdSet(nextIds, prevIds)) {
+      withSuppressedHandlers((token) => {
+        selectionSetSelectedShapes(selObjs);
+        lastProgrammaticToken = token;
+        log("DEBUG", "[canvas-events] selection:created store sync (setSelectedShapes)", { syncedIds: nextIds });
+      }, "created->setSelectedShapes");
+    } else {
       log("DEBUG", "[canvas-events] selection:created no-op (ids match)");
-      return;
     }
-    withSuppressedHandlers((token) => {
-      selectionSetSelectedShapes(selObjs);
-      lastProgrammaticToken = token;
-    }, "created->setSelectedShapes");
   };
 
   const onUpdated = (opt) => {
@@ -158,27 +159,26 @@ export function installFabricSelectionSync(canvas) {
     const nextIds = selObjs.filter(Boolean).map(o => o._id).filter(Boolean);
     const prevIds = (getState().selectedShapes || []).map(s => s._id);
 
+    log("DEBUG", "[canvas-events] selection:updated event received", {
+      eventToken, lastProgrammaticToken, nextIds, prevIds
+    });
+
+    // Only suppress if both token matches AND IDs match (no change)
     if (eventToken === lastProgrammaticToken && sameIdSet(nextIds, prevIds)) {
       log("DEBUG", "[canvas-events] selection:updated suppressed (token match and ids match)", { eventToken, lastProgrammaticToken, nextIds, prevIds });
       return;
     }
 
-    log("DEBUG", "[canvas-events] selection:updated", {
-      fabricSelectedCount: selObjs.length,
-      nextIds,
-      prevIds,
-      eventToken,
-      lastProgrammaticToken
-    });
-
-    if (sameIdSet(nextIds, prevIds)) {
+    // Always sync selection if IDs differ
+    if (!sameIdSet(nextIds, prevIds)) {
+      withSuppressedHandlers((token) => {
+        selectionSetSelectedShapes(selObjs);
+        lastProgrammaticToken = token;
+        log("DEBUG", "[canvas-events] selection:updated store sync (setSelectedShapes)", { syncedIds: nextIds });
+      }, "updated->setSelectedShapes");
+    } else {
       log("DEBUG", "[canvas-events] selection:updated no-op (ids match)");
-      return;
     }
-    withSuppressedHandlers((token) => {
-      selectionSetSelectedShapes(selObjs);
-      lastProgrammaticToken = token;
-    }, "updated->setSelectedShapes");
   };
 
   const onCleared = (opt) => {
@@ -193,7 +193,7 @@ export function installFabricSelectionSync(canvas) {
     const isUserEvent = !!(opt && opt.e);
     const hadSelection = (getState().selectedShapes || []).length > 0;
 
-    log("DEBUG", "[canvas-events] selection:cleared", { isUserEvent, hadSelection, eventToken, lastProgrammaticToken });
+    log("DEBUG", "[canvas-events] selection:cleared event received", { isUserEvent, hadSelection, eventToken, lastProgrammaticToken });
 
     if (!isUserEvent && eventToken === lastProgrammaticToken) {
       log("DEBUG", "[canvas-events] selection:cleared ignored (programmatic, token match)");
@@ -206,6 +206,7 @@ export function installFabricSelectionSync(canvas) {
     withSuppressedHandlers((token) => {
       deselectAll();
       lastProgrammaticToken = token;
+      log("DEBUG", "[canvas-events] selection:cleared store sync (deselectAll)");
     }, "cleared->deselectAll");
   };
 
@@ -226,6 +227,7 @@ export function installFabricSelectionSync(canvas) {
           }
           deselectAll();
           lastProgrammaticToken = token;
+          log("DEBUG", "[canvas-events] mouse:down store sync (deselectAll)");
         }, "mousedown-blank->deselectAll");
         if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
         else canvas.renderAll();

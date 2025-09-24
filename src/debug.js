@@ -1,10 +1,10 @@
 /**
  * debug.js
  * -----------------------------------------------------------
- * Scene Designer – Debug Snapshot Collector (ESM ONLY)
+ * Scene Designer – Debug Snapshot Collector (ESM ONLY, ENHANCED)
  * Purpose:
  * - Collect a diagnostic snapshot of app state, Fabric selection, and DOM layout.
- * - Added (2025-09-23): selectionDiagnostics block to compare MARQUEE vs SELECT ALL behavior.
+ * - Enhanced (2025-09-24): includes selectionSync logs and before/after selection IDs for deep tracing.
  *
  * Public Exports:
  * - collectDebugSnapshot()
@@ -14,16 +14,61 @@
  * Version History:
  * - debug-snapshot-2: DOM layout / bleedIndicators
  * - debug-snapshot-3: selectionDiagnostics (order, membership, locks, flags)
+ * - debug-snapshot-4: selectionSyncLog (recent events, before/after IDs)
  *
- * Usage for your current investigation:
- * 1) Make a marquee multi-select (include at least 3 shapes, one locked if possible) → Debug → paste.
- * 2) Then click Select All → Debug → paste.
- * Compare selectionDiagnostics between the two snapshots.
+ * Usage for investigation:
+ * 1) Marquee multi-select (include 3 shapes, at least one locked if possible) → Debug → paste.
+ * 2) Select All → Debug → paste.
+ * 3) Deep trace: selectionSyncLog shows event history and selection states (last 8 events).
  * -----------------------------------------------------------
  */
 
 import { log } from './log.js';
 import { getState } from './state.js';
+
+/* ---------- Selection Sync Log (new) ---------- */
+let selectionSyncLog = [];
+let installSyncLogHookDone = false;
+
+/**
+ * Hook into canvas-events.js event logs for debug tracing.
+ * Collects last 8 selection sync events (created/updated/cleared) with before/after IDs.
+ */
+function installSelectionSyncLogHook() {
+  if (installSyncLogHookDone) return;
+  installSyncLogHookDone = true;
+
+  // Patch log.js to intercept selection sync events
+  const origLog = log;
+  function patchedLog(level, msg, obj) {
+    // Only intercept selection sync events
+    if (
+      typeof msg === "string" &&
+      msg.startsWith("[canvas-events] selection:")
+    ) {
+      // Try to extract before/after IDs and event type
+      let eventType = "";
+      if (msg.includes("selection:created")) eventType = "created";
+      else if (msg.includes("selection:updated")) eventType = "updated";
+      else if (msg.includes("selection:cleared")) eventType = "cleared";
+      else if (msg.includes("selection:")) eventType = "other";
+      const payload = {
+        timeISO: new Date().toISOString(),
+        eventType,
+        msg,
+        details: obj,
+        selectedShapes: (getState().selectedShapes || []).map(s => s?._id),
+        shapes: (getState().shapes || []).map(s => s?._id),
+        logLevel: level
+      };
+      selectionSyncLog.push(payload);
+      if (selectionSyncLog.length > 8) selectionSyncLog.shift();
+    }
+    return origLog(level, msg, obj);
+  }
+  // Patch only once (dev only)
+  if (typeof window !== "undefined") window.log = patchedLog;
+}
 
 /* ---------- Generic Safe Helpers ---------- */
 function safe(val) {
@@ -259,7 +304,7 @@ function collectDomLayout(canvas) {
   }
 }
 
-/* ---------- Selection Diagnostics (NEW) ---------- */
+/* ---------- Selection Diagnostics (unchanged) ---------- */
 function collectSelectionDiagnostics(canvas) {
   const st = getState();
   const storeSelected = Array.isArray(st.selectedShapes) ? st.selectedShapes.filter(Boolean) : [];
@@ -281,13 +326,13 @@ function collectSelectionDiagnostics(canvas) {
         }
         activeFlags = {
           hasControls: !!fabricActive.hasControls,
-            hasBorders: !!fabricActive.hasBorders,
-            lockMovementX: !!fabricActive.lockMovementX,
-            lockMovementY: !!fabricActive.lockMovementY,
-            lockScalingX: !!fabricActive.lockScalingX,
-            lockScalingY: !!fabricActive.lockScalingY,
-            lockRotation: !!fabricActive.lockRotation,
-            hoverCursor: fabricActive.hoverCursor || null
+          hasBorders: !!fabricActive.hasBorders,
+          lockMovementX: !!fabricActive.lockMovementX,
+          lockMovementY: !!fabricActive.lockMovementY,
+          lockScalingX: !!fabricActive.lockScalingX,
+          lockScalingY: !!fabricActive.lockScalingY,
+          lockRotation: !!fabricActive.lockRotation,
+          hoverCursor: fabricActive.hoverCursor || null
         };
       }
     }
@@ -347,7 +392,7 @@ function collectSelectionDiagnostics(canvas) {
   };
 }
 
-/* ---------- Consistency Checks (Existing) ---------- */
+/* ---------- Consistency Checks (unchanged) ---------- */
 function buildConsistencyChecks({ shapesSumm, selectedSumm, fabricSel }) {
   try {
     const selIds = new Set((selectedSumm || []).map(s => s && s.id).filter(Boolean));
@@ -381,6 +426,7 @@ function buildConsistencyChecks({ shapesSumm, selectedSumm, fabricSel }) {
 
 /* ---------- Snapshot Builder ---------- */
 export function collectDebugSnapshot() {
+  installSelectionSyncLogHook();
   const s = getState();
   const canvas = s.fabricCanvas || null;
   const bgImg = s.bgFabricImage || null;
@@ -399,10 +445,13 @@ export function collectDebugSnapshot() {
     timeISO: new Date().toISOString()
   };
 
+  // Enhanced selection sync log (last 8 events; deep trace)
+  const syncLog = selectionSyncLog.slice();
+
   return {
     meta: {
       tool: 'Scene Designer',
-      version: 'debug-snapshot-3',
+      version: 'debug-snapshot-4',
       timeISO: env.timeISO
     },
     scene: {
@@ -424,6 +473,7 @@ export function collectDebugSnapshot() {
       selected: selectedSumm.map(x => x && x.id).filter(Boolean)
     },
     consistencyChecks: buildConsistencyChecks({ shapesSumm, selectedSumm, fabricSel }),
+    selectionSyncLog: syncLog,
     environment: env
   };
 }
@@ -434,6 +484,7 @@ export function formatDebugSnapshot(snapshot, format = 'json') {
     if (format === 'markdown') {
       const bleed = snapshot?.domLayout?.bleedIndicators || {};
       const sel = snapshot?.selectionDiagnostics?.summary || {};
+      const syncLog = snapshot?.selectionSyncLog || [];
       const json = JSON.stringify(snapshot, null, 2);
       return [
         '## Scene Designer Debug Snapshot',
@@ -443,6 +494,11 @@ export function formatDebugSnapshot(snapshot, format = 'json') {
         `- LockedInSelection=${sel.anyLockedSelected}`,
         `- ResponsiveScale=${sel.responsiveScale}`,
         `- BleedFlags: upper→Toolbar=${!!bleed.upperOverlapsToolbar}, upper→Settings=${!!bleed.upperOverlapsSettings}, upperOutsideCanvas=${!!bleed.upperOutsideCanvasPanel}`,
+        '',
+        '### Selection Sync Log (last 8 events):',
+        ...syncLog.map(ev =>
+          `- [${ev.timeISO}] ${ev.eventType}: storeSelected=[${ev.selectedShapes.join(',')}] shapes=[${ev.shapes.join(',')}]`
+        ),
         '',
         '```json',
         json,
@@ -505,3 +561,4 @@ export async function runDebugCapture(options = {}) {
   }
   return { text, snapshot };
 }
+
