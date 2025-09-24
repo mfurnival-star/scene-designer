@@ -28,7 +28,7 @@ Core Modules
 Commands
 - commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
 - commands/commands.js        – core command implementations:
-  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED
+  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED, SET_TRANSFORMS
   - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
 
 Keybindings
@@ -39,12 +39,13 @@ Geometry
 - geometry/shape-rect.js      – unified single-shape bounding box + center + aspectRatio + outerRadius
 
 Canvas
-- canvas-core.js              – Fabric canvas creation, image, sync, overlays (MiniLayout resize API)
+- canvas-core.js              – Fabric canvas creation, image, sync, overlays (MiniLayout resize API); installs transform-history listeners
 - canvas-events.js            – Fabric selection sync → store selection (ring buffer trace)
 - canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, unified single-shape geometry)
 - selection-outlines.js       – overlay painter for multi-select hull/boxes
 - loupe.js                    – magnifier overlay (independent overlay canvas; DPR/zoom-aware)
 - loupe-controller.js         – attaches loupe to selected Point via settings (loupeEnabled/size/magnification/crosshair)
+- canvas-transform-history.js – gesture snapshot listeners (moving/scaling/rotating); commits one history entry per gesture via SET_TRANSFORMS
 
 Toolbar
 - toolbar-panel.js            – assemble styles, DOM, handlers, state sync
@@ -94,6 +95,10 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24 (Phase 2 – Option B)
+  - commands/commands.js: added SET_TRANSFORMS to set {left, top, scaleX, scaleY, angle} per id and return inverse for undo.
+  - canvas-transform-history.js: new module that snapshots pre/post transforms and dispatches a single SET_TRANSFORMS on gesture end (object:modified/mouse:up).
+  - canvas-core.js: installs/uninstalls transform-history listeners during panel lifecycle.
 - 2025-09-24 (Phase 2 – Option A)
   - Toolbar: Added Undo/Redo buttons. Handlers wired to command bus. Toolbar state subscribes to history to enable/disable buttons.
 - 2025-09-24 (Phase 2 – Step C.1)
@@ -107,10 +112,6 @@ Recent Changes (brief)
   - actions.js now routes lock/unlock/resetRotation through command bus.
 - 2025-09-24 (Phase 2 – Step B)
   - keybindings.js added (global undo/redo). layout.js installs/uninstalls keybindings during app lifecycle.
-- 2025-09-24 (Phase 2 – Step A)
-  - Added commands/command-bus.js (dispatch, undo/redo, subscribers).
-  - Added commands/commands.js (ADD_SHAPE/ADD_SHAPES/DELETE_SHAPES/DUPLICATE_SHAPES/SET_SELECTION).
-  - actions.js now dispatches commands for add/delete/duplicate.
 - 2025-09-24 (Loupe Overlay)
   - Added loupe.js (DPR/zoom-aware magnifier overlay) and loupe-controller.js (anchors to selected Point via settings).
   - settings-core.js: added loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair.

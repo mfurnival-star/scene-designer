@@ -1,33 +1,3 @@
-/**
- * canvas-core.js
- * -----------------------------------------------------------
- * Scene Designer – Fabric Canvas Core (ESM ONLY, Image Fit + Panel Resize Integration)
- * Purpose:
- * - Build and manage Fabric canvas panel, sync with store, and dynamically resize
- *   the parent MiniLayout panel/container to fit the image.
- * - Uses MiniLayout API to ensure the panel always matches canvas size.
- * - Clip host: wraps Fabric wrapper to guarantee clipping within the Canvas panel body.
- * - Responsive mode: optionally scales the canvas content (Fabric zoom) to fit the
- *   available panel width on small screens, without breaking input coordinates.
- *
- * Exports:
- *    buildCanvasPanel({ element, title, componentName })
- *
- * Dependencies:
- * - log.js
- * - fabric-wrapper.js ({ Canvas, Image })
- * - state.js
- * - canvas-events.js, canvas-constraints.js, selection-outlines.js
- * - loupe-controller.js (loupe overlay anchored to selected Point via settings)
- * - minilayout.js (for panel resizing API)
- *
- * Logging Policy (reduced noise):
- * - INFO: key lifecycle (panel init/cleanup, background set/cleared).
- * - DEBUG: responsive zoom changes, fallback resize path, store setState (uncommon).
- * - WARN/ERROR: unchanged for failure paths.
- * - No entry/exit spam in hot paths.
- */
-
 import { log } from './log.js';
 import { Canvas, Image as FabricImage } from './fabric-wrapper.js';
 import {
@@ -42,25 +12,15 @@ import { installCanvasConstraints } from './canvas-constraints.js';
 import { installSelectionOutlines } from './selection-outlines.js';
 import { installLoupeController } from './loupe-controller.js';
 import { MiniLayout } from './minilayout.js';
+import { installCanvasTransformHistory } from './canvas-transform-history.js';
 
-/**
- * Remove all previous canvas DOM elements and containers from the panel.
- * Ensures only one Fabric canvas and wrapper exist per panel.
- */
 function removeAllCanvasElements(element) {
   if (!element) return;
-  // Remove canvases
   element.querySelectorAll('canvas').forEach(c => c.parentNode && c.parentNode.removeChild(c));
-  // Remove Fabric wrappers
   element.querySelectorAll('.canvas-container').forEach(div => div.parentNode && div.parentNode.removeChild(div));
-  // Remove clip hosts
   element.querySelectorAll('.canvas-clip-host').forEach(div => div.parentNode && div.parentNode.removeChild(div));
 }
 
-/**
- * Create a dedicated clipping host to contain Fabric's wrapper and canvases.
- * Ensures the canvas visuals cannot bleed into sibling panels (iOS Safari-safe).
- */
 function createClipHost(parent, width, height) {
   const div = document.createElement('div');
   div.className = 'canvas-clip-host';
@@ -77,10 +37,6 @@ function createClipHost(parent, width, height) {
   return div;
 }
 
-/**
- * Create the initial <canvas> that Fabric will wrap.
- * Append to the provided host (clip host).
- */
 function createCanvasElement(host, width, height) {
   const c = document.createElement('canvas');
   c.width = Math.max(1, Number(width) || 600);
@@ -117,10 +73,6 @@ function addAllStoreShapesToCanvas(canvas) {
   else canvas.renderAll();
 }
 
-/**
- * Compute canvas size for an image, preserving aspect ratio, within max settings.
- * Returns {width, height, scale}
- */
 function fitImageToMax(imageW, imageH, maxW, maxH) {
   let scale = 1;
   let w = imageW;
@@ -138,11 +90,8 @@ function fitImageToMax(imageW, imageH, maxW, maxH) {
   return { width: w, height: h, scale };
 }
 
-/**
- * Helpers to locate important DOM nodes relative to the Fabric canvas.
- */
 function getWrapper(canvas) {
-  return canvas?.lowerCanvasEl?.parentElement || null; // .canvas-container
+  return canvas?.lowerCanvasEl?.parentElement || null;
 }
 function getClipHost(canvas) {
   const w = getWrapper(canvas);
@@ -153,10 +102,6 @@ function getCanvasPanelBody(canvas) {
   return w?.closest('.minilayout-panel-body') || null;
 }
 
-/**
- * Resize MiniLayout panel and .canvas-container to match the canvas.
- * Uses the new API if available; also adjusts our clip host if present.
- */
 function resizeMiniLayoutPanel(canvas, width, height) {
   try {
     let layoutInstance = null;
@@ -165,10 +110,8 @@ function resizeMiniLayoutPanel(canvas, width, height) {
     }
     if (layoutInstance && typeof layoutInstance.resizePanelBody === "function") {
       layoutInstance.resizePanelBody('CanvasPanel', width, height);
-      // Reduced to DEBUG: may be called frequently on image/apply
       log("DEBUG", "[canvas-core] resizePanelBody(CanvasPanel)", { width, height });
     } else {
-      // Fallback: resize the wrapper, clip host, and panel body directly
       if (canvas && canvas.lowerCanvasEl) {
         const wrapper = getWrapper(canvas);
         if (wrapper) {
@@ -199,10 +142,6 @@ function resizeMiniLayoutPanel(canvas, width, height) {
   }
 }
 
-/**
- * Keep Fabric wrapper and clip host CSS in sync with canvas size.
- * Silent on success; WARN on failure.
- */
 function syncWrapperAndHostSizes(canvas) {
   try {
     const w = canvas.getWidth();
@@ -211,7 +150,6 @@ function syncWrapperAndHostSizes(canvas) {
     if (wrapper) {
       wrapper.style.width = `${w}px`;
       wrapper.style.height = `${h}px`;
-      // Enforce clipping and stacking
       wrapper.style.position = 'relative';
       wrapper.style.overflow = 'hidden';
       wrapper.style.zIndex = '10';
@@ -232,10 +170,6 @@ function syncWrapperAndHostSizes(canvas) {
   }
 }
 
-/**
- * Set upper/lower canvas visual layering to avoid bleeding.
- * Silent on success; WARN on failure.
- */
 function enforceLayerZOrder(canvas) {
   try {
     if (canvas.lowerCanvasEl) {
@@ -262,17 +196,10 @@ function enforceLayerZOrder(canvas) {
   }
 }
 
-/**
- * Responsive: scale canvas content to fit panel body width (mobile).
- * - Uses Fabric zoom so pointer math remains correct.
- * - Does NOT change logical canvas width/height.
- * - Adjusts wrapper/clipHost and panel body height to the scaled height.
- * DEBUG only when scale actually changes.
- */
 function applyResponsiveViewport(canvas, reason = "") {
   try {
     const settings = getState().settings || {};
-    const enabled = settings.canvasResponsive !== false; // default true
+    const enabled = settings.canvasResponsive !== false;
     const body = getCanvasPanelBody(canvas);
     const wrapper = getWrapper(canvas);
     const clipHost = getClipHost(canvas);
@@ -280,38 +207,31 @@ function applyResponsiveViewport(canvas, reason = "") {
 
     const canvasW = canvas.getWidth();
     const canvasH = canvas.getHeight();
-
-    // Available width is body clientWidth (respecting layout column)
     const availableW = Math.max(0, body.clientWidth || body.offsetWidth || 0);
     if (!availableW || !canvasW) return;
 
     const scale = enabled ? Math.min(1, availableW / canvasW) : 1;
 
-    // Apply Fabric zoom (around origin). Keep translation zero; wrapper clips excess.
     if (typeof canvas.setZoom === "function") {
       const prev = canvas.__responsiveScale || 1;
       if (Math.abs(prev - scale) > 0.0001) {
         canvas.setZoom(scale);
-        // Normalize viewportTransform to pure scale (0,0 origin)
         if (Array.isArray(canvas.viewportTransform) && canvas.viewportTransform.length >= 6) {
-          canvas.viewportTransform[0] = scale; // a
-          canvas.viewportTransform[3] = scale; // d
-          canvas.viewportTransform[4] = 0;     // e (x)
-          canvas.viewportTransform[5] = 0;     // f (y)
+          canvas.viewportTransform[0] = scale;
+          canvas.viewportTransform[3] = scale;
+          canvas.viewportTransform[4] = 0;
+          canvas.viewportTransform[5] = 0;
         }
         canvas.__responsiveScale = scale;
         log("DEBUG", "[canvas-core] Responsive zoom applied", { reason, scale, availableW, canvasW });
       }
     }
 
-    // Size the visual host to the scaled height; width follows panel body (100%)
     const scaledH = Math.round(canvasH * (canvas.__responsiveScale || 1));
 
-    // Let the panel/body be fluid in width; hard-set heights to scaledH to avoid overflow
     body.style.width = "100%";
     body.style.height = `${scaledH}px`;
 
-    // Clip host and wrapper follow the body width and scaled height
     clipHost.style.width = "100%";
     clipHost.style.height = `${scaledH}px`;
 
@@ -319,7 +239,6 @@ function applyResponsiveViewport(canvas, reason = "") {
     wrapper.style.height = `${scaledH}px`;
     wrapper.style.overflow = "hidden";
 
-    // Upper canvas must remain transparent; request a render to honor new zoom
     if (canvas.upperCanvasEl) {
       canvas.upperCanvasEl.style.background = "transparent";
     }
@@ -330,14 +249,6 @@ function applyResponsiveViewport(canvas, reason = "") {
   }
 }
 
-/**
- * Set or clear the background image via canvas.backgroundImage.
- * When image is set, resize canvas AND panel to image's aspect ratio.
- *
- * IMPORTANT: Do NOT manually set lowerCanvasEl/upperCanvasEl width/height attributes.
- * Fabric handles backing store size (retinaScaling) internally; overriding those values
- * causes input/pointer and selection offsets on high-DPI displays (iOS Safari).
- */
 function applyBackgroundImage(canvas, url, imgObj) {
   if (!canvas) return;
 
@@ -367,7 +278,6 @@ function applyBackgroundImage(canvas, url, imgObj) {
     return;
   }
 
-  // Compute new canvas size for this image
   const { width: newCanvasW, height: newCanvasH } = fitImageToMax(
     imgObj.naturalWidth,
     imgObj.naturalHeight,
@@ -375,18 +285,13 @@ function applyBackgroundImage(canvas, url, imgObj) {
     maxH
   );
 
-  // Let Fabric manage backstore/CSS + retinaScaling via its API
   canvas.setWidth(newCanvasW);
   canvas.setHeight(newCanvasH);
 
-  // Keep layers properly stacked and clipped
   enforceLayerZOrder(canvas);
   syncWrapperAndHostSizes(canvas);
-
-  // Resize the panel and container to fit (non-responsive baseline)
   resizeMiniLayoutPanel(canvas, newCanvasW, newCanvasH);
 
-  // Reflect the applied size back into settings (so a rebuild uses the same size)
   setSetting("canvasMaxWidth", newCanvasW);
   setSetting("canvasMaxHeight", newCanvasH);
 
@@ -418,18 +323,9 @@ function applyBackgroundImage(canvas, url, imgObj) {
     log("ERROR", "[canvas-core] Failed to set background via canvas.setBackgroundImage", e);
   }
 
-  // Finally, apply responsive zoom to fit current panel width (if enabled)
   applyResponsiveViewport(canvas, "applyBackgroundImage");
 }
 
-/**
- * Update canvas dimension from settings and re-scale background image.
- * If an image is present, canvas should keep image's aspect ratio.
- * Also resize MiniLayout panel/container.
- *
- * IMPORTANT: We only use Fabric's setWidth/setHeight. We do NOT write to
- * lowerCanvasEl/upperCanvasEl width/height attributes to preserve retina scaling.
- */
 function applyCanvasSizeFromSettings(canvas) {
   try {
     const imgObj = getState().imageObj;
@@ -445,14 +341,10 @@ function applyCanvasSizeFromSettings(canvas) {
     canvas.setWidth(w);
     canvas.setHeight(h);
 
-    // Keep layers properly stacked and clipped
     enforceLayerZOrder(canvas);
     syncWrapperAndHostSizes(canvas);
-
-    // Resize the panel/container to fit new canvas size (baseline)
     resizeMiniLayoutPanel(canvas, w, h);
 
-    // Scale background image (if present) to 1:1
     const bg = canvas.backgroundImage || getState().bgFabricImage;
     if (bg && imgObj && imgObj.naturalWidth > 0 && imgObj.naturalHeight > 0) {
       bg.set({ left: 0, top: 0, scaleX: 1, scaleY: 1 });
@@ -462,7 +354,6 @@ function applyCanvasSizeFromSettings(canvas) {
     if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
     else canvas.renderAll();
 
-    // Responsive pass (after baseline sizes are set)
     applyResponsiveViewport(canvas, "applyCanvasSizeFromSettings");
 
     log("INFO", "[canvas-core] Canvas size applied", {
@@ -480,10 +371,8 @@ export function buildCanvasPanel({ element, title, componentName }) {
     return;
   }
 
-  // Remove all previous canvas elements, wrappers, and clip hosts to guarantee only one canvas per panel
   removeAllCanvasElements(element);
 
-  // Root of this panel body
   element.innerHTML = "";
   element.style.background = "#eaf2fc";
   element.style.overflow = "hidden";
@@ -492,20 +381,15 @@ export function buildCanvasPanel({ element, title, componentName }) {
   const initialW = getState().settings?.canvasMaxWidth ?? 600;
   const initialH = getState().settings?.canvasMaxHeight ?? 400;
 
-  // Create a clip host that will contain the Fabric wrapper and clip any overflow
   const clipHost = createClipHost(element, initialW, initialH);
-
-  // Create initial DOM canvas inside the clip host
   const domCanvas = createCanvasElement(clipHost, initialW, initialH);
 
-  // Instantiate Fabric
   const canvas = new Canvas(domCanvas, {
     preserveObjectStacking: true,
     selection: true,
     backgroundColor: 'transparent'
   });
 
-  // Ensure transparent and correctly layered top
   setTimeout(() => {
     enforceLayerZOrder(canvas);
     syncWrapperAndHostSizes(canvas);
@@ -513,13 +397,12 @@ export function buildCanvasPanel({ element, title, componentName }) {
 
   setFabricCanvas(canvas);
 
-  // Install integrations
   installFabricSelectionSync(canvas);
   const detachConstraints = installCanvasConstraints(canvas);
   const detachOutlines = installSelectionOutlines(canvas);
-  const detachLoupe = installLoupeController(canvas); // Loupe overlay controlled by settings + selection (Point anchor)
+  const detachLoupe = installLoupeController(canvas);
+  const detachTransformHistory = installCanvasTransformHistory(canvas);
 
-  // Apply initial sizing from settings (and enforce clipping/stacking)
   applyCanvasSizeFromSettings(canvas);
 
   const s0 = getState();
@@ -531,14 +414,12 @@ export function buildCanvasPanel({ element, title, componentName }) {
     addAllStoreShapesToCanvas(canvas);
   }
 
-  // Responsive: re-apply on window resize and on setting change
   const onWindowResize = () => applyResponsiveViewport(canvas, "window-resize");
   window.addEventListener('resize', onWindowResize);
   window.addEventListener('orientationchange', onWindowResize);
 
   let ro = null;
   try {
-    // If supported, observe the panel body for width changes
     const body = getCanvasPanelBody(canvas);
     if (body && 'ResizeObserver' in window) {
       ro = new ResizeObserver(() => applyResponsiveViewport(canvas, "ResizeObserver"));
@@ -581,7 +462,6 @@ export function buildCanvasPanel({ element, title, componentName }) {
         }
         case "setSettings": {
           applyCanvasSizeFromSettings(canvas);
-          // Also re-apply responsive (in case canvasResponsive changed)
           applyResponsiveViewport(canvas, "store-setSettings");
           break;
         }
@@ -606,6 +486,7 @@ export function buildCanvasPanel({ element, title, componentName }) {
     try { detachConstraints && detachConstraints(); } catch {}
     try { detachOutlines && detachOutlines(); } catch {}
     try { detachLoupe && detachLoupe(); } catch {}
+    try { detachTransformHistory && detachTransformHistory(); } catch {}
     try {
       window.removeEventListener('resize', onWindowResize);
       window.removeEventListener('orientationchange', onWindowResize);

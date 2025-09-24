@@ -182,8 +182,6 @@ function cmdSetSelection(payload) {
   return { type: 'SET_SELECTION', payload: { ids: prevIds } };
 }
 
-// ---------- Helpers for movement/rotation/locking/align ----------
-
 function clampDeltaToImage(bbox, dx, dy, img) {
   if (!img || !bbox) return { dx, dy };
   try {
@@ -228,8 +226,6 @@ function setAngleAndCenter(shape, angle, center) {
     log("ERROR", "[commands] setAngleAndCenter failed", { id: shape?._id, error: e });
   }
 }
-
-// ---------- MOVE_SHAPES_DELTA (+ internal SET_POSITIONS) ----------
 
 function cmdMoveShapesDelta(payload) {
   const { ids, dx = 0, dy = 0, clamp = true } = payload || {};
@@ -294,8 +290,6 @@ function cmdSetPositions(payload) {
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
 }
 
-// ---------- RESET_ROTATION (+ internal SET_ANGLES_POSITIONS) ----------
-
 function cmdResetRotation(payload) {
   const { ids } = payload || {};
   const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
@@ -353,8 +347,6 @@ function cmdSetAnglesPositions(payload) {
   requestRender();
   return { type: 'SET_ANGLES_POSITIONS', payload: { items: prev } };
 }
-
-// ---------- LOCK / UNLOCK ----------
 
 function applyLockFlags(shape, locked) {
   if (!shape) return;
@@ -447,8 +439,6 @@ function cmdUnlockShapes(payload) {
   log("INFO", "[commands] Unlocked shapes", { count: affected.length, ids: affected });
   return { type: 'LOCK_SHAPES', payload: { ids: affected } };
 }
-
-// ---------- ALIGN_SELECTED (+ undo via SET_POSITIONS) ----------
 
 function referenceFromBboxes(bboxes, mode) {
   if (!Array.isArray(bboxes) || bboxes.length === 0) return 0;
@@ -573,7 +563,44 @@ function cmdAlignSelected(payload) {
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
 }
 
-// ---------- Execute ----------
+function cmdSetTransforms(payload) {
+  const { items } = payload || {};
+  const arr = Array.isArray(items) ? items.filter(i => i && i.id != null) : [];
+  if (!arr.length) return null;
+
+  const map = new Map((getState().shapes || []).map(s => [s._id, s]));
+  const prev = [];
+
+  arr.forEach(i => {
+    const shape = map.get(i.id);
+    if (!shape) return;
+    try {
+      prev.push({
+        id: shape._id,
+        left: Number.isFinite(shape.left) ? shape.left : 0,
+        top: Number.isFinite(shape.top) ? shape.top : 0,
+        scaleX: Number.isFinite(shape.scaleX) ? shape.scaleX : 1,
+        scaleY: Number.isFinite(shape.scaleY) ? shape.scaleY : 1,
+        angle: Number(shape.angle) || 0
+      });
+
+      const next = {};
+      if (i.left !== undefined) next.left = Number(i.left) || 0;
+      if (i.top !== undefined) next.top = Number(i.top) || 0;
+      if (i.scaleX !== undefined) next.scaleX = Number(i.scaleX) || 1;
+      if (i.scaleY !== undefined) next.scaleY = Number(i.scaleY) || 1;
+      if (i.angle !== undefined) next.angle = Number(i.angle) || 0;
+
+      shape.set(next);
+      if (typeof shape.setCoords === "function") shape.setCoords();
+    } catch (e) {
+      log("ERROR", "[commands] SET_TRANSFORMS apply failed", { id: i.id, error: e });
+    }
+  });
+
+  requestRender();
+  return { type: 'SET_TRANSFORMS', payload: { items: prev } };
+}
 
 export function executeCommand(cmd) {
   if (!cmd || typeof cmd.type !== 'string') {
@@ -612,6 +639,9 @@ export function executeCommand(cmd) {
 
     case 'ALIGN_SELECTED':
       return cmdAlignSelected(p);
+
+    case 'SET_TRANSFORMS':
+      return cmdSetTransforms(p);
 
     default:
       log("WARN", "[commands] Unknown command type", { type: t });
