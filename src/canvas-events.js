@@ -16,8 +16,12 @@
  * - No ENTRY/EXIT spam; helpers are silent in hot paths.
  *
  * Exports:
- * - installFabricSelectionSync(canvas)
+ * - installFabricSelectionSync(canvas) -> detachFn
  * - getSelectionEventTrace()
+ *
+ * Notes (Phase 1 gap fix):
+ * - Non-destructive handler install: we track ONLY our handlers on the canvas and detach them
+ *   on re-install or detach. No blanket canvas.off('*') calls.
  * -----------------------------------------------------------
  */
 
@@ -143,24 +147,40 @@ function enforceActiveSelectionVisuals(canvas) {
   }
 }
 
+// --------- Non-destructive handler scoping (Phase 1 fix) ----------
+const HANDLERS_KEY = '__sceneDesignerSelectionSyncHandlers__';
+
+function detachOurHandlers(canvas) {
+  try {
+    const list = canvas[HANDLERS_KEY];
+    if (Array.isArray(list)) {
+      list.forEach(({ event, fn }) => {
+        try { canvas.off(event, fn); } catch {}
+      });
+      canvas[HANDLERS_KEY] = [];
+    }
+  } catch (e) {
+    log("WARN", "[canvas-events] Failed detaching prior handlers (safe to ignore)", e);
+  }
+}
+
 // ---------------- Main Installer ----------------
 export function installFabricSelectionSync(canvas) {
   log("INFO", "[canvas-events] Installing Fabric selection sync");
 
   if (!canvas) {
     log("ERROR", "[canvas-events] installFabricSelectionSync: canvas is null/undefined");
-    return;
+    return () => {};
   }
 
-  // Remove only our prior handlers (non-destructive)
-  try {
-    canvas.off('selection:created');
-    canvas.off('selection:updated');
-    canvas.off('selection:cleared');
-    canvas.off('mouse:down');
-  } catch {
-    // ignore
-  }
+  // Detach only our previously installed handlers
+  detachOurHandlers(canvas);
+
+  const localHandlers = [];
+  const on = (event, fn) => {
+    canvas.on(event, fn);
+    localHandlers.push({ event, fn });
+  };
 
   let lastProgrammaticToken = 0;
 
@@ -273,11 +293,20 @@ export function installFabricSelectionSync(canvas) {
     }
   };
 
-  // Attach handlers
-  canvas.on('selection:created', onCreated);
-  canvas.on('selection:updated', onUpdated);
-  canvas.on('selection:cleared', onCleared);
-  canvas.on('mouse:down', onMouseDown);
+  // Attach handlers (scoped)
+  on('selection:created', onCreated);
+  on('selection:updated', onUpdated);
+  on('selection:cleared', onCleared);
+  on('mouse:down', onMouseDown);
 
-  log("INFO", "[canvas-events] Selection sync installed (created/updated/cleared + blank-click clear + tokenized sync + ActiveSelection unwrap + trace buffer)");
+  // Save handler refs on canvas for non-destructive re-install/detach
+  canvas[HANDLERS_KEY] = localHandlers;
+
+  log("INFO", "[canvas-events] Selection sync installed (scoped handlers + tokenized sync + ActiveSelection unwrap + trace buffer)");
+
+  // Detach function (optional use)
+  return function detach() {
+    detachOurHandlers(canvas);
+    log("INFO", "[canvas-events] Selection sync detached");
+  };
 }
