@@ -36,6 +36,20 @@ import { installSelectionOutlines } from './selection-outlines.js';
 import { MiniLayout } from './minilayout.js';
 
 /**
+ * Remove all child <canvas> elements from the parent panel element.
+ * Ensures only one Fabric canvas is ever present per panel.
+ */
+function removeAllCanvasElements(element) {
+  if (!element) return;
+  const canvases = element.querySelectorAll('canvas');
+  canvases.forEach(c => {
+    if (c && c.parentNode) {
+      c.parentNode.removeChild(c);
+    }
+  });
+}
+
+/**
  * Create a dedicated clipping host to contain Fabric's wrapper and canvases.
  * Ensures the canvas visuals cannot bleed into sibling panels (iOS Safari-safe).
  */
@@ -476,6 +490,9 @@ export function buildCanvasPanel({ element, title, componentName }) {
     log("ERROR", "[canvas-core] buildCanvasPanel: element is null/undefined");
     return;
   }
+
+  // Remove all previous canvas elements to guarantee only one canvas per panel
+  removeAllCanvasElements(element);
 
   // Root of this panel body
   element.innerHTML = "";
