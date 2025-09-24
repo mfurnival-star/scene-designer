@@ -23,25 +23,25 @@ Core Modules
 
 Canvas
 - canvas-core.js              – Fabric canvas creation, image, sync, overlays (now calls MiniLayout resize API)
-- canvas-events.js            – Fabric selection sync → store selection
-- canvas-constraints.js       – movement clamping + multi-drag lock guard
+- canvas-events.js            – Fabric selection sync → store selection (now with ring buffer trace)
+- canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, non-clobbering)
 - selection-outlines.js       – overlay painter for multi-select hull/boxes
 
 Toolbar
 - toolbar-panel.js            – assemble styles, DOM, handlers, state sync
 - toolbar-styles.js           – injects toolbar CSS (two-row layout)
-- toolbar-dom.js              – renders toolbar DOM; returns element refs (now includes Debug button ref)
-- toolbar-handlers.js         – wires events; calls actions/selection; installs Pickr; wires Debug snapshot button
+- toolbar-dom.js              – renders toolbar DOM; returns element refs (includes Debug button)
+- toolbar-handlers.js         – wires events; calls actions/selection; installs Pickr; Debug snapshot button
 - toolbar-state.js            – enable/disable logic; scale sync
 - toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha)
 
 Selection
 - selection-core.js           – single/multi selection; transformer lifecycle
 - transformer.js              – attach/detach/update Fabric controls
-- **geometry/selection-rects.js** – centralized geometry for selection hulls, overlays, alignment
+- geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
 
 Shapes
-- shapes-core.js              – rect/circle factories; colors; stroke width; labels
+- shapes-core.js              – rect/circle factories; colors; stroke width; labels; initial placement clamp
 - shapes-point.js             – point reticle factory and variants
 - shape-defs.js               – per-shape transform/edit capabilities
 - shape-state.js              – per-shape state machine (selected/dragging/locked)
@@ -58,11 +58,11 @@ Layout / Panels / Diagnostics
 - layout.js                   – MiniLayout bootstrap, panel wiring
 - errorlog.js                 – passive Error Log panel (Console.Re streaming in use)
 - global-errors.js            – window error/unhandledrejection → logger
-- debug.js                    – Debug Snapshot Collector (collectDebugSnapshot, runDebugCapture). Invoked by the toolbar Debug button
+- debug.js                    – Debug Snapshot Collector (direct selection trace + tolerant bleed)
 - scenario-runner.js          – scriptable scenarios for dev/QA
 
 MiniLayout (split)
-- minilayout-core.js          – layout engine (**exposes panel resizing API**)
+- minilayout-core.js          – layout engine (panel resizing API)
 - minilayout-splitter-persist.js – splitter + size persistence
 - minilayout.js               – facade export { MiniLayout }
 - minilayout-ui.js            – advanced UI helpers (splitters/tabs/ARIA)
@@ -74,6 +74,12 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-24
+  - EVT-TRACE: canvas-events.js now maintains an internal ring buffer (selectionEventTrace) for selection lifecycle (created/updated/cleared + blank clears) with suppression flags, tokens, and prev/next IDs; enforces ActiveSelection visuals (hasControls=false).
+  - DBG-05: debug.js bumped to debug-snapshot-5, consumes direct trace via getSelectionEventTrace(), merges with legacy intercepted logs, adds scaledWidth/scaledHeight, tolerant bleed evaluation, and unified selectionTrace section.
+  - SHP-CLAMP: shapes-core.js clamps initial Rect/Circle placement to non-negative coordinates to prevent partially off-canvas starts.
+  - CONSTRAINTS-PATCH: canvas-constraints.js made idempotent and non-destructive (tracks only its own handlers; removed blanket canvas.off('selection:*')), fixing multi-select deletion mismatch root cause.
+  - MULTI-DELETE-FIX: Store/Fabric selection sync stabilized—Delete now removes exactly the visually selected set (previous handler clobber removed).
 - 2025-09-23
   - ALN-01: Alignment wired with six buttons relative to selection hull only; removed reference dropdown from toolbar.
   - PHASE-01: Added geometry/selection-rects.js for centralized selection hull/rect math; overlays and alignment now use shared geometry (see docs/PHASED_ARCHITECTURE_PATH.md).
@@ -88,3 +94,4 @@ Recent Changes (brief)
 How to add here
 - When you add/rename/remove a module: update the relevant section above and keep the line short.
 - If you add a new facade, list it in “Facades (public import paths)”.
+

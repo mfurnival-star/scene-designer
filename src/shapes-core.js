@@ -7,6 +7,12 @@
  * - Implements non-point shapes (rect, circle).
  * - Diagnostic label visibility management for all shapes.
  *
+ * Enhancements (2025-09-24):
+ * - Initial placement clamp: newly created Rect / Circle groups are clamped so their
+ *   top-left never starts with negative coordinates (prevents partially off-canvas
+ *   objects when start percentages or offsets yield < 0). Children retain correct
+ *   relative positioning after clamp.
+ *
  * Exports:
  * - Public:
  *    setStrokeWidthForSelectedShapes,
@@ -224,10 +230,10 @@ export function setFillColorForSelectedShapes(hexColor, alphaPercent = null) {
       } else {
         // Point: only update halo-like circles (semi-transparent overlays)
         if (obj.type === 'circle' && 'fill' in obj) {
-          const op = (typeof obj.opacity === "number") ? obj.opacity : 1;
-          if (op > 0 && op < 1) {
-            obj.set({ fill: rgba });
-          }
+            const op = (typeof obj.opacity === "number") ? obj.opacity : 1;
+            if (op > 0 && op < 1) {
+              obj.set({ fill: rgba });
+            }
         }
         // Never touch hole rects (destination-out) or hitCircle (opacity 0)
       }
@@ -349,7 +355,6 @@ export function makeRectShape(x, y, w, h) {
     height: h,
     stroke: strokeColor,
     strokeWidth: strokeW,
-    // Convert stored hex (maybe #RRGGBBAA) to rgba() for Fabric safety
     fill: rgbaStringFromHex(fillColor)
   });
   rect.selectable = false;
@@ -372,6 +377,23 @@ export function makeRectShape(x, y, w, h) {
 
   if (!showLabels) {
     setGroupDiagnosticLabelVisible(group, false);
+  }
+
+  // Clamp initial placement so shape never starts partially off-canvas (negative coords)
+  const originalLeft = group.left;
+  const originalTop = group.top;
+  const clampedLeft = Math.max(0, originalLeft);
+  const clampedTop = Math.max(0, originalTop);
+  if (clampedLeft !== originalLeft || clampedTop !== originalTop) {
+    group.set({ left: clampedLeft, top: clampedTop });
+    if (typeof group.setCoords === 'function') {
+      try { group.setCoords(); } catch {}
+    }
+    log("INFO", "[shapes] makeRectShape: initial placement clamped", {
+      id: group._id,
+      from: { left: originalLeft, top: originalTop },
+      to: { left: clampedLeft, top: clampedTop }
+    });
   }
 
   group.on("modified", () => {
@@ -407,7 +429,6 @@ export function makeCircleShape(x, y, r) {
     radius: r,
     stroke: strokeColor,
     strokeWidth: strokeW,
-    // Convert stored hex (maybe #RRGGBBAA) to rgba() for Fabric safety
     fill: rgbaStringFromHex(fillColor)
   });
   circle.selectable = false;
@@ -430,6 +451,23 @@ export function makeCircleShape(x, y, r) {
 
   if (!showLabels) {
     setGroupDiagnosticLabelVisible(group, false);
+  }
+
+  // Clamp initial placement (same rationale as rectangle)
+  const originalLeft = group.left;
+  const originalTop = group.top;
+  const clampedLeft = Math.max(0, originalLeft);
+  const clampedTop = Math.max(0, originalTop);
+  if (clampedLeft !== originalLeft || clampedTop !== originalTop) {
+    group.set({ left: clampedLeft, top: clampedTop });
+    if (typeof group.setCoords === 'function') {
+      try { group.setCoords(); } catch {}
+    }
+    log("INFO", "[shapes] makeCircleShape: initial placement clamped", {
+      id: group._id,
+      from: { left: originalLeft, top: originalTop },
+      to: { left: clampedLeft, top: clampedTop }
+    });
   }
 
   group.on("modified", () => {

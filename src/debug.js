@@ -1,78 +1,89 @@
 /**
  * debug.js
  * -----------------------------------------------------------
- * Scene Designer – Debug Snapshot Collector (ESM ONLY, ENHANCED, FORCE-PATCH LOG)
+ * Scene Designer – Debug Snapshot Collector (ESM ONLY)
+ *
  * Purpose:
- * - Collect a diagnostic snapshot of app state, Fabric selection, and DOM layout.
- * - Enhanced (2025-09-24): includes selectionSync logs and before/after selection IDs for deep tracing.
- * - **NEW**: Force-patches window.log and global log to guarantee selectionSyncLog entries from canvas-events.js.
+ * - Collect a diagnostic snapshot of app state, Fabric selection state, DOM layout geometry,
+ *   responsive scaling, and selection synchronization traces.
+ *
+ * 2025-09-24 (debug-snapshot-5):
+ * - VERSION bump: debug-snapshot-5
+ * - Added direct selection trace ingestion via getSelectionEventTrace() (canvas-events.js ring buffer).
+ * - Keeps legacy (patched) log interception fallback; merges and de‑duplicates events (time+event+ids).
+ * - Added scaledCanvas metrics (logical vs scaled dimensions).
+ * - Added bleed tolerance evaluation (upperOutsideCanvasPanelTolerant) – ignores small differences caused
+ *   by responsive zoom rounding and panel sizing (configurable thresholds).
+ * - Added tolerantBleed block summarizing raw vs tolerant flags.
+ * - Hardened clipboard copy fallback.
+ * - Narrowed hook patching (no longer forcibly overrides global log each snapshot; interception
+ *   is still supported but now secondary to direct trace).
+ *
+ * Earlier history:
+ * - debug-snapshot-4b: force log hook (selectionSyncLog)
+ * - debug-snapshot-4: selectionDiagnostics section (order / membership / locks / flags)
+ * - debug-snapshot-3: DOM bleed indicators
+ * - debug-snapshot-2: initial structured snapshot improvements
  *
  * Public Exports:
  * - collectDebugSnapshot()
- * - formatDebugSnapshot(snapshot, format='json')
+ * - formatDebugSnapshot(snapshot, format='json'|'markdown')
  * - runDebugCapture({ format='json', copy=true, log=true })
  *
- * Version History:
- * - debug-snapshot-2: DOM layout / bleedIndicators
- * - debug-snapshot-3: selectionDiagnostics (order, membership, locks, flags)
- * - debug-snapshot-4: selectionSyncLog (recent events, before/after IDs)
- * - debug-snapshot-4b: force log patching
+ * Dependencies:
+ * - log.js (origLog)
+ * - state.js (getState)
+ * - canvas-events.js (getSelectionEventTrace)  <-- NEW
  *
- * Usage for investigation:
- * 1) Marquee multi-select (include 3 shapes, at least one locked if possible) → Debug → paste.
- * 2) Select All → Debug → paste.
- * 3) Deep trace: selectionSyncLog shows event history and selection states (last 8 events).
- * -----------------------------------------------------------
+ * NOTE:
+ * - We keep legacy interception support (selectionSyncLog) so older sessions that already patched
+ *   the logger still yield some event data; new preferred path is the direct ring buffer.
  */
 
 import { log as origLog } from './log.js';
 import { getState } from './state.js';
+import { getSelectionEventTrace } from './canvas-events.js';
 
-/* ---------- Selection Sync Log (new) ---------- */
-let selectionSyncLog = [];
-let installSyncLogHookDone = false;
+/* ---------- Legacy Intercepted Selection Sync Log (fallback) ---------- */
+let legacyInterceptLog = [];
+let legacyHookInstalled = false;
 
 /**
- * Hook into canvas-events.js event logs for debug tracing.
- * Collects last 8 selection sync events (created/updated/cleared) with before/after IDs.
- * FORCE PATCH: Always sets window.log and global log to patchedLog.
+ * Install a lightweight interception hook ONLY ONCE if not already installed.
+ * This is now fallback only; primary trace source is getSelectionEventTrace().
  */
-function installSelectionSyncLogHook() {
-  if (installSyncLogHookDone) return;
-  installSyncLogHookDone = true;
+function ensureLegacyLogHook() {
+  if (legacyHookInstalled) return;
+  legacyHookInstalled = true;
 
-  function patchedLog(level, msg, obj) {
-    // Only intercept selection sync events
-    if (
-      typeof msg === "string" &&
-      msg.startsWith("[canvas-events] selection:")
-    ) {
-      // Try to extract before/after IDs and event type
-      let eventType = "";
-      if (msg.includes("selection:created")) eventType = "created";
-      else if (msg.includes("selection:updated")) eventType = "updated";
-      else if (msg.includes("selection:cleared")) eventType = "cleared";
-      else if (msg.includes("selection:")) eventType = "other";
-      const payload = {
-        timeISO: new Date().toISOString(),
-        eventType,
-        msg,
-        details: obj,
-        selectedShapes: (getState().selectedShapes || []).map(s => s?._id),
-        shapes: (getState().shapes || []).map(s => s?._id),
-        logLevel: level
-      };
-      selectionSyncLog.push(payload);
-      if (selectionSyncLog.length > 8) selectionSyncLog.shift();
-    }
+  function patched(level, msg, obj) {
+    try {
+      if (typeof msg === 'string' && msg.startsWith('[canvas-events] selection:')) {
+        const st = getState();
+        legacyInterceptLog.push({
+          timeISO: new Date().toISOString(),
+            event: msg.includes('created') ? 'selection:created'
+              : msg.includes('updated') ? 'selection:updated'
+              : msg.includes('cleared') ? 'selection:cleared'
+              : 'selection:other',
+          raw: msg,
+          idsStore: (st.selectedShapes || []).map(s => s?._id),
+          idsAll: (st.shapes || []).map(s => s?._id),
+          level
+        });
+        if (legacyInterceptLog.length > 25) legacyInterceptLog.shift();
+      }
+    } catch {/* ignore */}
     return origLog(level, msg, obj);
   }
-  // Patch window.log and global log
-  if (typeof window !== "undefined") window.log = patchedLog;
-  globalThis.log = patchedLog;
+
+  // Attach ONLY if window.log still references original; do not overwrite if user replaced already
+  if (typeof window !== 'undefined' && window.log === origLog) {
+    window.log = patched;
+  }
 }
 
-/* ---------- Generic Safe Helpers ---------- */
+/* ---------- Safe helpers ---------- */
 function safe(val) {
   try {
     if (val == null) return null;
@@ -98,14 +109,13 @@ function safe(val) {
 }
 const round = n => (typeof n === 'number' && Number.isFinite(n)) ? Math.round(n * 100) / 100 : undefined;
 
-/* ---------- Shape Summaries ---------- */
+/* ---------- Shape summary ---------- */
 function summarizeShape(shape) {
   if (!shape) return null;
   try {
-    const kind = shape._type || shape.type || 'unknown';
     return {
       id: shape._id || null,
-      type: kind,
+      type: shape._type || shape.type || 'unknown',
       label: shape._label || null,
       locked: !!shape.locked,
       selectable: !!shape.selectable,
@@ -121,7 +131,7 @@ function summarizeShape(shape) {
   }
 }
 
-/* ---------- Fabric Selection Basic Summary ---------- */
+/* ---------- Fabric selection summary ---------- */
 function summarizeFabricSelection(canvas) {
   try {
     if (!canvas || typeof canvas.getActiveObject !== 'function') {
@@ -146,14 +156,20 @@ function summarizeFabricSelection(canvas) {
   }
 }
 
-/* ---------- Canvas / Background Summaries ---------- */
+/* ---------- Canvas / Background summaries ---------- */
 function summarizeCanvas(canvas) {
   try {
     if (!canvas) return { present: false };
+    const logicalW = typeof canvas.getWidth === 'function' ? canvas.getWidth() : undefined;
+    const logicalH = typeof canvas.getHeight === 'function' ? canvas.getHeight() : undefined;
+    const scale = canvas.__responsiveScale || 1;
     return {
       present: true,
-      width: typeof canvas.getWidth === 'function' ? canvas.getWidth() : undefined,
-      height: typeof canvas.getHeight === 'function' ? canvas.getHeight() : undefined,
+      width: logicalW,
+      height: logicalH,
+      scaledWidth: logicalW != null ? round(logicalW * scale) : undefined,
+      scaledHeight: logicalH != null ? round(logicalH * scale) : undefined,
+      responsiveScale: scale,
       devicePixelRatio: (typeof canvas.getRetinaScaling === 'function')
         ? canvas.getRetinaScaling()
         : (typeof window !== 'undefined' ? window.devicePixelRatio : 1)
@@ -200,7 +216,7 @@ function summarizeSettings(settings) {
   return out;
 }
 
-/* ---------- DOM Layout (Bleed) Helpers ---------- */
+/* ---------- DOM Layout + Bleed ---------- */
 function getEl(selOrEl) {
   if (!selOrEl) return null;
   if (typeof Element !== 'undefined' && selOrEl instanceof Element) return selOrEl;
@@ -211,8 +227,11 @@ function rectOf(el) {
   try {
     if (!el || !el.getBoundingClientRect) return null;
     const r = el.getBoundingClientRect();
-    return { left: Math.round(r.left), top: Math.round(r.top), right: Math.round(r.right),
-             bottom: Math.round(r.bottom), width: Math.round(r.width), height: Math.round(r.height) };
+    return {
+      left: Math.round(r.left), top: Math.round(r.top),
+      right: Math.round(r.right), bottom: Math.round(r.bottom),
+      width: Math.round(r.width), height: Math.round(r.height)
+    };
   } catch { return null; }
 }
 function styleSummary(el) {
@@ -246,11 +265,14 @@ function canvasLayerMetrics(el) {
       zIndex: cs ? cs.zIndex : null,
       background: cs ? (cs.backgroundColor || cs.background) : null
     };
-  } catch { return { present: !!el }; }
+  } catch {
+    return { present: !!el };
+  }
 }
 const rectsIntersect = (a,b) => !!(a && b) && !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
 const rectContains = (outer, inner) => !!(outer && inner) &&
-  inner.left >= outer.left && inner.top >= outer.top && inner.right <= outer.right && inner.bottom <= outer.bottom;
+  inner.left >= outer.left && inner.top >= outer.top &&
+  inner.right <= outer.right && inner.bottom <= outer.bottom;
 
 function collectDomLayout(canvas) {
   try {
@@ -306,7 +328,7 @@ function collectDomLayout(canvas) {
   }
 }
 
-/* ---------- Selection Diagnostics (unchanged) ---------- */
+/* ---------- Selection Diagnostics ---------- */
 function collectSelectionDiagnostics(canvas) {
   const st = getState();
   const storeSelected = Array.isArray(st.selectedShapes) ? st.selectedShapes.filter(Boolean) : [];
@@ -343,7 +365,6 @@ function collectSelectionDiagnostics(canvas) {
     activeFlags.error = safe(e);
   }
 
-  // Order & membership comparisons
   const storeSet = new Set(storeIds);
   const fabricSet = new Set(fabricMemberIds);
   const missingInFabric = [...storeSet].filter(id => !fabricSet.has(id));
@@ -352,11 +373,9 @@ function collectSelectionDiagnostics(canvas) {
     storeIds.length === fabricMemberIds.length &&
     storeIds.some((id, i) => fabricMemberIds[i] !== id);
 
-  // Locked shape analysis
-  const lockedInStoreSelected = storeSelected.filter(s => s.locked).map(s => s._id);
-  const anyLockedSelected = lockedInStoreSelected.length > 0;
+  const lockedSelectedIds = storeSelected.filter(s => s.locked).map(s => s._id);
+  const anyLockedSelected = lockedSelectedIds.length > 0;
 
-  // Attempt bounding rect of active selection (Fabric)
   let activeSelectionRect = null;
   if (fabricActive && activeType === 'activeSelection' && typeof fabricActive.getBoundingRect === 'function') {
     try {
@@ -368,7 +387,6 @@ function collectSelectionDiagnostics(canvas) {
     } catch {}
   }
 
-  // Responsive scale (if canvasResponsive scaled)
   const responsiveScale = canvas ? (canvas.__responsiveScale || 1) : 1;
 
   return {
@@ -387,14 +405,14 @@ function collectSelectionDiagnostics(canvas) {
       orderMismatch
     },
     locked: {
-      lockedSelectedIds: lockedInStoreSelected
+      lockedSelectedIds
     },
     activeFlags,
     activeSelectionRect
   };
 }
 
-/* ---------- Consistency Checks (unchanged) ---------- */
+/* ---------- Consistency Checks ---------- */
 function buildConsistencyChecks({ shapesSumm, selectedSumm, fabricSel }) {
   try {
     const selIds = new Set((selectedSumm || []).map(s => s && s.id).filter(Boolean));
@@ -426,9 +444,83 @@ function buildConsistencyChecks({ shapesSumm, selectedSumm, fabricSel }) {
   }
 }
 
+/* ---------- Bleed Tolerance ---------- */
+function evaluateBleedTolerance(domLayout, responsiveScale) {
+  const raw = domLayout?.bleedIndicators || {};
+  const upper = domLayout?.rects?.upperCanvas;
+  const body = domLayout?.rects?.canvasBody;
+  if (!upper || !body) {
+    return {
+      upperOutsideCanvasPanelTolerant: raw.upperOutsideCanvasPanel,
+      details: { reason: "missing-rects" }
+    };
+  }
+  // Define tolerances — width difference ≤ 4px, height difference ≤ (40 * (1 - scale) + 6)
+  const widthDiff = Math.abs(upper.width - body.width);
+  const heightDiff = Math.abs(upper.height - body.height);
+  const widthTol = 4;
+  const heightTol = Math.max(6, Math.round(40 * Math.max(0, 1 - responsiveScale) + 6));
+
+  const tolerated = raw.upperOutsideCanvasPanel &&
+    widthDiff <= widthTol &&
+    heightDiff <= heightTol;
+
+  return {
+    upperOutsideCanvasPanelTolerant: raw.upperOutsideCanvasPanel ? !tolerated : false,
+    toleranceApplied: raw.upperOutsideCanvasPanel && tolerated,
+    metrics: { widthDiff, heightDiff, widthTol, heightTol }
+  };
+}
+
+/* ---------- Selection Trace Merge ---------- */
+function buildMergedSelectionTrace() {
+  const directTrace = getSelectionEventTrace() || [];
+  ensureLegacyLogHook(); // install fallback once (non-invasive)
+  const legacy = legacyInterceptLog.slice();
+
+  // Normalize to a common shape
+  const normDirect = directTrace.map(e => ({
+    source: 'direct',
+    timeISO: e.timeISO,
+    event: e.event,
+    token: e.token,
+    suppressed: !!e.suppressed,
+    prevIds: e.prevIds || [],
+    nextIds: e.nextIds || [],
+    error: !!e.error,
+    noop: !!e.noop
+  }));
+
+  const normLegacy = legacy.map(e => ({
+    source: 'legacy',
+    timeISO: e.timeISO,
+    event: e.event,
+    token: undefined,
+    suppressed: false,
+    prevIds: [],
+    nextIds: e.idsStore || [],
+    error: false,
+    noop: false
+  }));
+
+  const combined = [...normDirect, ...normLegacy];
+
+  // De-duplicate by (timeISO + event + nextIds.join(',') + source priority)
+  const seen = new Set();
+  const out = [];
+  for (const ev of combined.sort((a,b) => a.timeISO.localeCompare(b.timeISO))) {
+    const key = `${ev.timeISO}|${ev.event}|${ev.nextIds.join(',')}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ev);
+  }
+
+  // Keep last 25 (most recent at end)
+  return out.slice(-25);
+}
+
 /* ---------- Snapshot Builder ---------- */
 export function collectDebugSnapshot() {
-  installSelectionSyncLogHook();
   const s = getState();
   const canvas = s.fabricCanvas || null;
   const bgImg = s.bgFabricImage || null;
@@ -438,6 +530,7 @@ export function collectDebugSnapshot() {
   const fabricSel = summarizeFabricSelection(canvas);
   const domLayout = collectDomLayout(canvas);
   const selectionDiagnostics = collectSelectionDiagnostics(canvas);
+  const bleedTol = evaluateBleedTolerance(domLayout, selectionDiagnostics.summary.responsiveScale || 1);
 
   const env = {
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'n/a',
@@ -447,13 +540,12 @@ export function collectDebugSnapshot() {
     timeISO: new Date().toISOString()
   };
 
-  // Enhanced selection sync log (last 8 events; deep trace)
-  const syncLog = selectionSyncLog.slice();
+  const selectionTrace = buildMergedSelectionTrace();
 
   return {
     meta: {
       tool: 'Scene Designer',
-      version: 'debug-snapshot-4b',
+      version: 'debug-snapshot-5',
       timeISO: env.timeISO
     },
     scene: {
@@ -466,8 +558,9 @@ export function collectDebugSnapshot() {
     canvas: summarizeCanvas(canvas),
     backgroundImage: summarizeBackgroundImage(bgImg),
     fabricSelection: fabricSel,
-    selectionDiagnostics,          // NEW block
+    selectionDiagnostics,
     domLayout,
+    tolerantBleed: bleedTol,
     shapes: shapesSumm,
     selectedShapes: selectedSumm,
     ids: {
@@ -475,31 +568,33 @@ export function collectDebugSnapshot() {
       selected: selectedSumm.map(x => x && x.id).filter(Boolean)
     },
     consistencyChecks: buildConsistencyChecks({ shapesSumm, selectedSumm, fabricSel }),
-    selectionSyncLog: syncLog,
+    selectionTrace,
     environment: env
   };
 }
 
-/* ---------- Formatting / Clipboard / Run ---------- */
+/* ---------- Formatting ---------- */
 export function formatDebugSnapshot(snapshot, format = 'json') {
   try {
     if (format === 'markdown') {
-      const bleed = snapshot?.domLayout?.bleedIndicators || {};
       const sel = snapshot?.selectionDiagnostics?.summary || {};
-      const syncLog = snapshot?.selectionSyncLog || [];
+      const bleed = snapshot?.domLayout?.bleedIndicators || {};
+      const tol = snapshot?.tolerantBleed || {};
+      const trace = snapshot?.selectionTrace || [];
       const json = JSON.stringify(snapshot, null, 2);
       return [
         '## Scene Designer Debug Snapshot',
         `- Captured: ${snapshot?.meta?.timeISO}`,
         `- Shapes: ${snapshot?.scene?.shapeCount}, Selected: ${snapshot?.scene?.selectedCount}`,
         `- Selection: activeType=${sel.activeType}, store=${sel.storeSelectedCount}, fabric=${sel.fabricMemberCount}, orderMismatch=${snapshot?.selectionDiagnostics?.ids?.orderMismatch}`,
-        `- LockedInSelection=${sel.anyLockedSelected}`,
+        `- LockedSelected=${sel.anyLockedSelected}`,
         `- ResponsiveScale=${sel.responsiveScale}`,
-        `- BleedFlags: upper→Toolbar=${!!bleed.upperOverlapsToolbar}, upper→Settings=${!!bleed.upperOverlapsSettings}, upperOutsideCanvas=${!!bleed.upperOutsideCanvasPanel}`,
+        `- RawBleed: upperOutsideCanvasPanel=${bleed.upperOutsideCanvasPanel}`,
+        `- TolerantBleed: upperOutsideCanvasPanelTolerant=${tol.upperOutsideCanvasPanelTolerant} (applied=${tol.toleranceApplied})`,
         '',
-        '### Selection Sync Log (last 8 events):',
-        ...syncLog.map(ev =>
-          `- [${ev.timeISO}] ${ev.eventType}: storeSelected=[${ev.selectedShapes.join(',')}] shapes=[${ev.shapes.join(',')}]`
+        '### Selection Trace (last events, direct+legacy merged):',
+        ...trace.map(ev =>
+          `- [${ev.timeISO}] ${ev.event} src=${ev.source} suppressed=${ev.suppressed} nextIds=[${ev.nextIds.join(',')}]`
         ),
         '',
         '```json',
@@ -514,18 +609,21 @@ export function formatDebugSnapshot(snapshot, format = 'json') {
   }
 }
 
+/* ---------- Clipboard ---------- */
 async function copyToClipboard(text) {
   try {
     if (navigator?.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
       return true;
     }
-  } catch {}
+  } catch {/* fallback below */}
   try {
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
-    ta.style.top = '-9999px';
+    ta.style.opacity = '0';
+    ta.style.pointerEvents = 'none';
+    ta.style.top = '0';
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
@@ -536,6 +634,7 @@ async function copyToClipboard(text) {
   }
 }
 
+/* ---------- Capture Orchestrator ---------- */
 export async function runDebugCapture(options = {}) {
   const { format = 'json', copy = true, log: doLog = true } = options;
   const snapshot = collectDebugSnapshot();
@@ -544,8 +643,9 @@ export async function runDebugCapture(options = {}) {
   if (copy) copied = await copyToClipboard(text);
 
   if (doLog) {
-    const bleed = snapshot?.domLayout?.bleedIndicators || {};
     const sel = snapshot?.selectionDiagnostics?.summary || {};
+    const bleed = snapshot?.domLayout?.bleedIndicators || {};
+    const tol = snapshot?.tolerantBleed || {};
     origLog("INFO", "[debug] Snapshot collected", {
       version: snapshot?.meta?.version,
       copiedToClipboard: copied,
@@ -557,7 +657,8 @@ export async function runDebugCapture(options = {}) {
       orderMismatch: snapshot?.selectionDiagnostics?.ids?.orderMismatch,
       anyLockedSelected: sel.anyLockedSelected,
       responsiveScale: sel.responsiveScale,
-      bleed_upperOverlapsSettings: !!bleed.upperOverlapsSettings
+      bleed_upperOutsideCanvasPanel_raw: bleed.upperOutsideCanvasPanel,
+      bleed_upperOutsideCanvasPanel_tolerant: tol.upperOutsideCanvasPanelTolerant
     });
     origLog("DEBUG", "[debug] Snapshot text", text);
   }
