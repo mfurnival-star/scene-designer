@@ -18,6 +18,7 @@
  * - **2025-09-24**: Selection suppression logic updated:
  *      - Only suppress selection events if both token matches AND selected IDs match.
  *      - Always sync selection if IDs differ, no matter the token.
+ * - **2025-09-24**: Added additional INFO-level logs to confirm handler registration and event firing.
  */
 
 import { log } from './log.js';
@@ -111,6 +112,7 @@ function sameIdSet(aIds, bIds) {
  * Calling this multiple times is safe; existing handlers are removed first.
  */
 export function installFabricSelectionSync(canvas) {
+  log("INFO", "[canvas-events] installFabricSelectionSync CALLED", { canvas });
   if (!canvas) {
     log("ERROR", "[canvas-events] installFabricSelectionSync: canvas is null/undefined");
     return;
@@ -126,6 +128,7 @@ export function installFabricSelectionSync(canvas) {
   let lastProgrammaticToken = 0;
 
   const onCreated = (opt) => {
+    log("INFO", "[canvas-events] selection:created handler FIRED", { opt });
     const eventToken = selectionSyncToken;
     const selObjs = getSelectedObjectsFromFabric(canvas, opt);
     const nextIds = selObjs.filter(Boolean).map(o => o._id).filter(Boolean);
@@ -154,6 +157,7 @@ export function installFabricSelectionSync(canvas) {
   };
 
   const onUpdated = (opt) => {
+    log("INFO", "[canvas-events] selection:updated handler FIRED", { opt });
     const eventToken = selectionSyncToken;
     const selObjs = getSelectedObjectsFromFabric(canvas, opt);
     const nextIds = selObjs.filter(Boolean).map(o => o._id).filter(Boolean);
@@ -182,6 +186,7 @@ export function installFabricSelectionSync(canvas) {
   };
 
   const onCleared = (opt) => {
+    log("INFO", "[canvas-events] selection:cleared handler FIRED", { opt });
     const eventToken = selectionSyncToken;
     // Suppress if programmatic clear just happened (token match)
     if (eventToken === lastProgrammaticToken) {
@@ -214,6 +219,7 @@ export function installFabricSelectionSync(canvas) {
    * Clear selection when clicking on background (blank area).
    */
   const onMouseDown = (opt) => {
+    log("INFO", "[canvas-events] mouse:down handler FIRED", { opt });
     try {
       const eventToken = selectionSyncToken;
       if (eventToken === lastProgrammaticToken) return;
