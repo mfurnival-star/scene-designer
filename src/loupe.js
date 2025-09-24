@@ -4,7 +4,9 @@
  * Scene Designer – Loupe (Magnifier) Overlay (ESM ONLY)
  *
  * Purpose:
- * - Provide a magnifying "loupe" lens that follows the pointer over the Fabric canvas.
+ * - Provide a magnifying "loupe" lens either:
+ *   a) following the pointer (default), or
+ *   b) attached to a canvas point (e.g., a Point shape center).
  * - Renders on an independent overlay canvas stacked above Fabric's upperCanvasEl.
  * - Samples pixels from Fabric's lowerCanvasEl (full scene render) and magnifies them.
  * - Fully DPI- and responsive-zoom aware.
@@ -21,7 +23,20 @@
  *   borderColor: string          // CSS color for lens border (default '#2176ff')
  *   borderWidthPx: number        // lens border width in CSS px (default 2)
  *   shadow: boolean              // lens shadow (default true)
+ *   anchorMode: 'pointer'|'canvasPoint' // default 'pointer'
+ *   anchor: { x: number, y: number }    // canvas-space point (used when anchorMode='canvasPoint')
  * }
+ *
+ * Runtime Controls (via returned meta on canvas):
+ * - canvas.__sceneDesignerLoupe__:
+ *    .detach()                          → remove loupe
+ *    .setEnabled(boolean)
+ *    .setSize(numberPx)
+ *    .setMagnification(number)
+ *    .setCrosshair(boolean)
+ *    .setStyle({ borderColor, borderWidthPx, shadow })
+ *    .setAnchorPointer()                → switch to pointer tracking
+ *    .setAnchorCanvasPoint(x, y)        → switch to canvas point anchoring
  *
  * Behavior:
  * - Pointer tracking attaches to Fabric wrapper (.canvas-container), not the overlay
@@ -34,10 +49,6 @@
  *
  * Dependencies:
  * - log.js (log)
- *
- * Notes:
- * - The overlay canvas automatically resizes with the clip host via ResizeObserver.
- * - The loupe can be hidden when the pointer exits the canvas area.
  * -----------------------------------------------------------
  */
 
@@ -55,6 +66,15 @@ function getClipHost(canvas) {
 function getLowerCanvas(canvas) {
   return canvas?.lowerCanvasEl || null;
 }
+function getScale(canvas) {
+  try {
+    if (typeof canvas.getZoom === 'function') {
+      const z = canvas.getZoom();
+      return Number.isFinite(z) && z > 0 ? z : 1;
+    }
+  } catch {}
+  return 1;
+}
 
 /**
  * Install the loupe overlay for the given Fabric canvas.
@@ -68,7 +88,9 @@ export function installLoupe(canvas, options = {}) {
     showCrosshair = true,
     borderColor = '#2176ff',
     borderWidthPx = 2,
-    shadow = true
+    shadow = true,
+    anchorMode = 'pointer',
+    anchor = null
   } = options || {};
 
   if (!canvas) {
@@ -118,6 +140,11 @@ export function installLoupe(canvas, options = {}) {
   let lensBorderWidth = Math.max(0, Number(borderWidthPx) || 2);
   let lensShadow = !!shadow;
 
+  // Anchor state
+  let mode = anchorMode === 'canvasPoint' ? 'canvasPoint' : 'pointer';
+  let anchorX = (anchor && Number.isFinite(anchor.x)) ? Number(anchor.x) : 0; // canvas-space
+  let anchorY = (anchor && Number.isFinite(anchor.y)) ? Number(anchor.y) : 0; // canvas-space
+
   // Pointer state (CSS px within overlay/clipHost)
   let px = -1;
   let py = -1;
@@ -146,12 +173,39 @@ export function installLoupe(canvas, options = {}) {
   let ro = null;
   try {
     if ('ResizeObserver' in window) {
-      ro = new ResizeObserver(() => resizeOverlayToHost());
+      ro = new ResizeObserver(() => {
+        resizeOverlayToHost();
+        queueDraw();
+      });
       ro.observe(clipHost);
     }
   } catch {}
 
-  // Helpers: draw the lens at current px,py
+  function computeLensCenterCSS() {
+    // Return [cx, cy] in CSS px relative to overlay/clipHost
+    const rect = lower.getBoundingClientRect();
+    const hostRect = clipHost.getBoundingClientRect();
+
+    if (mode === 'pointer') {
+      // Pointer-relative: already tracked as CSS px within clip host
+      return [px, py, rect, hostRect];
+    }
+
+    // Canvas point anchoring: convert canvas-space (anchorX,anchorY) → CSS px
+    // Given viewportTransform normalized to scale-only (applyResponsiveViewport ensures zero translation),
+    // CSS position relative to lower rect's top-left ≈ (anchorX * scale, anchorY * scale)
+    const scale = getScale(canvas);
+    const relX = anchorX * scale;
+    const relY = anchorY * scale;
+
+    // Convert to clipHost-relative CSS px
+    const cx = (rect.left - hostRect.left) + relX;
+    const cy = (rect.top - hostRect.top) + relY;
+
+    return [cx, cy, rect, hostRect];
+  }
+
+  // Helpers: draw the lens at current center
   function drawLens() {
     rafId = 0;
     if (!ctx) return;
@@ -162,18 +216,22 @@ export function installLoupe(canvas, options = {}) {
     // Clear full overlay in CSS units (ctx is scaled to DPR)
     ctx.clearRect(0, 0, wCss, hCss);
 
-    if (!liveEnabled || !inside) return;
+    if (!liveEnabled) return;
 
-    // Clamp pointer to host bounds (CSS coords)
-    const cx = Math.max(0, Math.min(px, wCss));
-    const cy = Math.max(0, Math.min(py, hCss));
+    const [cx, cy, rect] = computeLensCenterCSS();
 
-    // Compute source rect in DEVICE pixels for lowerCanvasEl
-    const rect = lower.getBoundingClientRect();
+    // If pointer mode but cursor is outside host, hide lens
+    if (mode === 'pointer') {
+      if (!inside) return;
+      // Clamp for safety
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+    }
+
+    // Compute mapping: CSS to device px for lower canvas
     const scaleX = rect.width > 0 ? (lower.width / rect.width) : 1;
     const scaleY = rect.height > 0 ? (lower.height / rect.height) : 1;
 
-    // Pointer relative to lowerCanvas CSS box
+    // relX/Y: center relative to lower's CSS box
     const relX = cx - (rect.left - clipHost.getBoundingClientRect().left);
     const relY = cy - (rect.top - clipHost.getBoundingClientRect().top);
 
@@ -182,10 +240,10 @@ export function installLoupe(canvas, options = {}) {
     const srcY = Math.round(relY * scaleY);
 
     // Source region size (device px) corresponding to the magnified lens
-    const srcW = Math.max(1, Math.round(lensSize / mag * scaleX)); // careful: scaleX applied twice? No – lensSize is CSS; srcW must be device px
+    const srcW = Math.max(1, Math.round(lensSize / mag * scaleX));
     const srcH = Math.max(1, Math.round(lensSize / mag * scaleY));
 
-    // Source top-left (device px), centered on pointer
+    // Source top-left (device px), centered on the computed center
     const sx = Math.max(0, Math.min(lower.width - srcW, Math.round(srcX - srcW / 2)));
     const sy = Math.max(0, Math.min(lower.height - srcH, Math.round(srcY - srcH / 2)));
 
@@ -218,7 +276,6 @@ export function installLoupe(canvas, options = {}) {
       ctx.clip();
 
       // Draw the magnified source into the clipped area
-      // Note: drawImage() expects source rect in DEVICE px and dest rect in CSS px (our ctx is CSS-units because of setTransform(dpr,...))
       ctx.drawImage(lower, sx, sy, srcW, srcH, dx, dy, dw, dh);
 
       // Optional crosshair
@@ -261,6 +318,7 @@ export function installLoupe(canvas, options = {}) {
 
   // Pointer handlers on wrapper (not on overlay, to avoid blocking Fabric)
   function onMove(e) {
+    if (mode !== 'pointer') return;
     try {
       const hostRect = clipHost.getBoundingClientRect();
       px = e.clientX - hostRect.left;
@@ -270,10 +328,12 @@ export function installLoupe(canvas, options = {}) {
     } catch {}
   }
   function onEnter() {
+    if (mode !== 'pointer') return;
     inside = true;
     queueDraw();
   }
   function onLeave() {
+    if (mode !== 'pointer') return;
     inside = false;
     queueDraw();
   }
@@ -304,6 +364,19 @@ export function installLoupe(canvas, options = {}) {
       if (borderWidthPx !== undefined) lensBorderWidth = Math.max(0, Number(borderWidthPx) || 0);
       if (shadow !== undefined) lensShadow = !!shadow;
       queueDraw();
+    },
+    setAnchorPointer() {
+      mode = 'pointer';
+      // pointer mode uses inside flag to show/hide
+      queueDraw();
+    },
+    setAnchorCanvasPoint(x, y) {
+      mode = 'canvasPoint';
+      anchorX = Number(x) || 0;
+      anchorY = Number(y) || 0;
+      // canvasPoint mode always paints if enabled (ignore 'inside')
+      inside = true;
+      queueDraw();
     }
   };
   canvas[META_KEY] = meta;
@@ -311,10 +384,14 @@ export function installLoupe(canvas, options = {}) {
   log("INFO", "[loupe] Installed loupe overlay", {
     sizePx: lensSize,
     magnification: mag,
-    crosshair
+    crosshair,
+    anchorMode: mode
   });
 
-  // Initial draw (hidden until pointer enters)
+  // Initial draw
+  if (mode === 'canvasPoint') {
+    inside = true; // always visible when anchored to a point
+  }
   queueDraw();
 
   function cleanup() {
