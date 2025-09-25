@@ -15,6 +15,35 @@ function setEnabled(el, enabled, disabledTitle, enabledTitle) {
   }
 }
 
+function isDrawableChild(obj) {
+  return !!obj && !obj._isDiagnosticLabel && (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'ellipse' || obj.type === 'line');
+}
+function readStrokeWidthFromShape(shape) {
+  try {
+    if (!shape || !Array.isArray(shape._objects)) return null;
+    const child = shape._objects.find(isDrawableChild);
+    if (!child) return null;
+    const w = Number(child.strokeWidth);
+    return Number.isFinite(w) && w > 0 ? w : null;
+  } catch {
+    return null;
+  }
+}
+function getCommonStrokeWidth(selected) {
+  if (!Array.isArray(selected) || selected.length === 0) return null;
+  const widths = [];
+  selected.forEach(s => {
+    const w = readStrokeWidthFromShape(s);
+    if (Number.isFinite(w) && w > 0) widths.push(w);
+  });
+  if (!widths.length) return null;
+  const first = widths[0];
+  for (let i = 1; i < widths.length; i++) {
+    if (Math.abs(widths[i] - first) > 0.0001) return null;
+  }
+  return Math.round(first);
+}
+
 export function installButtonsStateSync(refs) {
   const {
     deleteBtn,
@@ -30,8 +59,29 @@ export function installButtonsStateSync(refs) {
     alignMiddleYBtn,
     alignBottomBtn,
     undoBtn,
-    redoBtn
+    redoBtn,
+    strokeWidthInput
   } = refs || {};
+
+  function syncStrokeWidthInput() {
+    if (!strokeWidthInput) return;
+    if (document.activeElement === strokeWidthInput) return;
+    const selected = getState().selectedShapes || [];
+    const common = getCommonStrokeWidth(selected);
+    if (common !== null) {
+      if (strokeWidthInput.value !== String(common)) strokeWidthInput.value = String(common);
+      strokeWidthInput.placeholder = '';
+      return;
+    }
+    if (!Array.isArray(selected) || selected.length === 0) {
+      const defW = Number(getState().settings?.defaultStrokeWidth) || 1;
+      if (strokeWidthInput.value !== String(defW)) strokeWidthInput.value = String(defW);
+      strokeWidthInput.placeholder = '';
+      return;
+    }
+    strokeWidthInput.value = '';
+    strokeWidthInput.placeholder = '—';
+  }
 
   function updateButtonsState() {
     const selected = getState().selectedShapes || [];
@@ -135,6 +185,8 @@ export function installButtonsStateSync(refs) {
       "Select 2 or more shapes to align",
       "Align bottom (2+ selected)"
     );
+
+    syncStrokeWidthInput();
   }
 
   function updateUndoRedoFromSnapshot() {
@@ -156,7 +208,7 @@ export function installButtonsStateSync(refs) {
     setEnabled(redoBtn, !!canRedo, "Nothing to redo", "Redo");
   });
 
-  log("INFO", "[toolbar-state] Button state sync installed (incl. undo/redo)");
+  log("INFO", "[toolbar-state] Button state + stroke width sync installed");
   return function detach() {
     try { unsubStore && unsubStore(); } catch {}
     try { unsubHistory && unsubHistory(); } catch {}

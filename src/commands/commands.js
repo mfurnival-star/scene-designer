@@ -187,18 +187,14 @@ function clampDeltaToImage(bbox, dx, dy, img) {
   try {
     const imgW = img.width;
     const imgH = img.height;
-
     const newLeft = bbox.left + dx;
     const newTop = bbox.top + dy;
-
     const minLeft = 0;
     const minTop = 0;
     const maxLeft = Math.max(0, imgW - bbox.width);
     const maxTop = Math.max(0, imgH - bbox.height);
-
     const clampedLeft = Math.min(Math.max(newLeft, minLeft), maxLeft);
     const clampedTop = Math.min(Math.max(newTop, minTop), maxTop);
-
     return {
       dx: clampedLeft - bbox.left,
       dy: clampedTop - bbox.top
@@ -307,7 +303,6 @@ function cmdResetRotation(payload) {
         ? shape.getCenterPoint()
         : getShapeCenter(shape);
       const angle = Number(shape.angle) || 0;
-
       setAngleAndCenter(shape, 0, center);
       return { id: shape._id, angle, center };
     } catch (e) {
@@ -337,7 +332,6 @@ function cmdSetAnglesPositions(payload) {
         ? shape.getCenterPoint()
         : getShapeCenter(shape);
       prev.push({ id: shape._id, angle: Number(shape.angle) || 0, center: currentCenter });
-
       setAngleAndCenter(shape, i.angle, i.center);
     } catch (e) {
       log("ERROR", "[commands] SET_ANGLES_POSITIONS failed", { id: i.id, error: e });
@@ -623,7 +617,12 @@ function applyStrokeColorToShape(shape, color) {
     if (!isDrawableChild(obj)) return;
     if ('stroke' in obj) obj.set({ stroke: color });
     if ('strokeUniform' in obj) obj.set({ strokeUniform: true });
+    obj.objectCaching = false;
+    obj.dirty = true;
+    if (typeof obj.setCoords === 'function') { try { obj.setCoords(); } catch {} }
   });
+  shape.objectCaching = false;
+  shape.dirty = true;
   if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
 }
 function applyFillColorToShape(shape, rgba) {
@@ -632,7 +631,12 @@ function applyFillColorToShape(shape, rgba) {
     if (!isDrawableChild(obj)) return;
     if (obj.type === 'line') return;
     if ('fill' in obj) obj.set({ fill: rgba });
+    obj.objectCaching = false;
+    obj.dirty = true;
+    if (typeof obj.setCoords === 'function') { try { obj.setCoords(); } catch {} }
   });
+  shape.objectCaching = false;
+  shape.dirty = true;
   if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
 }
 function getFirstChildStrokeWidth(shape) {
@@ -649,7 +653,12 @@ function applyStrokeWidthToShape(shape, width) {
     if (!isDrawableChild(obj)) return;
     if ('strokeWidth' in obj) obj.set({ strokeWidth: w });
     if ('strokeUniform' in obj) obj.set({ strokeUniform: true });
+    obj.objectCaching = false;
+    obj.dirty = true;
+    if (typeof obj.setCoords === 'function') { try { obj.setCoords(); } catch {} }
   });
+  shape.objectCaching = false;
+  shape.dirty = true;
   if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
 }
 
@@ -831,3 +840,4 @@ export function executeCommand(cmd) {
       return null;
   }
 }
+

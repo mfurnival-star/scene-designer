@@ -106,6 +106,9 @@ export function setShapeStrokeWidth(shape, width = 1) {
     if (!obj) return;
     if ('strokeWidth' in obj) obj.set({ strokeWidth: w });
     if ('strokeUniform' in obj) obj.set({ strokeUniform: true });
+    obj.objectCaching = false;
+    obj.dirty = true;
+    if (typeof obj.setCoords === 'function') { try { obj.setCoords(); } catch {} }
   };
 
   if (shape._objects && Array.isArray(shape._objects)) {
@@ -116,6 +119,9 @@ export function setShapeStrokeWidth(shape, width = 1) {
       }
     });
   }
+  shape.objectCaching = false;
+  shape.dirty = true;
+  if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
   log("DEBUG", "[shapes] setShapeStrokeWidth EXIT", { id: shape?._id, type: shape?._type, width: w });
 }
 
@@ -150,8 +156,14 @@ export function setStrokeColorForSelectedShapes(hexColor) {
       if (obj.type === 'line' || obj.type === 'rect' || obj.type === 'circle' || obj.type === 'ellipse') {
         if ('stroke' in obj) obj.set({ stroke: color });
         if ('strokeUniform' in obj) obj.set({ strokeUniform: true });
+        obj.objectCaching = false;
+        obj.dirty = true;
+        if (typeof obj.setCoords === 'function') { try { obj.setCoords(); } catch {} }
       }
     });
+    shape.objectCaching = false;
+    shape.dirty = true;
+    if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
   });
 
   requestCanvasRender();
@@ -175,9 +187,15 @@ export function setFillColorForSelectedShapes(hexColor, alphaPercent = null) {
       if (!isPoint) {
         if ((obj.type === 'rect' || obj.type === 'circle' || obj.type === 'ellipse') && 'fill' in obj) {
           obj.set({ fill: rgba });
+          obj.objectCaching = false;
+          obj.dirty = true;
+          if (typeof obj.setCoords === 'function') { try { obj.setCoords(); } catch {} }
         }
       }
     });
+    shape.objectCaching = false;
+    shape.dirty = true;
+    if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
   });
 
   requestCanvasRender();
@@ -379,6 +397,7 @@ export function makeRectShape(x, y, w, h) {
   rect.selectable = false;
   rect.evented = false;
   rect.strokeUniform = true;
+  rect.objectCaching = false;
 
   const labelObj = makeDiagnosticLabel("Rect", rectId, x + w / 2, y);
 
@@ -395,6 +414,7 @@ export function makeRectShape(x, y, w, h) {
   group._diagLabel = labelObj;
   group._pendingStrokeWidthReapply = false;
   group._preTransformStrokeWidth = undefined;
+  group.objectCaching = false;
 
   if (!showLabels) {
     setGroupDiagnosticLabelVisible(group, false);
@@ -431,6 +451,7 @@ export function makeCircleShape(x, y, r) {
   circle.selectable = false;
   circle.evented = false;
   circle.strokeUniform = true;
+  circle.objectCaching = false;
 
   const labelObj = makeDiagnosticLabel("Circle", circleId, x, y - r);
 
@@ -447,6 +468,7 @@ export function makeCircleShape(x, y, r) {
   group._diagLabel = labelObj;
   group._pendingStrokeWidthReapply = false;
   group._preTransformStrokeWidth = undefined;
+  group.objectCaching = false;
 
   if (!showLabels) {
     setGroupDiagnosticLabelVisible(group, false);
@@ -487,6 +509,7 @@ export function makeEllipseShape(x, y, w, h) {
   ellipse.selectable = false;
   ellipse.evented = false;
   ellipse.strokeUniform = true;
+  ellipse.objectCaching = false;
 
   const labelObj = makeDiagnosticLabel("Ellipse", ellipseId, x, y - ry);
 
@@ -503,6 +526,7 @@ export function makeEllipseShape(x, y, w, h) {
   group._diagLabel = labelObj;
   group._pendingStrokeWidthReapply = false;
   group._preTransformStrokeWidth = undefined;
+  group.objectCaching = false;
 
   if (!showLabels) {
     setGroupDiagnosticLabelVisible(group, false);
