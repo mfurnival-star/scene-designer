@@ -1,29 +1,3 @@
-/**
- * settings-ui.js
- * -------------------------------------------------------------------
- * Scene Designer – Settings UI (Tweakpane) – ESM ONLY
- * Purpose:
- * - Render the Settings panel using Tweakpane.
- * - Bind settingsRegistry-defined controls to the centralized store.
- * - Persist changes via settings-core mutators.
- * - Avoid reloading persisted settings while already initialized in-memory.
- *
- * Exports:
- * - buildSettingsPanel({ element, title, componentName })
- *
- * Dependencies:
- * - state.js (getState)
- * - log.js (log)
- * - tweakpane (Pane)
- * - settings-core.js (settingsRegistry, loadSettings, setSettingAndSave)
- *
- * Notes:
- * - Panel visibility toggles (showErrorLogPanel, showScenarioRunner) are applied by layout.js
- *   via store subscription; UI simply sets the setting via setSettingAndSave().
- * - As agreed: any TRACE logs are standardized to DEBUG in modified files.
- * -------------------------------------------------------------------
- */
-
 import { getState } from './state.js';
 import { log } from './log.js';
 import { Pane } from 'tweakpane';
@@ -33,10 +7,6 @@ import {
   setSettingAndSave
 } from './settings-core.js';
 
-/**
- * Build the settings panel (MiniLayout-compliant).
- * Accepts: { element, title, componentName }
- */
 export function buildSettingsPanel({ element, title, componentName }) {
   log("DEBUG", "[settings-ui] buildSettingsPanel ENTRY", {
     PaneType: typeof Pane,
@@ -70,8 +40,8 @@ export function buildSettingsPanel({ element, title, componentName }) {
       }
 
       element.innerHTML = `
-        <div id="settings-panel-container" style="width:100%;height:100%;background:#fff;display:flex;flex-direction:column;overflow:auto;">
-          <div id="tweakpane-fields-div" style="flex:1 1 0;overflow:auto;padding:0 8px 8px 8px;"></div>
+        <div id="settings-panel-container" style="width:100%;height:100%;background:#fff;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+          <div id="tweakpane-fields-div" style="flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:0 8px 16px 8px;"></div>
         </div>
       `;
 
@@ -133,8 +103,6 @@ export function buildSettingsPanel({ element, title, componentName }) {
       log("INFO", "[settings-ui] Settings panel rendered (Tweakpane, no inner header)");
     };
 
-    // Avoid reloading persisted settings during layout rebuilds.
-    // If settings exist in store, build immediately; otherwise load then build.
     const hasSettingsInStore = !!(getState().settings && Object.keys(getState().settings).length > 0);
     if (hasSettingsInStore) {
       buildPanel();
@@ -158,4 +126,3 @@ export function buildSettingsPanel({ element, title, componentName }) {
     componentName
   });
 }
-
