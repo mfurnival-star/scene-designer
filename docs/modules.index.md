@@ -83,6 +83,9 @@ Settings
   - UI/Sidebar toggles: showRightSidebarPanel, showSettingsPanel, showHistoryPanel
 - settings-ui.js              – Tweakpane panel binding to settings
 
+Serialization
+- serialization/scene-io.js   – serializeScene(), deserializeScene(), exportSceneJSON(), importSceneJSON()
+
 Layout / Panels / Diagnostics
 - layout.js                   – MiniLayout bootstrap; right sidebar stack (Settings top, History bottom); toggles via settings; installs global undo/redo keybindings
 - errorlog.js                 – passive Error Log panel (Console.Re streaming in use)
@@ -105,6 +108,8 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-25 (Phase 2 – Serialization scaffolding)
+  - Added serialization/scene-io.js with serializeScene()/deserializeScene() and JSON helpers (exportSceneJSON/importSceneJSON).
 - 2025-09-25 (Commands split + facade)
   - Split commands into commands-structure.js (structural/transform) and commands-style.js (style).
   - commands/commands.js is now a facade routing to both modules; no public API changes.
