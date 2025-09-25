@@ -75,7 +75,9 @@ export const settingsRegistry = [
   { key: "loupeShowTether", label: "Loupe Show Tether", type: "boolean", default: true },
   { key: "showRightSidebarPanel", label: "Show Right Sidebar", type: "boolean", default: true },
   { key: "showSettingsPanel", label: "Show Settings Panel", type: "boolean", default: true },
-  { key: "showHistoryPanel", label: "Show History Panel", type: "boolean", default: false }
+  { key: "showHistoryPanel", label: "Show History Panel", type: "boolean", default: false },
+
+  { key: "exportFilename", label: "Export Filename", type: "text", default: "scene-{YYYY}{MM}{DD}-{hh}{mm}{ss}.json" }
 ];
 
 const STORAGE_KEY = "sceneDesignerSettings";

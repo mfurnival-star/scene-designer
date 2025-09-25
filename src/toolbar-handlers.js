@@ -48,6 +48,57 @@ function debounce(fn, wait = 140) {
   };
 }
 
+function pad2(n) {
+  return String(Math.max(0, Number(n) || 0)).padStart(2, '0');
+}
+function buildTimestampParts(d) {
+  return {
+    YYYY: String(d.getFullYear()),
+    MM: pad2(d.getMonth() + 1),
+    DD: pad2(d.getDate()),
+    hh: pad2(d.getHours()),
+    mm: pad2(d.getMinutes()),
+    ss: pad2(d.getSeconds())
+  };
+}
+function sanitizeFilename(name) {
+  if (typeof name !== 'string') return 'scene.json';
+  let s = name.trim();
+  s = s.replace(/[\\\/:*?"<>|\u0000-\u001F]/g, '_');
+  if (!s) s = 'scene.json';
+  return s;
+}
+function ensureExtension(name, fallbackExt = '.json') {
+  const idx = name.lastIndexOf('.');
+  if (idx > 0 && idx < name.length - 1) return name;
+  return name + fallbackExt;
+}
+function formatExportFilenameFromSettings() {
+  const s = getState().settings || {};
+  const tmpl = typeof s.exportFilename === 'string' ? s.exportFilename.trim() : '';
+  const now = new Date();
+  const parts = buildTimestampParts(now);
+
+  let filename = tmpl;
+  if (filename) {
+    filename = filename
+      .replace(/\{YYYY\}/g, parts.YYYY)
+      .replace(/\{MM\}/g, parts.MM)
+      .replace(/\{DD\}/g, parts.DD)
+      .replace(/\{hh\}/g, parts.hh)
+      .replace(/\{mm\}/g, parts.mm)
+      .replace(/\{ss\}/g, parts.ss);
+  } else {
+    filename = `scene-${parts.YYYY}${parts.MM}${parts.DD}-${parts.hh}${parts.mm}${parts.ss}.json`;
+  }
+
+  filename = sanitizeFilename(filename);
+  if (!/\.[A-Za-z0-9]+$/.test(filename)) {
+    filename = ensureExtension(filename, '.json');
+  }
+  return filename;
+}
+
 export function attachToolbarHandlers(refs) {
   if (!refs || typeof refs !== "object") {
     throw new Error("attachToolbarHandlers: refs object is required");
@@ -471,9 +522,7 @@ export function attachToolbarHandlers(refs) {
   const onExportJsonClick = () => {
     try {
       const json = exportSceneJSON(true);
-      const ts = new Date();
-      const pad = (n) => String(n).padStart(2, '0');
-      const fname = `scene-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.json`;
+      const fname = formatExportFilenameFromSettings();
       downloadText(fname, json);
       log("INFO", "[toolbar-handlers] Scene exported", { bytes: json.length, filename: fname });
     } catch (e) {
