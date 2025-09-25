@@ -28,7 +28,7 @@ Core Modules
 Commands
 - commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
 - commands/commands.js        – core command implementations:
-  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED, SET_TRANSFORMS, SET_STROKE_COLOR, SET_FILL_COLOR
+  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED, SET_TRANSFORMS, SET_STROKE_COLOR, SET_FILL_COLOR, SET_STROKE_WIDTH
   - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
 
 Keybindings
@@ -49,9 +49,9 @@ Canvas
 
 Toolbar
 - toolbar-panel.js            – assemble styles, DOM, handlers, state sync
-- toolbar-styles.js           – injects toolbar CSS (two-row layout)
-- toolbar-dom.js              – renders toolbar DOM; returns element refs (Ellipse option, Debug button, Undo/Redo buttons)
-- toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot; Undo/Redo buttons
+- toolbar-styles.js           – injects toolbar CSS (two-row layout); includes numeric input styling (stroke width), scale-aware
+- toolbar-dom.js              – renders toolbar DOM; returns element refs (Ellipse option, Debug button, Undo/Redo buttons, Stroke Width input)
+- toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot; Undo/Redo buttons; Stroke Width input → command bus or defaults
 - toolbar-state.js            – enable/disable logic; scale sync; subscribes to history for Undo/Redo enabled state
 - toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha) using command bus; debounced live updates
 
@@ -66,7 +66,7 @@ Shapes
 - shape-state.js              – per-shape state machine (selected/dragging/locked)
 
 Actions
-- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation/align via command bus; style intents setStrokeColorForSelected and setFillColorForSelected dispatch SET_STROKE_COLOR / SET_FILL_COLOR
+- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation/align via command bus; style intents setStrokeColorForSelected and setFillColorForSelected; stroke width intent setStrokeWidthForSelected dispatches SET_STROKE_WIDTH
 - actions-alignment.js        – dispatches ALIGN_SELECTED command (alignSelected(mode, ref))
 
 Settings
@@ -95,6 +95,12 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-25 (Phase 2 – Stroke Width Command)
+  - commands/commands.js: added SET_STROKE_WIDTH (batch per-id, undoable; inverse captures previous widths).
+  - actions.js: added setStrokeWidthForSelected(width) intent that dispatches SET_STROKE_WIDTH for unlocked selection.
+  - toolbar-dom.js: added a Stroke Width numeric input (px) next to color pickers; exposed ref.
+  - toolbar-handlers.js: wired Stroke Width input to command bus (when selection) or updates defaultStrokeWidth in settings (when no selection); debounced input events.
+  - toolbar-styles.js: added scale-aware numeric input styles consistent with toolbar UI scale.
 - 2025-09-24 (Phase 2 – Keybindings Expansion)
   - keybindings.js: Added Delete/Backspace (delete selection), Ctrl/Cmd+D (duplicate), Ctrl/Cmd+L (lock), Ctrl/Cmd+Shift+L (unlock), and R (reset rotation). All guarded for editable inputs and routed through the command bus.
 - 2025-09-24 (Phase 2 – Style Commands)

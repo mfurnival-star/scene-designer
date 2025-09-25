@@ -635,6 +635,23 @@ function applyFillColorToShape(shape, rgba) {
   });
   if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
 }
+function getFirstChildStrokeWidth(shape) {
+  if (!shape || !Array.isArray(shape._objects)) return null;
+  const child = shape._objects.find(isDrawableChild);
+  if (!child) return null;
+  return ('strokeWidth' in child) ? (Number(child.strokeWidth) || 0) : null;
+}
+function applyStrokeWidthToShape(shape, width) {
+  if (!shape || shape.locked || !Array.isArray(shape._objects)) return;
+  const w = Number(width);
+  if (!Number.isFinite(w) || w <= 0) return;
+  shape._objects.forEach(obj => {
+    if (!isDrawableChild(obj)) return;
+    if ('strokeWidth' in obj) obj.set({ strokeWidth: w });
+    if ('strokeUniform' in obj) obj.set({ strokeUniform: true });
+  });
+  if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
+}
 
 function cmdSetStrokeColor(payload) {
   const items = Array.isArray(payload?.items) ? payload.items.filter(i => i && i.id != null && typeof i.color === 'string') : null;
@@ -718,6 +735,48 @@ function cmdSetFillColor(payload) {
   return { type: 'SET_FILL_COLOR', payload: { items: prev } };
 }
 
+function cmdSetStrokeWidth(payload) {
+  const items = Array.isArray(payload?.items) ? payload.items.filter(i => i && i.id != null && Number.isFinite(Number(i.width)) && Number(i.width) > 0) : null;
+  const width = Number(payload?.width);
+  let targets = [];
+
+  if (items && items.length) {
+    const byId = new Map((getState().shapes || []).map(s => [s._id, s]));
+    targets = items.map(i => {
+      const s = byId.get(i.id);
+      const w = Number(i.width);
+      return s && !s.locked && Number.isFinite(w) && w > 0 ? { shape: s, width: w } : null;
+    }).filter(Boolean);
+  } else {
+    const ids = Array.isArray(payload?.ids) && payload.ids.length ? payload.ids : getSelectedIds();
+    if (!ids.length || !Number.isFinite(width) || width <= 0) {
+      log("INFO", "[commands] SET_STROKE_WIDTH: no targets or invalid width");
+      return null;
+    }
+    targets = getShapesByIds(ids).filter(s => s && !s.locked).map(s => ({ shape: s, width }));
+  }
+
+  if (!targets.length) {
+    log("INFO", "[commands] SET_STROKE_WIDTH: nothing to apply");
+    return null;
+  }
+
+  const prev = [];
+  targets.forEach(({ shape, width: w }) => {
+    try {
+      const before = getFirstChildStrokeWidth(shape);
+      prev.push({ id: shape._id, width: before });
+      applyStrokeWidthToShape(shape, w);
+    } catch (e) {
+      log("WARN", "[commands] SET_STROKE_WIDTH: apply failed", { id: shape?._id, error: e });
+    }
+  });
+
+  requestRender();
+  log("INFO", "[commands] Stroke width applied", { count: targets.length, width: items && items.length ? 'per-item' : width });
+  return { type: 'SET_STROKE_WIDTH', payload: { items: prev } };
+}
+
 export function executeCommand(cmd) {
   if (!cmd || typeof cmd.type !== 'string') {
     log("WARN", "[commands] executeCommand: invalid cmd", { cmd });
@@ -763,6 +822,9 @@ export function executeCommand(cmd) {
       return cmdSetStrokeColor(p);
     case 'SET_FILL_COLOR':
       return cmdSetFillColor(p);
+
+    case 'SET_STROKE_WIDTH':
+      return cmdSetStrokeWidth(p);
 
     default:
       log("WARN", "[commands] Unknown command type", { type: t });

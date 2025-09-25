@@ -72,6 +72,10 @@ export function renderToolbar(element) {
           <button id="toolbar-stroke-pickr" class="toolbar-btn pickr-btn" type="button" title="Stroke color">Pick</button>
           <label class="toolbar-label" for="toolbar-fill-pickr" title="Fill color + Alpha">Fill</label>
           <button id="toolbar-fill-pickr" class="toolbar-btn pickr-btn" type="button" title="Fill color + Alpha">Pick</button>
+
+          <span class="toolbar-label" style="margin-left:8px;">Stroke:</span>
+          <label class="toolbar-label" for="toolbar-stroke-width-input" title="Stroke width (px)">Width</label>
+          <input id="toolbar-stroke-width-input" class="toolbar-input-number" type="number" min="1" max="20" step="1" value="1" title="Stroke width (px)" />
         </div>
 
         <div class="toolbar-group" id="toolbar-debug-group">
@@ -109,6 +113,7 @@ export function renderToolbar(element) {
 
   const strokePickrEl = element.querySelector('#toolbar-stroke-pickr');
   const fillPickrEl = element.querySelector('#toolbar-fill-pickr');
+  const strokeWidthInput = element.querySelector('#toolbar-stroke-width-input');
 
   const debugBtn = element.querySelector('#toolbar-debug-btn');
 
@@ -129,6 +134,7 @@ export function renderToolbar(element) {
     redoBtn,
     strokePickrEl,
     fillPickrEl,
+    strokeWidthInput,
     alignLeftBtn,
     alignCenterXBtn,
     alignRightBtn,
@@ -143,7 +149,7 @@ export function renderToolbar(element) {
     log("WARN", "[toolbar-dom] Some toolbar refs are missing", { missing });
   }
 
-  log("INFO", "[toolbar-dom] Toolbar DOM rendered (undo/redo buttons included)");
+  log("INFO", "[toolbar-dom] Toolbar DOM rendered (undo/redo, color pickers, stroke width input)");
   log("DEBUG", "[toolbar-dom] renderToolbar EXIT");
 
   return refs;

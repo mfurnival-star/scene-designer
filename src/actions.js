@@ -132,4 +132,22 @@ export function setFillColorForSelected(fill) {
   });
 }
 
+export function setStrokeWidthForSelected(width) {
+  const selected = getState().selectedShapes || [];
+  const ids = selected.filter(s => s && !s.locked).map(s => s._id);
+  if (!ids.length) {
+    log("INFO", "[actions] setStrokeWidthForSelected: no unlocked shapes selected");
+    return;
+  }
+  const w = Number(width);
+  if (!Number.isFinite(w) || w <= 0) {
+    log("WARN", "[actions] setStrokeWidthForSelected: invalid width", { width });
+    return;
+  }
+  dispatch({
+    type: 'SET_STROKE_WIDTH',
+    payload: { ids, width: w }
+  });
+}
+
 export { alignSelected } from './actions-alignment.js';

@@ -7,12 +7,14 @@ import {
   lockSelectedShapes,
   unlockSelectedShapes,
   resetRotationForSelectedShapes,
-  alignSelected
+  alignSelected,
+  setStrokeWidthForSelected
 } from './actions.js';
 import { selectAllShapes } from './selection.js';
 import { installColorPickers } from './toolbar-color.js';
 import { runDebugCapture } from './debug.js';
 import { undo, redo } from './commands/command-bus.js';
+import { setSettingAndSave } from './settings-core.js';
 
 function resolveServerImageUrl(filename) {
   const base = (typeof window !== 'undefined' ? window.location.href : '');
@@ -35,6 +37,14 @@ function loadImageFromBlob(blob, cb, canonicalUrl) {
   } catch (e) {
     log("ERROR", "[toolbar-handlers] Failed to create Blob URL for image", { canonicalUrl, error: e });
   }
+}
+
+function debounce(fn, wait = 140) {
+  let t = null;
+  return (...args) => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
 }
 
 export function attachToolbarHandlers(refs) {
@@ -67,6 +77,8 @@ export function attachToolbarHandlers(refs) {
     // Pickr hosts
     strokePickrEl,
     fillPickrEl,
+    // Stroke width input
+    strokeWidthInput,
     // Debug button (optional)
     debugBtn
   } = refs;
@@ -332,6 +344,53 @@ export function attachToolbarHandlers(refs) {
     }
   } catch (e) {
     log("ERROR", "[toolbar-handlers] Failed to install Pickr color pickers", e);
+  }
+
+  // Stroke Width input wiring (selection → command; no selection → update default setting)
+  function coerceStrokeWidth(raw) {
+    let w = Number(raw);
+    if (!Number.isFinite(w)) return null;
+    // Enforce bounds similar to input attributes
+    if (w < 1) w = 1;
+    if (w > 20) w = 20;
+    // Integer step
+    w = Math.round(w);
+    return w;
+  }
+
+  const applyStrokeWidth = (source = 'input') => {
+    try {
+      if (!strokeWidthInput) return;
+      const w = coerceStrokeWidth(strokeWidthInput.value);
+      if (!Number.isFinite(w) || w <= 0) {
+        log("WARN", "[toolbar-handlers] Stroke width ignored (invalid)", { value: strokeWidthInput.value });
+        return;
+      }
+      // Normalize UI value to the coerced number
+      try { strokeWidthInput.value = String(w); } catch {}
+
+      const selected = Array.isArray(getState().selectedShapes) ? getState().selectedShapes.filter(Boolean) : [];
+      const anyUnlocked = selected.some(s => s && !s.locked);
+      if (selected.length > 0 && anyUnlocked) {
+        setStrokeWidthForSelected(w);
+        log("INFO", "[toolbar-handlers] Stroke width applied to selection", { width: w, source });
+      } else {
+        setSettingAndSave("defaultStrokeWidth", w);
+        log("INFO", "[toolbar-handlers] Default stroke width updated", { width: w, source });
+      }
+    } catch (e) {
+      log("ERROR", "[toolbar-handlers] applyStrokeWidth error", e);
+    }
+  };
+
+  const debouncedApplyStrokeWidth = debounce(() => applyStrokeWidth('debounced'));
+
+  if (strokeWidthInput) {
+    on(strokeWidthInput, 'input', () => debouncedApplyStrokeWidth());
+    on(strokeWidthInput, 'change', () => applyStrokeWidth('change'));
+    on(strokeWidthInput, 'blur', () => applyStrokeWidth('blur'));
+  } else {
+    log("WARN", "[toolbar-handlers] strokeWidthInput ref missing; stroke width control not wired");
   }
 
   const onDebugClick = async () => {
