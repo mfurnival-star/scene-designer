@@ -15,6 +15,7 @@ import { installColorPickers } from './toolbar-color.js';
 import { runDebugCapture } from './debug.js';
 import { undo, redo } from './commands/command-bus.js';
 import { setSettingAndSave } from './settings-core.js';
+import { exportSceneJSON, importSceneJSON } from './serialization/scene-io.js';
 
 function resolveServerImageUrl(filename) {
   const base = (typeof window !== 'undefined' ? window.location.href : '');
@@ -75,6 +76,9 @@ export function attachToolbarHandlers(refs) {
     strokePickrEl,
     fillPickrEl,
     strokeWidthInput,
+    exportJsonBtn,
+    importJsonBtn,
+    importJsonFile,
     debugBtn,
     settingsToggleBtn
   } = refs;
@@ -445,6 +449,69 @@ export function attachToolbarHandlers(refs) {
     }
   };
   if (settingsToggleBtn) on(settingsToggleBtn, 'click', onSettingsToggleClick);
+
+  function downloadText(filename, text) {
+    try {
+      const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try { document.body.removeChild(a); } catch {}
+        try { URL.revokeObjectURL(url); } catch {}
+      }, 0);
+    } catch (e) {
+      log("ERROR", "[toolbar-handlers] downloadText failed", e);
+    }
+  }
+
+  const onExportJsonClick = () => {
+    try {
+      const json = exportSceneJSON(true);
+      const ts = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const fname = `scene-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.json`;
+      downloadText(fname, json);
+      log("INFO", "[toolbar-handlers] Scene exported", { bytes: json.length, filename: fname });
+    } catch (e) {
+      log("ERROR", "[toolbar-handlers] Export scene failed", e);
+    }
+  };
+
+  const onImportJsonClick = () => {
+    try {
+      if (!importJsonFile) return;
+      importJsonFile.value = "";
+      importJsonFile.click();
+    } catch (e) {
+      log("ERROR", "[toolbar-handlers] Import click failed", e);
+    }
+  };
+
+  const onImportJsonFileChange = async (e) => {
+    try {
+      const file = e?.target?.files && e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const result = await importSceneJSON(text);
+      log("INFO", "[toolbar-handlers] Scene imported", {
+        filename: file.name,
+        shapesLoaded: result?.shapesLoaded ?? 0,
+        imageSet: !!result?.imageSet
+      });
+    } catch (err) {
+      log("ERROR", "[toolbar-handlers] Import scene failed", err);
+    } finally {
+      try { if (importJsonFile) importJsonFile.value = ""; } catch {}
+    }
+  };
+
+  on(exportJsonBtn, 'click', onExportJsonClick);
+  on(importJsonBtn, 'click', onImportJsonClick);
+  on(importJsonFile, 'change', onImportJsonFileChange);
 
   log("INFO", "[toolbar-handlers] Toolbar handlers attached");
   return function detach() {

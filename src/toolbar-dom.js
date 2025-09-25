@@ -80,6 +80,13 @@ export function renderToolbar(element) {
           <input id="toolbar-stroke-width-input" class="toolbar-input-number" type="number" min="1" max="20" step="1" value="1" title="Stroke width (px)" />
         </div>
 
+        <div class="toolbar-group" id="toolbar-io-group">
+          <span class="toolbar-label">Scene:</span>
+          <button id="toolbar-export-json-btn" class="toolbar-btn" title="Export scene as JSON">Export</button>
+          <button id="toolbar-import-json-btn" class="toolbar-btn" title="Import scene from JSON">Import</button>
+          <input id="toolbar-import-json-file" type="file" accept=".json,application/json" style="display:none" />
+        </div>
+
         <div class="toolbar-group" id="toolbar-debug-group">
           <button id="toolbar-debug-btn" class="toolbar-btn" title="Collect debug snapshot and copy to clipboard">Debug</button>
         </div>
@@ -117,6 +124,10 @@ export function renderToolbar(element) {
   const fillPickrEl = element.querySelector('#toolbar-fill-pickr');
   const strokeWidthInput = element.querySelector('#toolbar-stroke-width-input');
 
+  const exportJsonBtn = element.querySelector('#toolbar-export-json-btn');
+  const importJsonBtn = element.querySelector('#toolbar-import-json-btn');
+  const importJsonFile = element.querySelector('#toolbar-import-json-file');
+
   const debugBtn = element.querySelector('#toolbar-debug-btn');
   const settingsToggleBtn = element.querySelector('#toolbar-settings-toggle-btn');
 
@@ -144,6 +155,9 @@ export function renderToolbar(element) {
     alignTopBtn,
     alignMiddleYBtn,
     alignBottomBtn,
+    exportJsonBtn,
+    importJsonBtn,
+    importJsonFile,
     debugBtn,
     settingsToggleBtn
   };
@@ -153,7 +167,7 @@ export function renderToolbar(element) {
     log("WARN", "[toolbar-dom] Some toolbar refs are missing", { missing });
   }
 
-  log("INFO", "[toolbar-dom] Toolbar DOM rendered (undo/redo, color pickers, stroke width, settings toggle)");
+  log("INFO", "[toolbar-dom] Toolbar DOM rendered (export/import, undo/redo, color pickers, stroke width, settings toggle)");
   log("DEBUG", "[toolbar-dom] renderToolbar EXIT");
 
   return refs;
