@@ -1,24 +1,5 @@
-/**
- * state.js
- * -----------------------------------------------------------
- * Scene Designer – Centralized App State Store (ESM ONLY)
- * Purpose:
- * - Single source of truth for app state: shapes, selection, image, canvas, settings.
- * - Zustand-style store pattern (no window/global usage).
- * - Exports: getState, setShapes, setSelectedShapes, addShape, removeShape,
- *            setImage, setFabricCanvas, setBgFabricImage, setSettings, setSetting,
- *            getSetting, setSceneName, setSceneLogic, sceneDesignerStore, subscribe
- *
- * Logging Policy (reduced noise):
- * - WARN/ERROR: unchanged (always log).
- * - INFO: Only for high-level changes (e.g., shapes count, image set/cleared, settings saved).
- * - DEBUG: Removed for hot-path getters and redundant ENTRY/EXIT pairs.
- * -----------------------------------------------------------
- */
-
 import { log } from './log.js';
 
-// --- Core Store Object ---
 let _state = {
   shapes: [],
   selectedShape: null,
@@ -34,9 +15,7 @@ let _state = {
 
 const listeners = [];
 
-// --- Store API ---
 export function getState() {
-  // No debug noise here; this is called very frequently.
   return _state;
 }
 
@@ -63,7 +42,6 @@ export function addShape(shape) {
 }
 
 export function removeShape(shape) {
-  // Use _id-based deletion for robustness (fixes reselect/delete bug)
   if (!shape || !shape._id) {
     log("WARN", "[state] removeShape: shape or _id missing", { shape });
     return;
@@ -93,10 +71,8 @@ export function setFabricCanvas(canvas) {
 export function setBgFabricImage(img) {
   _state.bgFabricImage = img || null;
   notify({ type: "setBgFabricImage", img: _state.bgFabricImage });
-  // No INFO log to avoid noise during image (re)apply cycles.
 }
 
-// --- Settings API ---
 export function setSettings(obj) {
   const next = { ...(obj || {}) };
   _state.settings = next;
@@ -111,11 +87,9 @@ export function setSetting(key, value) {
 }
 
 export function getSetting(key) {
-  // No logging here (hot path from UI/layout).
   return _state.settings[key];
 }
 
-// --- Scene Name & Logic ---
 export function setSceneName(name) {
   _state.sceneName = name || "";
   notify({ type: "setSceneName", name: _state.sceneName });
@@ -128,11 +102,9 @@ export function setSceneLogic(logic) {
   log("INFO", "[state] scene logic set", { sceneLogic: _state.sceneLogic });
 }
 
-// --- Subscribe API ---
 export function subscribe(fn) {
   if (typeof fn !== "function") return () => {};
   listeners.push(fn);
-  // Keep subscribe/unsubscribe quiet to avoid noise during panel rebuilds.
   return () => {
     const idx = listeners.indexOf(fn);
     if (idx >= 0) listeners.splice(idx, 1);
@@ -140,7 +112,6 @@ export function subscribe(fn) {
 }
 
 function notify(details = null) {
-  // No DEBUG spam; only call listeners and guard errors.
   for (const fn of listeners) {
     try {
       fn(_state, details);
@@ -150,14 +121,12 @@ function notify(details = null) {
   }
 }
 
-// --- Export store for direct access (Zustand-like) ---
 export const sceneDesignerStore = {
   getState,
   setState: function (obj) {
     if (!obj || typeof obj !== "object") return;
     Object.assign(_state, obj);
     notify({ type: "setState", obj });
-    // Keep this at DEBUG since it's uncommon but can be verbose.
     log("DEBUG", "[state] setState applied", { keys: Object.keys(obj) });
   },
   subscribe
