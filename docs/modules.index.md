@@ -19,6 +19,7 @@ Facades (public import paths)
 - ./selection.js → public selection API (from selection-core.js)
 - ./settings.js → core + UI (from settings-core.js, settings-ui.js)
 - ./shapes.js → shape helpers/factories (from shapes-core.js, shapes-point.js)
+- ./commands/commands.js → public commands facade (delegates to commands-structure.js and commands-style.js)
 
 Core Modules
 - log.js                      – central logger (ESM)
@@ -27,9 +28,16 @@ Core Modules
 
 Commands
 - commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions; supports history coalescing via options.coalesceKey (+ coalesceWindowMs)
-- commands/commands.js        – core command implementations:
-  - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED, SET_TRANSFORMS, SET_STROKE_COLOR, SET_FILL_COLOR, SET_STROKE_WIDTH
-  - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
+- commands/commands-structure.js – structural/transform commands:
+  - ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION
+  - MOVE_SHAPES_DELTA, SET_POSITIONS
+  - RESET_ROTATION, SET_ANGLES_POSITIONS
+  - LOCK_SHAPES, UNLOCK_SHAPES
+  - ALIGN_SELECTED
+  - SET_TRANSFORMS
+- commands/commands-style.js  – style commands:
+  - SET_STROKE_COLOR, SET_FILL_COLOR, SET_STROKE_WIDTH
+- commands/commands.js        – facade that routes to structure/style implementations; public entrypoint for executeCommand(cmd)
 
 Keybindings
 - keybindings.js              – global Ctrl/Cmd+Z (undo), Ctrl/Cmd+Shift+Z / Ctrl+Y (redo), Arrow key nudges (Shift=10px), Delete/Backspace (delete selection), Ctrl/Cmd+D (duplicate), Ctrl/Cmd+L (lock), Ctrl/Cmd+Shift+L (unlock), R (reset rotation); installed in layout.js
@@ -97,6 +105,11 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-25 (Commands split + facade)
+  - Split commands into commands-structure.js (structural/transform) and commands-style.js (style).
+  - commands/commands.js is now a facade routing to both modules; no public API changes.
+- 2025-09-25 (Duplicate preserves transforms/styles)
+  - DUPLICATE_SHAPES now preserves scale, angle, and style (stroke/fill/strokeWidth).
 - 2025-09-25 (Phase 2 – Quick Fix + Picker Selection Sync)
   - actions.js: setStrokeWidthForSelected now accepts optional { coalesceKey, coalesceWindowMs } passed to dispatch (typing/coalesced undo).
   - toolbar-color.js: pickers sync from selection/defaults; mixed selection shows “(mixed)” via title; programmatic setColor calls muted to avoid feedback loops.
@@ -121,36 +134,5 @@ Recent Changes (brief)
   - commands/commands.js: added SET_STROKE_COLOR and SET_FILL_COLOR (batch, undoable per-id; inverse captures previous colors).
   - actions.js: added setStrokeColorForSelected(color) and setFillColorForSelected(fill) that dispatch the new commands for unlocked selection.
   - toolbar-color.js: switched to actions-based dispatch through the command bus; debounced live changes; when no selection, updates defaults in settings.
-- 2025-09-24 (Phase 2 – Option B)
-  - commands/commands.js: added SET_TRANSFORMS to set {left, top, scaleX, scaleY, angle} per id and return inverse for undo.
-  - canvas-transform-history.js: new module that snapshots pre/post transforms and dispatches a single SET_TRANSFORMS on gesture end (object:modified/mouse:up).
-  - canvas-core.js: installs/uninstalls transform-history listeners during panel lifecycle.
-- 2025-09-24 (Phase 2 – Option A)
-  - Toolbar: Added Undo/Redo buttons. Handlers wired to command bus. Toolbar state subscribes to history to enable/disable buttons.
-- 2025-09-24 (Phase 2 – Step C.1)
-  - keybindings.js: Added Arrow key nudges for selected shapes (1px; Shift=10px) via MOVE_SHAPES_DELTA command.
-- 2025-09-24 (Phase 2 – Step C)
-  - commands/commands.js: added ALIGN_SELECTED (undo via SET_POSITIONS), using centralized selection geometry and clamped deltas.
-  - actions-alignment.js: now dispatches ALIGN_SELECTED via the command bus.
-  - actions.js: Actions section updated to reflect alignment using command bus.
-- 2025-09-24 (Phase 2 – Step B.2)
-  - commands/commands.js extended: MOVE_SHAPES_DELTA (+ SET_POSITIONS), RESET_ROTATION (+ SET_ANGLES_POSITIONS), LOCK_SHAPES, UNLOCK_SHAPES.
-  - actions.js now routes lock/unlock/resetRotation through command bus.
-- 2025-09-24 (Phase 2 – Step B)
-  - keybindings.js added (global undo/redo). layout.js installs/uninstalls keybindings during app lifecycle.
-- 2025-09-24 (Loupe Overlay)
-  - Added loupe.js (DPR/zoom-aware magnifier overlay) and loupe-controller.js (anchors to selected Point via settings).
-  - settings-core.js: added loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair.
-  - canvas-core.js: wires loupe-controller during panel init/cleanup.
-- 2025-09-24 (Phase 1 Completion – Geometry & Selection Stability)
-  - GEO-UNIFY: Added geometry/shape-rect.js – single source for bounding box, center, aspectRatio, outerRadius.
-  - CONSTRAINTS-GEOM: canvas-constraints.js now uses getShapeBoundingBox for single shapes (ActiveSelection hull still Fabric fallback).
-  - DEBUG-GEOM: debug.js shape summaries now reference unified geometry (adds aspectRatio, outerRadius, geometrySource).
-  - CIRCLE-GUARD: transformer.js defensive uniform scaling guard (lockUniScaling + scale normalization).
-  - STROKE-OPT: shapes-core.js + selection-core.js reworked so stroke width reapplies only after actual scale/rotate (transform tracking via _pendingStrokeWidthReapply).
-  - SEL-CLEAN: selection-core.js removed unconditional stroke normalization logic.
-  - DEV-SANITY: dev/geometry-sanity.js script validates unified geometry vs Fabric boundingRect (tolerance-based diff logging).
-
-How to add here
-- When you add/rename/remove a module: update the relevant section above and keep the line short.
-- If you add a new facade, list it in “Facades (public import paths)”.
+- 2025-09-24 (Phase 2 – Option B.2/B/C.1 and Phase 1 completion notes)
+  - See prior entries for SET_TRANSFORMS, ALIGN_SELECTED, MOVE_SHAPES_DELTA, transform-history, toolbar/history integrations, and geometry/selection stability improvements.
