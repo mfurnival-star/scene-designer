@@ -15,7 +15,6 @@ export function alignSelected(mode, ref = 'selection') {
 
   const selected = Array.isArray(getState().selectedShapes) ? getState().selectedShapes.filter(Boolean) : [];
   if (selected.length < 2) {
-    log("INFO", "[actions-align] Requires 2+ selected shapes", { selectedCount: selected.length });
     return;
   }
 

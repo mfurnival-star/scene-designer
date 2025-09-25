@@ -189,7 +189,6 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!deleteBtn || deleteBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", "[toolbar-handlers] Delete clicked while disabled");
         return;
       }
       deleteSelectedShapes();
@@ -203,7 +202,6 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!duplicateBtn || duplicateBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", "[toolbar-handlers] Duplicate clicked while disabled");
         return;
       }
       duplicateSelectedShapes();
@@ -217,7 +215,6 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!resetRotationBtn || resetRotationBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", "[toolbar-handlers] Reset Rotation clicked while disabled");
         return;
       }
       resetRotationForSelectedShapes();
@@ -231,7 +228,6 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!selectAllBtn || selectAllBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", "[toolbar-handlers] Select All clicked while disabled");
         return;
       }
       selectAllShapes();
@@ -245,7 +241,6 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!lockBtn || lockBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", "[toolbar-handlers] Lock clicked while disabled");
         return;
       }
       lockSelectedShapes();
@@ -259,7 +254,6 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!unlockBtn || unlockBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", "[toolbar-handlers] Unlock clicked while disabled");
         return;
       }
       unlockSelectedShapes();
@@ -278,13 +272,9 @@ export function attachToolbarHandlers(refs) {
       const btn = ev?.currentTarget;
       if (btn && btn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", `[toolbar-handlers] Align '${mode}' clicked while disabled`);
         return;
       }
-      if (!hasTwoOrMoreSelected()) {
-        log("WARN", "[toolbar-handlers] Align: need 2+ selected");
-        return;
-      }
+      if (!hasTwoOrMoreSelected()) return;
       alignSelected(mode);
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Align failed", { mode, err });
@@ -302,11 +292,10 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!undoBtn || undoBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", "[toolbar-handlers] Undo clicked while disabled");
         return;
       }
       undo();
-      log("INFO", "[toolbar-handlers] Undo triggered via toolbar button");
+      log("DEBUG", "[toolbar-handlers] Undo via toolbar");
     } catch (e) {
       log("ERROR", "[toolbar-handlers] Undo failed", e);
     }
@@ -317,11 +306,10 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!redoBtn || redoBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
-        log("WARN", "[toolbar-handlers] Redo clicked while disabled");
         return;
       }
       redo();
-      log("INFO", "[toolbar-handlers] Redo triggered via toolbar button");
+      log("DEBUG", "[toolbar-handlers] Redo via toolbar");
     } catch (e) {
       log("ERROR", "[toolbar-handlers] Redo failed", e);
     }
@@ -331,15 +319,15 @@ export function attachToolbarHandlers(refs) {
   try {
     if (strokePickrEl && fillPickrEl) {
       detachPickrs = installColorPickers({ strokePickrEl, fillPickrEl });
-      log("INFO", "[toolbar-handlers] Pickr color pickers installed");
+      log("INFO", "[toolbar-handlers] Color pickers installed");
     } else {
-      log("WARN", "[toolbar-handlers] Pickr hosts missing; color pickers not installed", {
+      log("WARN", "[toolbar-handlers] Pickr hosts missing", {
         hasStrokeHost: !!strokePickrEl,
         hasFillHost: !!fillPickrEl
       });
     }
   } catch (e) {
-    log("ERROR", "[toolbar-handlers] Failed to install Pickr color pickers", e);
+    log("ERROR", "[toolbar-handlers] Failed to install color pickers", e);
   }
 
   function coerceStrokeWidth(raw) {
@@ -351,7 +339,6 @@ export function attachToolbarHandlers(refs) {
     return w;
   }
 
-  // Coalescing session for Stroke Width typing
   let strokeWidthSession = 0;
   let strokeWidthKey = null;
   const beginStrokeWidthSession = () => {
@@ -366,23 +353,19 @@ export function attachToolbarHandlers(refs) {
     try {
       if (!strokeWidthInput) return;
       const w = coerceStrokeWidth(strokeWidthInput.value);
-      if (!Number.isFinite(w) || w <= 0) {
-        log("WARN", "[toolbar-handlers] Stroke width ignored (invalid)", { value: strokeWidthInput.value });
-        return;
-      }
+      if (!Number.isFinite(w) || w <= 0) return;
+
       try { strokeWidthInput.value = String(w); } catch {}
 
       const selected = Array.isArray(getState().selectedShapes) ? getState().selectedShapes.filter(Boolean) : [];
       const anyUnlocked = selected.some(s => s && !s.locked);
       if (selected.length > 0 && anyUnlocked) {
-        // Pass coalesceKey if provided (command-bus will merge within window)
         const opts = key ? { coalesceKey: key, coalesceWindowMs: 1000 } : undefined;
-        // setStrokeWidthForSelected may ignore extra args; command-bus coalescing requires updated actions.js
         setStrokeWidthForSelected(w, opts);
-        log("INFO", "[toolbar-handlers] Stroke width applied to selection", { width: w, source, coalesceKey: key || null });
+        log("DEBUG", "[toolbar-handlers] Stroke width applied to selection", { width: w, source, coalesceKey: key || null });
       } else {
         setSettingAndSave("defaultStrokeWidth", w);
-        log("INFO", "[toolbar-handlers] Default stroke width updated", { width: w, source });
+        log("DEBUG", "[toolbar-handlers] Default stroke width updated", { width: w, source });
       }
     } catch (e) {
       log("ERROR", "[toolbar-handlers] applyStrokeWidth error", e);
@@ -452,10 +435,10 @@ export function attachToolbarHandlers(refs) {
       if (!isVisible) {
         if (s.showRightSidebarPanel === false) setSettingAndSave("showRightSidebarPanel", true);
         setSettingAndSave("showSettingsPanel", true);
-        log("INFO", "[toolbar-handlers] Settings panel shown via toolbar toggle");
+        log("DEBUG", "[toolbar-handlers] Settings panel shown via toggle");
       } else {
         setSettingAndSave("showSettingsPanel", false);
-        log("INFO", "[toolbar-handlers] Settings panel hidden via toolbar toggle");
+        log("DEBUG", "[toolbar-handlers] Settings panel hidden via toggle");
       }
     } catch (e) {
       log("ERROR", "[toolbar-handlers] Settings toggle failed", e);

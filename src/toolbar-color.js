@@ -74,7 +74,6 @@ function rgbaStringToHex6AlphaPct(str) {
     const alphaPct = alphaPctFromHex(s, 100);
     return { hex6, alphaPct };
   }
-  // rgba(255, 0, 0, 0.5) or rgb(255, 0, 0)
   const m = s.match(/^rgba?\s*\(\s*([0-9.\-e+]+)\s*,\s*([0-9.\-e+]+)\s*,\s*([0-9.\-e+]+)(?:\s*,\s*([0-9.\-e+]+))?\s*\)\s*$/i);
   if (m) {
     const r = Math.max(0, Math.min(255, Math.round(Number(m[1]) || 0)));
@@ -190,11 +189,11 @@ export function installColorPickers(refs) {
     try {
       if (hasSelection()) {
         setStrokeColorForSelected(hex6, opts);
-        log("INFO", "[toolbar-color] Applied stroke to selection", { hex6, coalesceKey: opts.coalesceKey });
+        log("DEBUG", "[toolbar-color] Stroke applied", { coalesceKey: opts.coalesceKey });
       } else {
         const hex8 = makeHex8(hex6, 100);
         setSettingAndSave("defaultStrokeColor", hex8);
-        log("INFO", "[toolbar-color] Updated defaultStrokeColor", { hex8 });
+        log("INFO", "[toolbar-color] Default stroke updated");
       }
     } catch (e) {
       log("ERROR", "[toolbar-color] applyStroke error", e);
@@ -205,11 +204,11 @@ export function installColorPickers(refs) {
       if (hasSelection()) {
         const rgba = rgbaStringFromHex6(hex6, alphaPct);
         setFillColorForSelected(rgba, opts);
-        log("INFO", "[toolbar-color] Applied fill to selection", { rgba, coalesceKey: opts.coalesceKey });
+        log("DEBUG", "[toolbar-color] Fill applied", { coalesceKey: opts.coalesceKey });
       } else {
         const hex8 = makeHex8(hex6, alphaPct);
         setSettingAndSave("defaultFillColor", hex8);
-        log("INFO", "[toolbar-color] Updated defaultFillColor", { hex8 });
+        log("INFO", "[toolbar-color] Default fill updated");
       }
     } catch (e) {
       log("ERROR", "[toolbar-color] applyFill error", e);
@@ -224,8 +223,7 @@ export function installColorPickers(refs) {
   }, 140);
 
   const onStrokeChange = (color) => {
-    if (!color) return;
-    if (muteStrokeChange) return;
+    if (!color || muteStrokeChange) return;
     const hex6 = pickrColorToHex6(color);
     const key = `stroke-color-${strokeSession}`;
     debouncedStroke(hex6, key);
@@ -239,8 +237,7 @@ export function installColorPickers(refs) {
   };
 
   const onFillChange = (color) => {
-    if (!color) return;
-    if (muteFillChange) return;
+    if (!color || muteFillChange) return;
     const hex6 = pickrColorToHex6(color);
     const alphaPct = pickrColorToAlphaPct(color);
     const key = `fill-color-${fillSession}`;
@@ -267,9 +264,7 @@ export function installColorPickers(refs) {
     try {
       muteStrokeChange = true;
       strokePickr.setColor(hex6);
-    } catch (e) {
-      // ignore
-    } finally {
+    } catch {} finally {
       setTimeout(() => { muteStrokeChange = false; }, 0);
     }
   }
@@ -278,9 +273,7 @@ export function installColorPickers(refs) {
       muteFillChange = true;
       const hex8 = makeHex8(hex6, alphaPct);
       fillPickr.setColor(hex8);
-    } catch (e) {
-      // ignore
-    } finally {
+    } catch {} finally {
       setTimeout(() => { muteFillChange = false; }, 0);
     }
   }
@@ -290,7 +283,6 @@ export function installColorPickers(refs) {
     const selected = Array.isArray(s.selectedShapes) ? s.selectedShapes.filter(Boolean) : [];
     const settingsNow = s.settings || {};
 
-    // Stroke sync
     let strokeTitleExtra = '';
     if (selected.length === 0) {
       const defStroke6 = toHex6(settingsNow.defaultStrokeColor || '#2176ff');
@@ -299,7 +291,6 @@ export function installColorPickers(refs) {
     } else {
       const strokes = selected.map(readStrokeFromShape).filter(Boolean);
       if (!strokes.length) {
-        // Fallback to default if none readable
         const defStroke6 = toHex6(settingsNow.defaultStrokeColor || '#2176ff');
         setStrokePickrSilently(defStroke6);
         strokeTitleExtra = ' (mixed)';
@@ -309,17 +300,12 @@ export function installColorPickers(refs) {
           setStrokePickrSilently(strokes[0]);
           strokeTitleExtra = '';
         } else {
-          // Mixed – do not change color, just indicate state
           strokeTitleExtra = ' (mixed)';
         }
       }
     }
-    try {
-      const base = 'Stroke color';
-      strokePickrEl.title = base + strokeTitleExtra;
-    } catch {}
+    try { strokePickrEl.title = 'Stroke color' + strokeTitleExtra; } catch {}
 
-    // Fill sync
     let fillTitleExtra = '';
     const nonPoint = selected.length ? selected.filter(sh => sh && sh._type !== 'point') : [];
     if (selected.length === 0 || nonPoint.length === 0) {
@@ -331,7 +317,6 @@ export function installColorPickers(refs) {
     } else {
       const fills = nonPoint.map(readFillFromShape).filter(Boolean);
       if (!fills.length) {
-        // No readable fills: fallback to default
         const defFill = ensureHash(settingsNow.defaultFillColor || '#00000000');
         const defFill6 = toHex6(defFill);
         const defAlpha = alphaPctFromHex(defFill, 0);
@@ -348,10 +333,7 @@ export function installColorPickers(refs) {
         }
       }
     }
-    try {
-      const base = 'Fill color + Alpha';
-      fillPickrEl.title = base + fillTitleExtra;
-    } catch {}
+    try { fillPickrEl.title = 'Fill color + Alpha' + fillTitleExtra; } catch {}
   }
 
   const unsub = sceneDesignerStore.subscribe((_state, details) => {
@@ -360,7 +342,6 @@ export function installColorPickers(refs) {
       if (details.type === 'setSelectedShapes') {
         syncPickersFromSelectionOrDefaults();
       } else if (details.type === 'setSettings') {
-        // reflect new defaults if no selection
         if (!hasSelection()) syncPickersFromSelectionOrDefaults();
       } else if (details.type === 'setSetting') {
         if ((details.key === 'defaultStrokeColor' || details.key === 'defaultFillColor') && !hasSelection()) {
@@ -372,24 +353,19 @@ export function installColorPickers(refs) {
     }
   });
 
-  // Initial sync after creating pickers
   setTimeout(() => {
     try { syncPickersFromSelectionOrDefaults(); } catch {}
   }, 0);
 
-  log("INFO", "[toolbar-color] Pickr color pickers installed (with history coalescing + selection/default sync)");
+  log("INFO", "[toolbar-color] Color pickers installed");
   return function detach() {
     try { unsub && unsub(); } catch {}
-    try {
-      strokePickr && strokePickr.destroyAndRemove();
-    } catch (e) {
-      log("WARN", "[toolbar-color] Failed to destroy strokePickr", e);
+    try { strokePickr && strokePickr.destroyAndRemove(); } catch (e) {
+      log("WARN", "[toolbar-color] destroy strokePickr failed", e);
     }
-    try {
-      fillPickr && fillPickr.destroyAndRemove();
-    } catch (e) {
-      log("WARN", "[toolbar-color] Failed to destroy fillPickr", e);
+    try { fillPickr && fillPickr.destroyAndRemove(); } catch (e) {
+      log("WARN", "[toolbar-color] destroy fillPickr failed", e);
     }
-    log("INFO", "[toolbar-color] Pickr color pickers detached");
+    log("INFO", "[toolbar-color] Color pickers detached");
   };
 }
