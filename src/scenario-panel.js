@@ -1,33 +1,10 @@
-/**
- * scenario-panel.js
- * -----------------------------------------------------------
- * Scene Designer – Scenario Runner UI Panel (MiniLayout, ESM-only)
- * - Panel for running scripted scenarios and viewing step logs/results.
- * - Lists registered scenarios from scenario-runner.js; allows run, step, and log dump.
- * - Uses only ES module imports; no globals.
- * - Logging via log.js.
- * - Exports: buildScenarioPanel({ element, title, componentName })
- * -----------------------------------------------------------
- */
-
 import { log } from './log.js';
 import {
   getRegisteredScenarios,
   runRegisteredScenario
 } from './scenario-runner.js';
 
-/**
- * Build the Scenario Runner Panel
- * MiniLayout-compliant: accepts { element, title, componentName }
- */
 export function buildScenarioPanel({ element, title, componentName }) {
-  log("DEBUG", "[scenario-panel] buildScenarioPanel entry", {
-    elementType: element?.tagName,
-    title,
-    componentName
-  });
-
-  // Inject styles (once per document)
   if (typeof document !== "undefined" && !document.getElementById("scenario-panel-style")) {
     const style = document.createElement("style");
     style.id = "scenario-panel-style";
@@ -102,7 +79,6 @@ export function buildScenarioPanel({ element, title, componentName }) {
     document.head.appendChild(style);
   }
 
-  // Main panel HTML
   element.innerHTML = `
     <div id="scenario-panel-container">
       <div id="scenario-panel-select-row">
@@ -118,7 +94,6 @@ export function buildScenarioPanel({ element, title, componentName }) {
   const runBtn = element.querySelector("#scenario-panel-run-btn");
   const logDiv = element.querySelector("#scenario-panel-log");
 
-  // Populate scenario dropdown
   function populateScenarioOptions() {
     const scenarios = getRegisteredScenarios();
     scenarioSelect.innerHTML = "";
@@ -131,7 +106,6 @@ export function buildScenarioPanel({ element, title, componentName }) {
   }
   populateScenarioOptions();
 
-  // Utility: Show log/result steps in logDiv
   function showScenarioLog(logSteps) {
     logDiv.innerHTML = "";
     logSteps.forEach((step, idx) => {
@@ -145,7 +119,6 @@ export function buildScenarioPanel({ element, title, componentName }) {
     });
   }
 
-  // Run scenario on button click
   runBtn.addEventListener("click", async () => {
     const scenarioName = scenarioSelect.value;
     if (!scenarioName) return;
@@ -155,7 +128,6 @@ export function buildScenarioPanel({ element, title, componentName }) {
       await runRegisteredScenario(scenarioName, {
         delayMs: 120,
         onStep: ({ index, step, result }) => {
-          // For log display, annotate errors/asserts
           let logStep = {
             __desc: step.fn ? `Action: ${step.fn}` : step.type ? `Type: ${step.type}` : "Step",
             __log: result && typeof result === "object" ? JSON.stringify(result, null, 2) : String(result)
@@ -172,7 +144,6 @@ export function buildScenarioPanel({ element, title, componentName }) {
           showScenarioLog(steps);
         }
       });
-      // Final log update
       if (steps.length === 0) {
         logDiv.innerHTML = `<div style="color:#c00;">No steps executed. Check scenario definition.</div>`;
       }
@@ -182,9 +153,4 @@ export function buildScenarioPanel({ element, title, componentName }) {
   });
 
   log("INFO", "[scenario-panel] Scenario Runner panel initialized");
-  log("DEBUG", "[scenario-panel] buildScenarioPanel exit", {
-    elementType: element?.tagName,
-    title,
-    componentName
-  });
 }

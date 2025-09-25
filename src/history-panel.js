@@ -1,7 +1,7 @@
 import { log } from './log.js';
 import { subscribeHistory, getHistorySnapshot, undo, redo, clearHistory } from './commands/command-bus.js';
 
-export function buildHistoryPanel({ element, title, componentName }) {
+export function buildHistoryPanel({ element }) {
   try {
     if (!element) {
       log("ERROR", "[history-panel] missing root element");

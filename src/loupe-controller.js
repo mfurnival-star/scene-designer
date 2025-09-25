@@ -1,40 +1,3 @@
-/**
- * loupe-controller.js
- * -----------------------------------------------------------
- * Scene Designer – Loupe Controller (ESM ONLY)
- *
- * Purpose:
- * - Manage the loupe (magnifier) overlay lifecycle based on settings and selection.
- * - When enabled via settings.loupeEnabled, the loupe attaches to the currently
- *   selected Point shape's center. If no Point is selected, loupe is hidden.
- * - Reacts to settings changes (size/magnification/crosshair/offset/tether), selection changes,
- *   and live point movement (Fabric object:moving/modified).
- *
- * Public Export:
- * - installLoupeController(canvas) -> detachFn
- *
- * Behavior:
- * - Non-destructive: tracks its own subscription and overlay; detaches cleanly.
- * - Anchoring:
- *   - Prefers selected Point shape (first Point in selectedShapes).
- *   - Anchor center is resolved via unified geometry getShapeCenter() for ALL shapes.
- *     This avoids relying on group.left/top semantics which may represent the top-left
- *     of the group bounding box (the previous assumption caused the observed top-left
- *     anchoring offset for Point shapes).
- *
- * Dependencies:
- * - state.js (getState, sceneDesignerStore)
- * - log.js (log)
- * - loupe.js (installLoupe)
- * - geometry/shape-rect.js (getShapeCenter)
- *
- * 2025-09-24 Fix:
- * - Anchor center now uses getShapeCenter(shape) for all shapes (including Point).
- *   This fixes the bug where the loupe center appeared at the top-left of the point's
- *   bounding square due to assuming group.left/top was the center.
- * -----------------------------------------------------------
- */
-
 import { getState, sceneDesignerStore } from './state.js';
 import { log } from './log.js';
 import { installLoupe } from './loupe.js';
@@ -53,9 +16,7 @@ function ensureLoupeInstalled(canvas, initialOptions) {
     return meta;
   }
   try {
-    // Install with initial options; controller will then configure it live
     installLoupe(canvas, initialOptions || {});
-    // installLoupe stores meta under META_KEY
     return getLoupeMeta(canvas);
   } catch (e) {
     log("ERROR", "[loupe-controller] Failed to install loupe", e);
@@ -71,14 +32,12 @@ function findFirstSelectedPoint() {
   return null;
 }
 
-// Compute anchor center for a shape (geometry-driven for correctness)
 function resolveShapeCenter(shape) {
   if (!shape) return null;
   const center = getShapeCenter(shape);
   if (center && Number.isFinite(center.x) && Number.isFinite(center.y)) {
     return center;
   }
-  // Fallback: estimate from group box if geometry helper could not resolve
   const left = Number.isFinite(shape.left) ? shape.left : 0;
   const top = Number.isFinite(shape.top) ? shape.top : 0;
   const w = typeof shape.getScaledWidth === 'function'
@@ -105,8 +64,8 @@ function applyOffsetAndTetherToLoupe(meta, settings) {
   if (!meta) return;
   const offX = Number.isFinite(settings?.loupeOffsetXPx) ? Number(settings.loupeOffsetXPx) : 140;
   const offY = Number.isFinite(settings?.loupeOffsetYPx) ? Number(settings.loupeOffsetYPx) : -140;
-  const smart = settings?.loupeSmartTether !== false; // default true
-  const showTether = settings?.loupeShowTether !== false; // default true
+  const smart = settings?.loupeSmartTether !== false;
+  const showTether = settings?.loupeShowTether !== false;
 
   if (typeof meta.setOffset === 'function') meta.setOffset(offX, offY);
   if (typeof meta.setSmartTether === 'function') meta.setSmartTether(!!smart);
@@ -130,23 +89,16 @@ function detachOurHandlers(canvas) {
       canvas[HANDLERS_KEY] = [];
     }
   } catch (e) {
-    log("WARN", "[loupe-controller] Failed detaching prior Fabric handlers (safe to ignore)", e);
+    log("WARN", "[loupe-controller] Failed detaching prior Fabric handlers", e);
   }
 }
 
-/**
- * Controller installer.
- * - Subscribes to store to react to settings/selection changes.
- * - Anchors loupe to Point center when enabled; hides when disabled or no Point selected.
- * - Listens to Fabric object:moving/modified to keep loupe centered during drags.
- */
 export function installLoupeController(canvas) {
   if (!canvas) {
     log("ERROR", "[loupe-controller] installLoupeController: canvas is null/undefined");
     return () => {};
   }
 
-  // Initial apply
   const s0 = getState().settings || {};
   const initialEnabled = !!s0.loupeEnabled;
   if (initialEnabled) {
@@ -155,17 +107,13 @@ export function installLoupeController(canvas) {
       sizePx: Number(s0.loupeSizePx) || 160,
       magnification: Number(s0.loupeMagnification) || 2,
       showCrosshair: s0.loupeCrosshair !== false,
-      // If loupe.js supports these options (new version), they will be honored:
       offsetXPx: Number.isFinite(s0.loupeOffsetXPx) ? Number(s0.loupeOffsetXPx) : 140,
       offsetYPx: Number.isFinite(s0.loupeOffsetYPx) ? Number(s0.loupeOffsetYPx) : -140,
       smartTether: s0.loupeSmartTether !== false,
       showTether: s0.loupeShowTether !== false
     });
     if (meta) {
-      // Also apply via setters for backwards compatibility
       applyAllLoupeSettings(meta, s0);
-
-      // Anchor if a Point is selected
       const point = findFirstSelectedPoint();
       if (point) {
         const center = resolveShapeCenter(point);
@@ -180,13 +128,11 @@ export function installLoupeController(canvas) {
           meta.setEnabled(true);
         }
       } else {
-        // No point selected → hide loupe
         meta.setEnabled(false);
       }
     }
   }
 
-  // Fabric event handlers (scoped, non-destructive)
   detachOurHandlers(canvas);
   const localHandlers = [];
   const on = (event, fn) => {
@@ -194,7 +140,6 @@ export function installLoupeController(canvas) {
     localHandlers.push({ event, fn });
   };
 
-  // Keep loupe centered on the moving selected point
   const onObjectMoveOrModify = (opt) => {
     try {
       const settings = getState().settings || {};
@@ -209,14 +154,11 @@ export function installLoupeController(canvas) {
         return;
       }
 
-      // Only update when the point is the moving target; otherwise, just ensure it's enabled
       const target = opt?.target;
       if (target && target !== point) {
-        // Non-point or other object moving – we can skip anchor update to reduce churn
         if (target._type !== 'point') return;
       }
 
-      // Re-apply offsets and tethers if settings changed mid-drag (cheap)
       applyOffsetAndTetherToLoupe(meta, settings);
 
       const center = resolveShapeCenter(point);
@@ -235,12 +177,10 @@ export function installLoupeController(canvas) {
     }
   };
 
-  // Attach Fabric listeners for live updates while dragging/after drop
   on('object:moving', onObjectMoveOrModify);
   on('object:modified', onObjectMoveOrModify);
   canvas[HANDLERS_KEY] = localHandlers;
 
-  // Store subscription
   const unsub = sceneDesignerStore.subscribe((state, details) => {
     if (!details) return;
 
@@ -248,9 +188,7 @@ export function installLoupeController(canvas) {
       const settings = state.settings || {};
       const meta = getLoupeMeta(canvas);
 
-      // Settings changes that affect loupe presence or visuals
       if (details.type === 'setSettings' || details.type === 'setSetting') {
-        // Toggle install/remove on loupeEnabled
         if (details.type === 'setSetting' && details.key === 'loupeEnabled') {
           const enabled = !!details.value;
           if (enabled) {
@@ -288,10 +226,9 @@ export function installLoupeController(canvas) {
               meta.detach();
             }
           }
-          return; // handled
+          return;
         }
 
-        // Visual + offset/tether tweaks when any relevant setting changes
         const relevantKeys = new Set([
           'loupeSizePx', 'loupeMagnification', 'loupeCrosshair',
           'loupeOffsetXPx', 'loupeOffsetYPx', 'loupeSmartTether', 'loupeShowTether'
@@ -305,7 +242,6 @@ export function installLoupeController(canvas) {
         }
       }
 
-      // Selection changes: update anchor
       if (details.type === 'setSelectedShapes' || details.type === 'setState') {
         const enabled = !!settings.loupeEnabled;
         if (!enabled) {
@@ -325,7 +261,6 @@ export function installLoupeController(canvas) {
         });
         if (!m) return;
 
-        // Always ensure settings are applied (cheap idempotent)
         applyAllLoupeSettings(m, settings);
 
         const point = findFirstSelectedPoint();
@@ -339,11 +274,9 @@ export function installLoupeController(canvas) {
               warnedNoAnchorOnce = true;
               log("WARN", "[loupe-controller] Loupe missing anchor APIs; using pointer mode only (update loupe.js).");
             }
-            // If we cannot anchor, keep it enabled (pointer mode), user can hover to inspect
             m.setEnabled(true);
           }
         } else {
-          // No point selected → hide loupe
           m.setEnabled(false);
         }
       }
