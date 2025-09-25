@@ -24,10 +24,11 @@ function applyScrollableAncestorFixes(rootEl) {
     let hops = 0;
     while (el && hops < 5) {
       if (el.classList && el.classList.contains('minilayout-panel-body')) {
-        el.style.overflow = 'hidden';
         el.style.minHeight = '0';
         el.style.display = 'flex';
         el.style.flexDirection = 'column';
+        el.style.overflow = 'visible';
+        el.style.contain = 'content';
       }
       if (el.classList && el.classList.contains('minilayout-panel')) {
         el.style.minHeight = '0';
@@ -65,6 +66,15 @@ function ensureBottomSpacer(container, opts = {}) {
   }
 }
 
+function enableTouchScroll(el) {
+  if (!el || !el.style) return;
+  try {
+    el.style.webkitOverflowScrolling = 'touch';
+    el.style.overscrollBehavior = 'contain';
+    el.style.touchAction = 'pan-x pan-y';
+  } catch {}
+}
+
 export function buildSettingsPanel({ element, title, componentName }) {
   log("DEBUG", "[settings-ui] buildSettingsPanel ENTRY", {
     PaneType: typeof Pane,
@@ -92,11 +102,22 @@ export function buildSettingsPanel({ element, title, componentName }) {
       }
 
       element.innerHTML = `
-        <div id="settings-panel-container" style="width:100%;height:100%;background:#fff;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+        <div id="settings-panel-container" style="
+          width:100%;
+          height:100%;
+          background:#fff;
+          display:flex;
+          flex-direction:column;
+          overflow:hidden;
+          min-height:0;
+          position:relative;
+        ">
           <div id="tweakpane-fields-div" style="
             flex:1 1 auto;
             min-height:0;
-            overflow:auto;
+            min-width:0;
+            overflow-x:auto;
+            overflow-y:auto;
             -webkit-overflow-scrolling:touch;
             overscroll-behavior: contain;
             scroll-behavior: smooth;
@@ -104,6 +125,7 @@ export function buildSettingsPanel({ element, title, componentName }) {
             padding-bottom: calc(56px + env(safe-area-inset-bottom));
             display:flex;
             flex-direction:column;
+            touch-action: pan-x pan-y;
           "></div>
         </div>
       `;
@@ -117,6 +139,8 @@ export function buildSettingsPanel({ element, title, componentName }) {
       }
 
       applyScrollableAncestorFixes(element);
+      enableTouchScroll(fieldsDiv);
+      enableTouchScroll(container);
 
       let pane;
       try {
@@ -171,6 +195,8 @@ export function buildSettingsPanel({ element, title, componentName }) {
       const onResize = () => {
         applyScrollableAncestorFixes(element);
         ensureBottomSpacer(fieldsDiv, { iosExtraPx: 120 });
+        enableTouchScroll(fieldsDiv);
+        enableTouchScroll(container);
       };
       window.addEventListener('orientationchange', onResize);
       window.addEventListener('resize', onResize);
@@ -187,7 +213,7 @@ export function buildSettingsPanel({ element, title, componentName }) {
       }
       window.addEventListener('beforeunload', cleanup, { once: true });
 
-      log("INFO", "[settings-ui] Settings panel rendered with iOS scroll workarounds");
+      log("INFO", "[settings-ui] Settings panel rendered with mobile scroll fixes");
     };
 
     const hasSettingsInStore = !!(getState().settings && Object.keys(getState().settings).length > 0);
