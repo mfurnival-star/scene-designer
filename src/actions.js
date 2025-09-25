@@ -132,7 +132,7 @@ export function setFillColorForSelected(fill, options = {}) {
   }, options);
 }
 
-export function setStrokeWidthForSelected(width) {
+export function setStrokeWidthForSelected(width, options = {}) {
   const selected = getState().selectedShapes || [];
   const ids = selected.filter(s => s && !s.locked).map(s => s._id);
   if (!ids.length) {
@@ -147,7 +147,7 @@ export function setStrokeWidthForSelected(width) {
   dispatch({
     type: 'SET_STROKE_WIDTH',
     payload: { ids, width: w }
-  });
+  }, options);
 }
 
 export { alignSelected } from './actions-alignment.js';
