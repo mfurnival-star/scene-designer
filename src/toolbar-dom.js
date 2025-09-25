@@ -11,6 +11,8 @@ export function renderToolbar(element) {
 
   element.innerHTML = `
     <div id="canvas-toolbar-container">
+      <button id="toolbar-settings-toggle-btn" class="toolbar-btn toolbar-settings-toggle" title="Show Settings">⚙ Settings</button>
+
       <div class="toolbar-row" id="toolbar-row-1">
         <div class="toolbar-group">
           <label for="toolbar-image-upload" class="toolbar-btn" title="Upload image">Upload Image</label>
@@ -116,6 +118,7 @@ export function renderToolbar(element) {
   const strokeWidthInput = element.querySelector('#toolbar-stroke-width-input');
 
   const debugBtn = element.querySelector('#toolbar-debug-btn');
+  const settingsToggleBtn = element.querySelector('#toolbar-settings-toggle-btn');
 
   const refs = {
     container,
@@ -141,7 +144,8 @@ export function renderToolbar(element) {
     alignTopBtn,
     alignMiddleYBtn,
     alignBottomBtn,
-    debugBtn
+    debugBtn,
+    settingsToggleBtn
   };
 
   const missing = Object.entries(refs).filter(([, el]) => !el).map(([k]) => k);
@@ -149,7 +153,7 @@ export function renderToolbar(element) {
     log("WARN", "[toolbar-dom] Some toolbar refs are missing", { missing });
   }
 
-  log("INFO", "[toolbar-dom] Toolbar DOM rendered (undo/redo, color pickers, stroke width input)");
+  log("INFO", "[toolbar-dom] Toolbar DOM rendered (undo/redo, color pickers, stroke width, settings toggle)");
   log("DEBUG", "[toolbar-dom] renderToolbar EXIT");
 
   return refs;

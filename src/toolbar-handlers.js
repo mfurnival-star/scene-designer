@@ -64,23 +64,19 @@ export function attachToolbarHandlers(refs) {
     selectAllBtn,
     lockBtn,
     unlockBtn,
-    // Undo/Redo
     undoBtn,
     redoBtn,
-    // Alignment controls
     alignLeftBtn,
     alignCenterXBtn,
     alignRightBtn,
     alignTopBtn,
     alignMiddleYBtn,
     alignBottomBtn,
-    // Pickr hosts
     strokePickrEl,
     fillPickrEl,
-    // Stroke width input
     strokeWidthInput,
-    // Debug button (optional)
-    debugBtn
+    debugBtn,
+    settingsToggleBtn
   } = refs;
 
   const handlers = [];
@@ -346,14 +342,11 @@ export function attachToolbarHandlers(refs) {
     log("ERROR", "[toolbar-handlers] Failed to install Pickr color pickers", e);
   }
 
-  // Stroke Width input wiring (selection → command; no selection → update default setting)
   function coerceStrokeWidth(raw) {
     let w = Number(raw);
     if (!Number.isFinite(w)) return null;
-    // Enforce bounds similar to input attributes
     if (w < 1) w = 1;
     if (w > 20) w = 20;
-    // Integer step
     w = Math.round(w);
     return w;
   }
@@ -366,7 +359,6 @@ export function attachToolbarHandlers(refs) {
         log("WARN", "[toolbar-handlers] Stroke width ignored (invalid)", { value: strokeWidthInput.value });
         return;
       }
-      // Normalize UI value to the coerced number
       try { strokeWidthInput.value = String(w); } catch {}
 
       const selected = Array.isArray(getState().selectedShapes) ? getState().selectedShapes.filter(Boolean) : [];
@@ -424,6 +416,24 @@ export function attachToolbarHandlers(refs) {
     }
   };
   if (debugBtn) on(debugBtn, 'click', onDebugClick);
+
+  const onSettingsToggleClick = () => {
+    try {
+      const s = getState().settings || {};
+      const isVisible = !!s.showSettingsPanel;
+      if (!isVisible) {
+        if (s.showRightSidebarPanel === false) setSettingAndSave("showRightSidebarPanel", true);
+        setSettingAndSave("showSettingsPanel", true);
+        log("INFO", "[toolbar-handlers] Settings panel shown via toolbar toggle");
+      } else {
+        setSettingAndSave("showSettingsPanel", false);
+        log("INFO", "[toolbar-handlers] Settings panel hidden via toolbar toggle");
+      }
+    } catch (e) {
+      log("ERROR", "[toolbar-handlers] Settings toggle failed", e);
+    }
+  };
+  if (settingsToggleBtn) on(settingsToggleBtn, 'click', onSettingsToggleClick);
 
   log("INFO", "[toolbar-handlers] Toolbar handlers attached");
   return function detach() {

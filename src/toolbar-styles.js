@@ -20,6 +20,7 @@ export function ensureToolbarStylesInjected() {
       justify-content: flex-start;
       gap: 10px;
       padding: 8px 12px;
+      padding-right: 96px;
       box-shadow: 0 1.5px 6px -2px #b8c6e6;
       border-radius: 0 0 13px 13px;
       box-sizing: border-box;
@@ -28,6 +29,15 @@ export function ensureToolbarStylesInjected() {
       line-height: 1.2;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      position: relative;
+    }
+
+    .toolbar-settings-toggle {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      z-index: 5;
+      white-space: nowrap;
     }
 
     .toolbar-row {
@@ -253,6 +263,7 @@ export function ensureToolbarStylesInjected() {
     @media (max-width: 900px) {
       #canvas-toolbar-container {
         padding: 6px 8px;
+        padding-right: 88px;
         gap: 8px;
         font-size: calc(13px * var(--toolbar-ui-scale, 1));
       }
@@ -274,6 +285,10 @@ export function ensureToolbarStylesInjected() {
         min-width: 4.2em;
         width: 4.8em;
         padding: 0.28em 0.5em;
+      }
+      .toolbar-settings-toggle {
+        top: 6px;
+        right: 8px;
       }
     }
   `;
