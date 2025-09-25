@@ -41,7 +41,16 @@ export function buildSettingsPanel({ element, title, componentName }) {
 
       element.innerHTML = `
         <div id="settings-panel-container" style="width:100%;height:100%;background:#fff;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
-          <div id="tweakpane-fields-div" style="flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:0 8px 16px 8px;"></div>
+          <div id="tweakpane-fields-div" style="
+            flex:1 1 auto;
+            min-height:0;
+            overflow:auto;
+            -webkit-overflow-scrolling:touch;
+            padding:0 8px 56px 8px;
+            padding-bottom: calc(56px + env(safe-area-inset-bottom));
+            overscroll-behavior: contain;
+            scroll-behavior: smooth;
+          "></div>
         </div>
       `;
 
@@ -100,7 +109,7 @@ export function buildSettingsPanel({ element, title, componentName }) {
         }
       });
 
-      log("INFO", "[settings-ui] Settings panel rendered (Tweakpane, no inner header)");
+      log("INFO", "[settings-ui] Settings panel rendered (Tweakpane, iOS-safe bottom padding)");
     };
 
     const hasSettingsInStore = !!(getState().settings && Object.keys(getState().settings).length > 0);
