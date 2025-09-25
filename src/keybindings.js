@@ -22,26 +22,15 @@ function handleUndoRedo(e, keyLower) {
   const hasMeta = !!e.metaKey;
   const hasShift = !!e.shiftKey;
   const modifier = hasMeta || hasCtrl;
-
   if (!modifier) return false;
 
   if (keyLower === 'z') {
     e.preventDefault();
     e.stopPropagation();
     if (hasShift) {
-      if (canRedo()) {
-        redo();
-        log("INFO", "[keybindings] Redo via Ctrl/Cmd+Shift+Z");
-      } else {
-        log("INFO", "[keybindings] Redo unavailable");
-      }
+      if (canRedo()) redo();
     } else {
-      if (canUndo()) {
-        undo();
-        log("INFO", "[keybindings] Undo via Ctrl/Cmd+Z");
-      } else {
-        log("INFO", "[keybindings] Undo unavailable");
-      }
+      if (canUndo()) undo();
     }
     return true;
   }
@@ -49,12 +38,7 @@ function handleUndoRedo(e, keyLower) {
   if (keyLower === 'y' && hasCtrl && !hasMeta) {
     e.preventDefault();
     e.stopPropagation();
-    if (canRedo()) {
-      redo();
-      log("INFO", "[keybindings] Redo via Ctrl+Y");
-    } else {
-      log("INFO", "[keybindings] Redo unavailable");
-    }
+    if (canRedo()) redo();
     return true;
   }
 
@@ -68,7 +52,6 @@ function handleArrowNudge(e, keyLower) {
     keyLower === 'arrowup' ||
     keyLower === 'arrowdown';
   if (!isArrow) return false;
-
   if (isEditableTarget(e.target)) return false;
 
   const base = e.shiftKey ? 10 : 1;
@@ -83,11 +66,9 @@ function handleArrowNudge(e, keyLower) {
       type: 'MOVE_SHAPES_DELTA',
       payload: { dx, dy, clamp: true }
     });
-
     if (inverse) {
       e.preventDefault();
       e.stopPropagation();
-      log("INFO", "[keybindings] Nudge move", { dx, dy, shift: !!e.shiftKey });
       return true;
     }
   } catch (err) {
@@ -118,7 +99,6 @@ function handleCommonShortcuts(e, keyLower) {
       e.preventDefault();
       e.stopPropagation();
       deleteSelectedShapes();
-      log("INFO", "[keybindings] Delete selected via Delete/Backspace");
       return true;
     }
     return false;
@@ -129,7 +109,6 @@ function handleCommonShortcuts(e, keyLower) {
       e.preventDefault();
       e.stopPropagation();
       duplicateSelectedShapes();
-      log("INFO", "[keybindings] Duplicate via Ctrl/Cmd+D");
       return true;
     }
     return false;
@@ -140,7 +119,6 @@ function handleCommonShortcuts(e, keyLower) {
       e.preventDefault();
       e.stopPropagation();
       lockSelectedShapes();
-      log("INFO", "[keybindings] Lock via Ctrl/Cmd+L");
       return true;
     }
     return false;
@@ -151,7 +129,6 @@ function handleCommonShortcuts(e, keyLower) {
       e.preventDefault();
       e.stopPropagation();
       unlockSelectedShapes();
-      log("INFO", "[keybindings] Unlock via Ctrl/Cmd+Shift+L");
       return true;
     }
     return false;
@@ -162,7 +139,6 @@ function handleCommonShortcuts(e, keyLower) {
       e.preventDefault();
       e.stopPropagation();
       resetRotationForSelectedShapes();
-      log("INFO", "[keybindings] Reset rotation via R", { shift: hasShift });
       return true;
     }
     return false;
@@ -174,7 +150,6 @@ function handleCommonShortcuts(e, keyLower) {
 function handleKeydown(e) {
   try {
     const keyLower = (e.key || '').toLowerCase();
-
     if (handleUndoRedo(e, keyLower)) return;
     if (handleArrowNudge(e, keyLower)) return;
     if (handleCommonShortcuts(e, keyLower)) return;
@@ -190,9 +165,9 @@ export function installUndoRedoKeybindings(target = window) {
   }
   const listener = (e) => handleKeydown(e);
   target.addEventListener('keydown', listener, { capture: true });
-  log("INFO", "[keybindings] Global keybindings installed (undo/redo + arrow nudges + common actions)");
+  log("INFO", "[keybindings] Keybindings installed");
   return () => {
     try { target.removeEventListener('keydown', listener, { capture: true }); } catch {}
-    log("INFO", "[keybindings] Global keybindings removed");
+    log("INFO", "[keybindings] Keybindings removed");
   };
 }

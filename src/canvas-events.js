@@ -1,30 +1,3 @@
-/**
- * canvas-events.js
- * -----------------------------------------------------------
- * Scene Designer – Fabric.js Selection Event Sync (ESM ONLY, Phase 1)
- *
- * Purpose:
- * - Keep store selection in sync with Fabric visual selection.
- * - Tokenized suppression prevents feedback loops.
- * - Unwrap ActiveSelection to store all members for multi-select.
- * - Clear selection on blank clicks.
- * - Maintain a lightweight, structured trace buffer for diagnostics.
- *
- * Logging Policy (reduced noise):
- * - INFO: one concise line per user-visible selection change.
- * - DEBUG: minimal, only for unusual branches.
- * - No ENTRY/EXIT spam; helpers are silent in hot paths.
- *
- * Exports:
- * - installFabricSelectionSync(canvas) -> detachFn
- * - getSelectionEventTrace()
- *
- * Notes (Phase 1 gap fix):
- * - Non-destructive handler install: we track ONLY our handlers on the canvas and detach them
- *   on re-install or detach. No blanket canvas.off('*') calls.
- * -----------------------------------------------------------
- */
-
 import { log } from './log.js';
 import { getState } from './state.js';
 import {
@@ -32,56 +5,38 @@ import {
   deselectAll
 } from './selection.js';
 
-// ---------------- Internal Trace Ring Buffer ----------------
 const TRACE_CAPACITY = 25;
 const selectionEventTrace = [];
 
-/**
- * Push a structured selection event trace entry.
- */
 function pushTrace(entry) {
   try {
-    selectionEventTrace.push({
-      timeISO: new Date().toISOString(),
-      ...entry
-    });
-    if (selectionEventTrace.length > TRACE_CAPACITY) {
-      selectionEventTrace.shift();
-    }
+    selectionEventTrace.push({ timeISO: new Date().toISOString(), ...entry });
+    if (selectionEventTrace.length > TRACE_CAPACITY) selectionEventTrace.shift();
   } catch (e) {
-    // Silent failure warning only
     log("WARN", "[canvas-events] pushTrace failed", e);
   }
 }
 
-/**
- * Public getter for debug integrations.
- */
 export function getSelectionEventTrace() {
   return selectionEventTrace.slice();
 }
 
-// ---------------- Transaction Token ----------------
 let selectionSyncToken = 0;
-
 function withSuppressedHandlers(fn) {
   const token = ++selectionSyncToken;
   fn(token);
 }
 
-// ---------------- Helpers ----------------
 function getSelectedObjectsFromFabric(canvas, options) {
   try {
     const active = canvas && typeof canvas.getActiveObject === 'function'
       ? canvas.getActiveObject()
       : null;
 
-    // Direct ActiveSelection
     if (active && active.type === 'activeSelection' && Array.isArray(active._objects)) {
       return active._objects.slice();
     }
 
-    // Convenience (some Fabric builds)
     if (canvas && typeof canvas.getActiveObjects === 'function') {
       const objs = canvas.getActiveObjects() || [];
       if (objs.length === 1 &&
@@ -93,7 +48,6 @@ function getSelectedObjectsFromFabric(canvas, options) {
       return Array.isArray(objs) ? objs : (objs ? [objs] : []);
     }
 
-    // Fallback: options.selected
     if (options && Array.isArray(options.selected) && options.selected.length) {
       const arr = options.selected;
       if (arr.length === 1 &&
@@ -105,7 +59,6 @@ function getSelectedObjectsFromFabric(canvas, options) {
       return arr;
     }
 
-    // Fallback: event target
     if (options && options.target) {
       const t = options.target;
       if (t.type === 'activeSelection' && Array.isArray(t._objects)) {
@@ -123,15 +76,10 @@ function sameIdSet(aIds, bIds) {
   if (aIds.length !== bIds.length) return false;
   const a = [...aIds].sort();
   const b = [...bIds].sort();
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
 }
 
-/**
- * Ensure consistent UI flags for ActiveSelection (no transform handles).
- */
 function enforceActiveSelectionVisuals(canvas) {
   try {
     if (!canvas || typeof canvas.getActiveObject !== 'function') return;
@@ -142,38 +90,29 @@ function enforceActiveSelectionVisuals(canvas) {
         if (typeof active.setCoords === 'function') { try { active.setCoords(); } catch {} }
       }
     }
-  } catch (e) {
-    // Non-fatal
-  }
+  } catch {}
 }
 
-// --------- Non-destructive handler scoping (Phase 1 fix) ----------
 const HANDLERS_KEY = '__sceneDesignerSelectionSyncHandlers__';
 
 function detachOurHandlers(canvas) {
   try {
     const list = canvas[HANDLERS_KEY];
     if (Array.isArray(list)) {
-      list.forEach(({ event, fn }) => {
-        try { canvas.off(event, fn); } catch {}
-      });
+      list.forEach(({ event, fn }) => { try { canvas.off(event, fn); } catch {} });
       canvas[HANDLERS_KEY] = [];
     }
   } catch (e) {
-    log("WARN", "[canvas-events] Failed detaching prior handlers (safe to ignore)", e);
+    log("WARN", "[canvas-events] Failed detaching prior handlers", e);
   }
 }
 
-// ---------------- Main Installer ----------------
 export function installFabricSelectionSync(canvas) {
-  log("INFO", "[canvas-events] Installing Fabric selection sync");
-
   if (!canvas) {
     log("ERROR", "[canvas-events] installFabricSelectionSync: canvas is null/undefined");
     return () => {};
   }
 
-  // Detach only our previously installed handlers
   detachOurHandlers(canvas);
 
   const localHandlers = [];
@@ -192,7 +131,6 @@ export function installFabricSelectionSync(canvas) {
 
       enforceActiveSelectionVisuals(canvas);
 
-      // Suppress only if truly duplicate (token + id set)
       if (selectionSyncToken === lastProgrammaticToken && sameIdSet(nextIds, prevIds)) {
         pushTrace({ event: 'selection:created', suppressed: true, token: selectionSyncToken, prevIds, nextIds });
         return;
@@ -243,7 +181,7 @@ export function installFabricSelectionSync(canvas) {
     }
   };
 
-  const onCleared = (opt) => {
+  const onCleared = () => {
     const prevIds = (getState().selectedShapes || []).map(s => s._id);
     try {
       if (selectionSyncToken === lastProgrammaticToken) {
@@ -285,7 +223,7 @@ export function installFabricSelectionSync(canvas) {
         if (typeof canvas.requestRenderAll === 'function') canvas.requestRenderAll();
         else canvas.renderAll();
 
-        log("INFO", "[canvas-events] Blank click → selection cleared");
+        log("INFO", "[canvas-events] Blank click cleared selection");
         pushTrace({ event: 'mouse:down-blank-clear', token: selectionSyncToken, prevIds, nextIds: [] });
       }
     } catch (e) {
@@ -293,18 +231,14 @@ export function installFabricSelectionSync(canvas) {
     }
   };
 
-  // Attach handlers (scoped)
   on('selection:created', onCreated);
   on('selection:updated', onUpdated);
   on('selection:cleared', onCleared);
   on('mouse:down', onMouseDown);
 
-  // Save handler refs on canvas for non-destructive re-install/detach
   canvas[HANDLERS_KEY] = localHandlers;
 
-  log("INFO", "[canvas-events] Selection sync installed (scoped handlers + tokenized sync + ActiveSelection unwrap + trace buffer)");
-
-  // Detach function (optional use)
+  log("INFO", "[canvas-events] Selection sync installed");
   return function detach() {
     detachOurHandlers(canvas);
     log("INFO", "[canvas-events] Selection sync detached");

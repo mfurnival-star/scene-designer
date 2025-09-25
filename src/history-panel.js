@@ -111,15 +111,11 @@ export function buildHistoryPanel({ element, title, componentName }) {
         type.textContent = it.cmdType || it.event;
         const meta = document.createElement('div');
         meta.style.color = '#345';
-        meta.textContent = it.event === 'dispatch'
-          ? 'Dispatched'
-          : it.event === 'undo'
-          ? 'Undo'
-          : it.event === 'redo'
-          ? 'Redo'
-          : it.event === 'clear'
-          ? 'Clear'
-          : it.event;
+        meta.textContent =
+          it.event === 'dispatch' ? 'Dispatched' :
+          it.event === 'undo' ? 'Undo' :
+          it.event === 'redo' ? 'Redo' :
+          it.event === 'clear' ? 'Clear' : it.event;
         const time = document.createElement('div');
         time.className = 'hist-time';
         time.textContent = it.timeISO.replace('T', ' ').replace('Z', 'Z');
@@ -161,7 +157,7 @@ export function buildHistoryPanel({ element, title, componentName }) {
         clearHistory();
         items = [];
         refresh();
-        log("INFO", "[history-panel] Cleared history");
+        log("INFO", "[history-panel] History cleared");
       } catch (e) {
         log("ERROR", "[history-panel] clear click error", e);
       }
@@ -184,7 +180,7 @@ export function buildHistoryPanel({ element, title, componentName }) {
     }
     window.addEventListener('beforeunload', cleanup, { once: true });
 
-    log("INFO", "[history-panel] initialized");
+    log("INFO", "[history-panel] ready");
   } catch (e) {
     log("ERROR", "[history-panel] init error", e);
   }

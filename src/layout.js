@@ -18,21 +18,19 @@ export function isErrorLogPanelOpen() {
 }
 
 export function isScenarioPanelOpen() { return false; }
-export function showScenarioPanel() { log("INFO", "[layout] Scenario Runner is disabled (no-op)"); }
-export function hideScenarioPanel() { log("INFO", "[layout] Scenario Runner is disabled (no-op)"); }
+export function showScenarioPanel() { log("INFO", "[layout] Scenario Runner is disabled"); }
+export function hideScenarioPanel() { log("INFO", "[layout] Scenario Runner is disabled"); }
 export function setScenarioRunnerPanelVisible(_visible) {}
 
 export function showErrorLogPanel() {
   if (!layout) { log("ERROR", "[layout] showErrorLogPanel: layout not initialized"); return; }
-  if (isErrorLogPanelOpen()) { log("INFO", "[layout] Error Log already open"); return; }
+  if (isErrorLogPanelOpen()) { return; }
   rebuildLayout();
-  log("INFO", "[layout] Error Log panel added");
 }
 export function hideErrorLogPanel() {
   if (!layout) { log("ERROR", "[layout] hideErrorLogPanel: layout not initialized"); return; }
-  if (!isErrorLogPanelOpen()) { log("INFO", "[layout] Error Log already hidden"); return; }
+  if (!isErrorLogPanelOpen()) { return; }
   rebuildLayout();
-  log("INFO", "[layout] Error Log panel removed");
 }
 export function setErrorLogPanelVisible(_visible) {
   rebuildLayout();
@@ -154,19 +152,13 @@ function rebuildLayout() {
   layout.registerComponent('HistoryPanel', buildHistoryPanel);
 
   registerErrorLogSink();
-
   layout.init();
 
   if (typeof window !== "undefined") {
     try { window.layout = layout; } catch {}
   }
 
-  log("INFO", "[layout] Layout initialized", {
-    withErrorLog: !!showErrorLog,
-    sidebarEnabled: !!rightSidebarContent.length,
-    settingsPanel: !!settingsEnabled,
-    historyPanel: !!historyEnabled
-  });
+  log("INFO", "[layout] Layout initialized");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -176,7 +168,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await loadSettings();
   } catch (e) {
-    log("ERROR", "[layout] Error loading settings, using defaults", e);
+    log("ERROR", "[layout] Settings load failed; using defaults", e);
   }
 
   rebuildLayout();
@@ -185,7 +177,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       detachKeybindings = installUndoRedoKeybindings(window);
     } catch (e) {
-      log("ERROR", "[layout] Failed to install undo/redo keybindings", e);
+      log("ERROR", "[layout] Failed to install keybindings", e);
     }
   }
 

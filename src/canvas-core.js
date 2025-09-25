@@ -110,7 +110,6 @@ function resizeMiniLayoutPanel(canvas, width, height) {
     }
     if (layoutInstance && typeof layoutInstance.resizePanelBody === "function") {
       layoutInstance.resizePanelBody('CanvasPanel', width, height);
-      log("DEBUG", "[canvas-core] resizePanelBody(CanvasPanel)", { width, height });
     } else {
       if (canvas && canvas.lowerCanvasEl) {
         const wrapper = getWrapper(canvas);
@@ -134,7 +133,6 @@ function resizeMiniLayoutPanel(canvas, width, height) {
           panel.style.height = `${height}px`;
           panel.style.flex = "0 0 auto";
         }
-        log("DEBUG", "[canvas-core] Fallback panel/container resize", { width, height });
       }
     }
   } catch (e) {
@@ -223,7 +221,6 @@ function applyResponsiveViewport(canvas, reason = "") {
           canvas.viewportTransform[5] = 0;
         }
         canvas.__responsiveScale = scale;
-        log("DEBUG", "[canvas-core] Responsive zoom applied", { reason, scale, availableW, canvasW });
       }
     }
 
@@ -312,7 +309,7 @@ function applyBackgroundImage(canvas, url, imgObj) {
       if (typeof canvas.requestRenderAll === "function") canvas.requestRenderAll();
       else canvas.renderAll();
 
-      log("INFO", "[canvas-core] Background image set", {
+      log("INFO", "[canvas-core] Background set", {
         imgW: imgObj.naturalWidth,
         imgH: imgObj.naturalHeight,
         canvasW: canvas.getWidth(),

@@ -81,44 +81,41 @@ export const settingsRegistry = [
 const STORAGE_KEY = "sceneDesignerSettings";
 
 export function loadSettings() {
-  log("DEBUG", "[settings-core] loadSettings ENTRY");
   let stored = {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) stored = JSON.parse(raw);
   } catch (e) {
-    log("ERROR", "[settings-core] loadSettings: failed to parse", e);
+    log("ERROR", "[settings-core] loadSettings parse failed", e);
   }
+
   const settingsOut = {};
   for (const reg of settingsRegistry) {
     const key = reg.key;
     const val = (key in stored) ? stored[key] : reg.default;
     settingsOut[key] = val;
   }
+
   setSettings(settingsOut);
   reconfigureLoggingFromSettings({
     level: settingsOut.DEBUG_LOG_LEVEL,
     dest: settingsOut.LOG_OUTPUT_DEST
   });
-  log("INFO", "[settings-core] Settings loaded and applied", { settings: settingsOut });
-  log("DEBUG", "[settings-core] loadSettings EXIT");
+  log("INFO", "[settings-core] Settings loaded", { keys: Object.keys(settingsOut).length });
   return Promise.resolve(settingsOut);
 }
 
 export function saveSettings() {
-  log("DEBUG", "[settings-core] saveSettings ENTRY");
   try {
     const settings = getState().settings || {};
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    log("INFO", "[settings-core] Settings saved to localStorage", { settings });
+    log("INFO", "[settings-core] Settings saved");
   } catch (e) {
     log("ERROR", "[settings-core] saveSettings error", e);
   }
-  log("DEBUG", "[settings-core] saveSettings EXIT");
 }
 
 export function setSettingAndSave(key, value) {
-  log("DEBUG", "[settings-core] setSettingAndSave ENTRY", { key, value });
   setSetting(key, value);
   if (key === "DEBUG_LOG_LEVEL" || key === "LOG_OUTPUT_DEST") {
     reconfigureLoggingFromSettings({
@@ -127,13 +124,11 @@ export function setSettingAndSave(key, value) {
     });
   }
   saveSettings();
-  log("INFO", "[settings-core] Setting updated and saved", { key, value });
-  log("DEBUG", "[settings-core] setSettingAndSave EXIT");
+  log("INFO", "[settings-core] Setting saved", { key });
 }
 
 export function setSettingsAndSave(settingsObj) {
-  log("DEBUG", "[settings-core] setSettingsAndSave ENTRY", { settingsObj });
-  for (const [key, value] of Object.entries(settingsObj)) {
+  for (const [key, value] of Object.entries(settingsObj || {})) {
     setSetting(key, value);
   }
   reconfigureLoggingFromSettings({
@@ -141,6 +136,5 @@ export function setSettingsAndSave(settingsObj) {
     dest: settingsObj.LOG_OUTPUT_DEST ?? getState().settings.LOG_OUTPUT_DEST
   });
   saveSettings();
-  log("INFO", "[settings-core] Multiple settings updated and saved", { settingsObj });
-  log("DEBUG", "[settings-core] setSettingsAndSave EXIT");
+  log("INFO", "[settings-core] Settings batch saved");
 }

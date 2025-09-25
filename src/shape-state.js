@@ -1,156 +1,51 @@
-/**
- * shape-state.js
- * -----------------------------------------------------------
- * Scene Designer – Per-Shape State Machine (Fabric.js Migration, ESM ONLY)
- * - Centralizes all shape state transitions: selected, dragging, locked, multi-selected.
- * - Used by shapes.js, canvas.js, selection.js, transformer.js for robust state flows.
- * - No globals, no window.* usage.
- * - Logging via log.js.
- * -----------------------------------------------------------
- */
-
 import { log } from './log.js';
 
-/**
- * Initialize shape state on creation.
- * @param {Object} shape - Fabric.js object or group
- */
 export function initShapeState(shape) {
-  log("DEBUG", "[shape-state] initShapeState entry", { shape });
-  shape._state = "default";
-  log("DEBUG", "[shape-state] initShapeState exit");
+  if (!shape) return;
+  shape._state = 'default';
 }
 
-/**
- * Set shape state to a new state.
- * @param {Object} shape
- * @param {string} newState
- */
 export function setShapeState(shape, newState) {
-  log("DEBUG", "[shape-state] setShapeState entry", { shape, newState });
-  const prevState = shape._state;
-  shape._state = newState;
-  log("DEBUG", "[shape-state] Shape state changed", { shape: safeShapeSummary(shape), prevState, newState });
-  log("DEBUG", "[shape-state] setShapeState exit");
+  if (!shape) return;
+  shape._state = newState || 'default';
 }
 
-/**
- * Get current shape state.
- * @param {Object} shape
- * @returns {string}
- */
 export function getShapeState(shape) {
-  log("DEBUG", "[shape-state] getShapeState entry", { shape });
-  const state = shape._state || "default";
-  log("DEBUG", "[shape-state] getShapeState exit", { state });
-  return state;
+  return shape?._state || 'default';
 }
 
-/**
- * Mark shape as selected.
- * @param {Object} shape
- */
 export function selectShape(shape) {
-  log("DEBUG", "[shape-state] selectShape entry", { shape });
   setShapeState(shape, 'selected');
-  log("DEBUG", "[shape-state] selectShape exit");
 }
 
-/**
- * Mark shape as deselected.
- * @param {Object} shape
- */
 export function deselectShape(shape) {
-  log("DEBUG", "[shape-state] deselectShape entry", { shape });
   setShapeState(shape, 'default');
-  log("DEBUG", "[shape-state] deselectShape exit");
 }
 
-/**
- * Mark shape as being dragged.
- * @param {Object} shape
- */
 export function startDraggingShape(shape) {
-  log("DEBUG", "[shape-state] startDraggingShape entry", { shape });
   setShapeState(shape, 'dragging');
-  log("DEBUG", "[shape-state] startDraggingShape exit");
 }
 
-/**
- * Mark shape as done dragging (returns to selected).
- * @param {Object} shape
- */
 export function stopDraggingShape(shape) {
-  log("DEBUG", "[shape-state] stopDraggingShape entry", { shape });
   setShapeState(shape, 'selected');
-  log("DEBUG", "[shape-state] stopDraggingShape exit");
 }
 
-/**
- * Lock a shape (cannot move, transform, or interact).
- * @param {Object} shape
- */
 export function lockShape(shape) {
-  log("DEBUG", "[shape-state] lockShape entry", { shape });
+  if (!shape) return;
   setShapeState(shape, 'locked');
   shape.locked = true;
-  // Fabric.js: disable drag/resize/selection
-  shape.selectable = false;
-  shape.evented = false;
-  log("DEBUG", "[shape-state] lockShape exit");
 }
 
-/**
- * Unlock a shape (can move, transform, interact).
- * @param {Object} shape
- */
 export function unlockShape(shape) {
-  log("DEBUG", "[shape-state] unlockShape entry", { shape });
+  if (!shape) return;
   setShapeState(shape, 'default');
   shape.locked = false;
-  shape.selectable = true;
-  shape.evented = true;
-  log("DEBUG", "[shape-state] unlockShape exit");
 }
 
-/**
- * Mark shape as multi-selected (for multi-select group).
- * @param {Object} shape
- * @param {boolean} enable
- */
 export function setMultiSelected(shape, enable = true) {
-  log("DEBUG", "[shape-state] setMultiSelected entry", { shape, enable });
-  setShapeState(shape, enable ? "multi-selected" : "default");
-  log("DEBUG", "[shape-state] setMultiSelected exit");
+  setShapeState(shape, enable ? 'multi-selected' : 'default');
 }
 
-/**
- * Returns true if shape is in the given state.
- * @param {Object} shape
- * @param {string} state
- * @returns {boolean}
- */
 export function isShapeInState(shape, state) {
-  log("DEBUG", "[shape-state] isShapeInState entry", { shape, state });
-  const result = shape._state === state;
-  log("DEBUG", "[shape-state] isShapeInState exit", { result });
-  return result;
-}
-
-/**
- * Debug summary for logs.
- */
-function safeShapeSummary(shape) {
-  if (!shape) return shape;
-  return {
-    type: shape._type,
-    label: shape._label,
-    state: shape._state,
-    locked: shape.locked,
-    left: shape.left,
-    top: shape.top,
-    width: shape.width,
-    height: shape.height,
-    radius: shape.radius
-  };
+  return !!shape && shape._state === state;
 }

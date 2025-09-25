@@ -88,10 +88,7 @@ export function installCanvasTransformHistory(canvas) {
           gesture.selectionIds.push(snap.id);
         }
       });
-      log("DEBUG", "[transform-history] gesture start", { count: gesture.pre.size });
-    } catch (e) {
-      log("WARN", "[transform-history] beginGesture error", e);
-    }
+    } catch {}
   }
 
   function markMoved() {
@@ -105,7 +102,6 @@ export function installCanvasTransformHistory(canvas) {
       const stateShapes = getState().shapes || [];
       const byId = new Map(stateShapes.filter(Boolean).map(s => [s._id, s]));
       const postItems = [];
-      const changedIds = [];
 
       gesture.selectionIds.forEach(id => {
         const shape = byId.get(id);
@@ -114,15 +110,12 @@ export function installCanvasTransformHistory(canvas) {
         const pre = gesture.pre.get(id);
         if (pre && post && diffChanged(pre, post)) {
           postItems.push(post);
-          changedIds.push(id);
         }
       });
 
       if (postItems.length > 0) {
         dispatch({ type: 'SET_TRANSFORMS', payload: { items: postItems } });
         log("INFO", "[transform-history] gesture committed", { reason, changed: postItems.length });
-      } else {
-        log("DEBUG", "[transform-history] gesture no-op", { reason, moved: gesture.moved, tracked: gesture.pre.size });
       }
     } catch (e) {
       log("ERROR", "[transform-history] finalizeGesture error", e);
@@ -134,27 +127,12 @@ export function installCanvasTransformHistory(canvas) {
     }
   }
 
-  const onMouseDown = () => {
-    beginGesture();
-  };
-
-  const onScaling = () => {
-    markMoved();
-  };
-  const onMoving = () => {
-    markMoved();
-  };
-  const onRotating = () => {
-    markMoved();
-  };
-
-  const onObjectModified = () => {
-    finalizeGesture('object:modified');
-  };
-
-  const onMouseUp = () => {
-    finalizeGesture('mouse:up');
-  };
+  const onMouseDown = () => { beginGesture(); };
+  const onScaling = () => { markMoved(); };
+  const onMoving = () => { markMoved(); };
+  const onRotating = () => { markMoved(); };
+  const onObjectModified = () => { finalizeGesture('object:modified'); };
+  const onMouseUp = () => { finalizeGesture('mouse:up'); };
 
   on('mouse:down', onMouseDown);
   on('mouse:up', onMouseUp);

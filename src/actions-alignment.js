@@ -9,13 +9,13 @@ export function alignSelected(mode, ref = 'selection') {
   const refMode = ref === 'canvas' ? 'canvas' : 'selection';
 
   if (!VALID_MODES.has(alignMode)) {
-    log("WARN", "[actions-align] Invalid align mode; no-op", { mode: alignMode });
+    log("WARN", "[actions-align] Invalid align mode", { mode: alignMode });
     return;
   }
 
   const selected = Array.isArray(getState().selectedShapes) ? getState().selectedShapes.filter(Boolean) : [];
   if (selected.length < 2) {
-    log("INFO", "[actions-align] Requires 2+ selected shapes; no-op", { selectedCount: selected.length });
+    log("INFO", "[actions-align] Requires 2+ selected shapes", { selectedCount: selected.length });
     return;
   }
 

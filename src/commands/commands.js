@@ -1,4 +1,3 @@
-
 import { log } from '../log.js';
 import {
   getState,
@@ -97,12 +96,12 @@ function cmdAddShape(payload) {
   const { shapeType, opts } = payload || {};
   const shape = createShapeByType(shapeType, opts || {});
   if (!shape) {
-    log("WARN", "[commands] ADD_SHAPE failed to create", { shapeType, opts });
+    log("WARN", "[commands] ADD_SHAPE failed", { type: shapeType });
     return null;
   }
   addShape(shape);
   selectionSetSelectedShapes([shape]);
-  log("INFO", "[commands] Added shape", { type: shapeType, id: shape._id });
+  log("INFO", "[commands] Shape added");
   return { type: 'DELETE_SHAPES', payload: { ids: [shape._id] } };
 }
 
@@ -112,7 +111,7 @@ function cmdAddShapes(payload) {
   if (!arr.length) return null;
   arr.forEach(s => addShape(s));
   selectionSetSelectedShapes(arr);
-  log("INFO", "[commands] Added shapes (batch)", { count: arr.length, ids: arr.map(s => s._id) });
+  log("INFO", "[commands] Shapes added", { count: arr.length });
   return { type: 'DELETE_SHAPES', payload: { ids: arr.map(s => s._id) } };
 }
 
@@ -120,7 +119,7 @@ function cmdDeleteShapes(payload) {
   const { ids } = payload || {};
   const targets = getShapesByIds(ids || []);
   if (!targets.length) {
-    log("INFO", "[commands] DELETE_SHAPES: nothing to delete");
+    log("INFO", "[commands] Delete: nothing to remove");
     return null;
   }
   const removed = [];
@@ -130,8 +129,7 @@ function cmdDeleteShapes(payload) {
   });
   const remainingSelected = (getState().selectedShapes || []).filter(s => !ids.includes(s._id));
   selectionSetSelectedShapes(remainingSelected);
-
-  log("INFO", "[commands] Deleted shapes", { count: targets.length, ids: targets.map(s => s._id) });
+  log("INFO", "[commands] Shapes deleted", { count: targets.length });
   return { type: 'ADD_SHAPES', payload: { shapes: removed } };
 }
 
@@ -142,7 +140,7 @@ function cmdDuplicateShapes(payload) {
 
   const sources = getShapesByIds(ids || getSelectedIds());
   if (!sources.length) {
-    log("INFO", "[commands] DUPLICATE_SHAPES: no source shapes");
+    log("INFO", "[commands] Duplicate: no sources");
     return null;
   }
 
@@ -165,12 +163,12 @@ function cmdDuplicateShapes(payload) {
   }).filter(Boolean);
 
   if (!created.length) {
-    log("INFO", "[commands] DUPLICATE_SHAPES: no duplicates created");
+    log("INFO", "[commands] Duplicate: none created");
     return null;
   }
 
   selectionSetSelectedShapes(created);
-  log("INFO", "[commands] Duplicated shapes", { count: created.length, ids: created.map(s => s._id) });
+  log("INFO", "[commands] Shapes duplicated", { count: created.length });
   return { type: 'DELETE_SHAPES', payload: { ids: created.map(s => s._id) } };
 }
 
@@ -190,18 +188,14 @@ function clampDeltaToImage(bbox, dx, dy, img) {
     const imgH = img.height;
     const newLeft = bbox.left + dx;
     const newTop = bbox.top + dy;
-    const minLeft = 0;
-    const minTop = 0;
-    const maxLeft = Math.max(0, imgW - bbox.width);
-    const maxTop = Math.max(0, imgH - bbox.height);
-    const clampedLeft = Math.min(Math.max(newLeft, minLeft), maxLeft);
-    const clampedTop = Math.min(Math.max(newTop, minTop), maxTop);
+    const clampedLeft = Math.min(Math.max(newLeft, 0), Math.max(0, imgW - bbox.width));
+    const clampedTop = Math.min(Math.max(newTop, 0), Math.max(0, imgH - bbox.height));
     return {
       dx: clampedLeft - bbox.left,
       dy: clampedTop - bbox.top
     };
   } catch (e) {
-    log("WARN", "[commands] clampDeltaToImage failed; applying unclamped delta", e);
+    log("WARN", "[commands] clampDeltaToImage failed", e);
     return { dx, dy };
   }
 }
@@ -220,7 +214,7 @@ function setAngleAndCenter(shape, angle, center) {
     }
     if (typeof shape.setCoords === "function") shape.setCoords();
   } catch (e) {
-    log("ERROR", "[commands] setAngleAndCenter failed", { id: shape?._id, error: e });
+    log("ERROR", "[commands] setAngleAndCenter failed", e);
   }
 }
 
@@ -232,7 +226,7 @@ function cmdMoveShapesDelta(payload) {
   const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
   const targets = shapes.filter(s => s && !s.locked);
   if (!targets.length) {
-    log("INFO", "[commands] MOVE_SHAPES_DELTA: no unlocked targets");
+    log("INFO", "[commands] Move: no unlocked targets");
     return null;
   }
 
@@ -249,17 +243,15 @@ function cmdMoveShapesDelta(payload) {
         ddx = clamped.dx;
         ddy = clamped.dy;
       }
-      const newLeft = (shape.left ?? 0) + ddx;
-      const newTop = (shape.top ?? 0) + ddy;
-      shape.set({ left: newLeft, top: newTop });
+      shape.set({ left: (shape.left ?? 0) + ddx, top: (shape.top ?? 0) + ddy });
       if (typeof shape.setCoords === "function") shape.setCoords();
     } catch (e) {
-      log("ERROR", "[commands] MOVE_SHAPES_DELTA: failed to move shape", { id: shape._id, error: e });
+      log("ERROR", "[commands] MOVE_SHAPES_DELTA failed for shape", e);
     }
   });
 
   requestRender();
-  log("INFO", "[commands] Moved shapes by delta", { count: targets.length, dx: dxN, dy: dyN });
+  log("INFO", "[commands] Shapes moved", { count: targets.length });
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
 }
 
@@ -279,7 +271,7 @@ function cmdSetPositions(payload) {
       shape.set({ left: Number(p.left) || 0, top: Number(p.top) || 0 });
       if (typeof shape.setCoords === "function") shape.setCoords();
     } catch (e) {
-      log("ERROR", "[commands] SET_POSITIONS failed", { id: p.id, error: e });
+      log("ERROR", "[commands] SET_POSITIONS failed", e);
     }
   });
 
@@ -294,7 +286,7 @@ function cmdResetRotation(payload) {
     s && !s.locked && (s._type === 'rect' || s._type === 'circle' || s._type === 'ellipse')
   );
   if (!targets.length) {
-    log("INFO", "[commands] RESET_ROTATION: no eligible targets");
+    log("INFO", "[commands] Reset rotation: no eligible targets");
     return null;
   }
 
@@ -307,13 +299,13 @@ function cmdResetRotation(payload) {
       setAngleAndCenter(shape, 0, center);
       return { id: shape._id, angle, center };
     } catch (e) {
-      log("ERROR", "[commands] RESET_ROTATION: failed for shape", { id: shape._id, error: e });
+      log("ERROR", "[commands] RESET_ROTATION failed for shape", e);
       return null;
     }
   }).filter(Boolean);
 
   requestRender();
-  log("INFO", "[commands] Rotation reset to 0°", { ids: targets.map(t => t._id) });
+  log("INFO", "[commands] Rotation reset", { count: targets.length });
   return { type: 'SET_ANGLES_POSITIONS', payload: { items: prev } };
 }
 
@@ -335,7 +327,7 @@ function cmdSetAnglesPositions(payload) {
       prev.push({ id: shape._id, angle: Number(shape.angle) || 0, center: currentCenter });
       setAngleAndCenter(shape, i.angle, i.center);
     } catch (e) {
-      log("ERROR", "[commands] SET_ANGLES_POSITIONS failed", { id: i.id, error: e });
+      log("ERROR", "[commands] SET_ANGLES_POSITIONS failed", e);
     }
   });
 
@@ -375,7 +367,7 @@ function cmdLockShapes(payload) {
   const { ids } = payload || {};
   const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
   if (!shapes.length) {
-    log("INFO", "[commands] LOCK_SHAPES: nothing selected");
+    log("INFO", "[commands] Lock: nothing selected");
     return null;
   }
 
@@ -388,13 +380,13 @@ function cmdLockShapes(payload) {
   });
 
   if (!affected.length) {
-    log("INFO", "[commands] LOCK_SHAPES: no unlocked shapes to lock");
+    log("INFO", "[commands] Lock: no change");
     return null;
   }
 
   requestRender();
   selectionSetSelectedShapes(shapes.slice());
-  log("INFO", "[commands] Locked shapes", { count: affected.length, ids: affected });
+  log("INFO", "[commands] Shapes locked", { count: affected.length });
   return { type: 'UNLOCK_SHAPES', payload: { ids: affected } };
 }
 
@@ -410,7 +402,7 @@ function cmdUnlockShapes(payload) {
   }
 
   if (!targets.length) {
-    log("INFO", "[commands] UNLOCK_SHAPES: no shapes to unlock");
+    log("INFO", "[commands] Unlock: no targets");
     return null;
   }
 
@@ -423,7 +415,7 @@ function cmdUnlockShapes(payload) {
   });
 
   if (!affected.length) {
-    log("INFO", "[commands] UNLOCK_SHAPES: none were locked");
+    log("INFO", "[commands] Unlock: no change");
     return null;
   }
 
@@ -431,7 +423,7 @@ function cmdUnlockShapes(payload) {
   selectionSetSelectedShapes(preserve);
 
   requestRender();
-  log("INFO", "[commands] Unlocked shapes", { count: affected.length, ids: affected });
+  log("INFO", "[commands] Shapes unlocked", { count: affected.length });
   return { type: 'LOCK_SHAPES', payload: { ids: affected } };
 }
 
@@ -464,21 +456,21 @@ function cmdAlignSelected(payload) {
   const ref = payload?.ref === 'canvas' ? 'canvas' : 'selection';
   const valid = new Set(['left', 'centerX', 'right', 'top', 'middleY', 'bottom']);
   if (!valid.has(mode)) {
-    log("WARN", "[commands] ALIGN_SELECTED: invalid mode", { mode });
+    log("WARN", "[commands] ALIGN_SELECTED: invalid mode");
     return null;
   }
 
   const store = getState();
   const selected = Array.isArray(store.selectedShapes) ? store.selectedShapes.filter(Boolean) : [];
   if (selected.length < 2) {
-    log("INFO", "[commands] ALIGN_SELECTED: need 2+ selected");
+    log("INFO", "[commands] Align: need 2+ selected");
     return null;
   }
 
   const bboxes = getAbsoluteRectsForSelection(selected, store.fabricCanvas);
   const existingBboxes = bboxes.filter(Boolean);
   if (existingBboxes.length < 2) {
-    log("WARN", "[commands] ALIGN_SELECTED: not enough valid bounding boxes", { have: existingBboxes.length });
+    log("WARN", "[commands] Align: not enough geometry");
     return null;
   }
 
@@ -538,23 +530,21 @@ function cmdAlignSelected(payload) {
 
     try {
       prevPositions.push({ id: shape._id, left: shape.left ?? 0, top: shape.top ?? 0 });
-      const newLeft = (shape.left ?? 0) + dx;
-      const newTop = (shape.top ?? 0) + dy;
-      shape.set({ left: newLeft, top: newTop });
+      shape.set({ left: (shape.left ?? 0) + dx, top: (shape.top ?? 0) + dy });
       if (typeof shape.setCoords === "function") shape.setCoords();
       movedCount++;
     } catch (e) {
-      log("ERROR", "[commands] ALIGN_SELECTED: move failed", { id: shape._id, error: e });
+      log("ERROR", "[commands] ALIGN_SELECTED move failed", e);
     }
   });
 
   if (movedCount === 0) {
-    log("INFO", "[commands] ALIGN_SELECTED: nothing moved");
+    log("INFO", "[commands] Align: nothing moved");
     return null;
   }
 
   requestRender();
-  log("INFO", "[commands] ALIGN_SELECTED complete", { mode, ref, movedCount, selectedCount: selected.length });
+  log("INFO", "[commands] Aligned shapes", { count: movedCount });
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
 }
 
@@ -589,7 +579,7 @@ function cmdSetTransforms(payload) {
       shape.set(next);
       if (typeof shape.setCoords === "function") shape.setCoords();
     } catch (e) {
-      log("ERROR", "[commands] SET_TRANSFORMS apply failed", { id: i.id, error: e });
+      log("ERROR", "[commands] SET_TRANSFORMS failed", e);
     }
   });
 
@@ -677,14 +667,14 @@ function cmdSetStrokeColor(payload) {
   } else {
     const ids = Array.isArray(payload?.ids) && payload.ids.length ? payload.ids : getSelectedIds();
     if (!ids.length || !color) {
-      log("INFO", "[commands] SET_STROKE_COLOR: no targets or color");
+      log("INFO", "[commands] Set stroke color: no targets");
       return null;
     }
     targets = getShapesByIds(ids).filter(s => s && !s.locked).map(s => ({ shape: s, color }));
   }
 
   if (!targets.length) {
-    log("INFO", "[commands] SET_STROKE_COLOR: nothing to apply");
+    log("INFO", "[commands] Set stroke color: no-op");
     return null;
   }
 
@@ -695,7 +685,7 @@ function cmdSetStrokeColor(payload) {
       prev.push({ id: shape._id, color: before });
       applyStrokeColorToShape(shape, c);
     } catch (e) {
-      log("WARN", "[commands] SET_STROKE_COLOR: apply failed", { id: shape?._id, error: e });
+      log("WARN", "[commands] Set stroke color failed", e);
     }
   });
 
@@ -718,14 +708,14 @@ function cmdSetFillColor(payload) {
   } else {
     const ids = Array.isArray(payload?.ids) && payload.ids.length ? payload.ids : getSelectedIds();
     if (!ids.length || !fill) {
-      log("INFO", "[commands] SET_FILL_COLOR: no targets or fill");
+      log("INFO", "[commands] Set fill: no targets");
       return null;
     }
     targets = getShapesByIds(ids).filter(s => s && !s.locked && s._type !== 'point').map(s => ({ shape: s, fill }));
   }
 
   if (!targets.length) {
-    log("INFO", "[commands] SET_FILL_COLOR: nothing to apply");
+    log("INFO", "[commands] Set fill: no-op");
     return null;
   }
 
@@ -736,12 +726,12 @@ function cmdSetFillColor(payload) {
       prev.push({ id: shape._id, fill: before });
       applyFillColorToShape(shape, f);
     } catch (e) {
-      log("WARN", "[commands] SET_FILL_COLOR: apply failed", { id: shape?._id, error: e });
+      log("WARN", "[commands] Set fill failed", e);
     }
   });
 
   requestRender();
-  log("INFO", "[commands] Fill color applied", { count: targets.length });
+  log("INFO", "[commands] Fill applied", { count: targets.length });
   return { type: 'SET_FILL_COLOR', payload: { items: prev } };
 }
 
@@ -760,14 +750,14 @@ function cmdSetStrokeWidth(payload) {
   } else {
     const ids = Array.isArray(payload?.ids) && payload.ids.length ? payload.ids : getSelectedIds();
     if (!ids.length || !Number.isFinite(width) || width <= 0) {
-      log("INFO", "[commands] SET_STROKE_WIDTH: no targets or invalid width");
+      log("INFO", "[commands] Set stroke width: invalid or no targets");
       return null;
     }
     targets = getShapesByIds(ids).filter(s => s && !s.locked).map(s => ({ shape: s, width }));
   }
 
   if (!targets.length) {
-    log("INFO", "[commands] SET_STROKE_WIDTH: nothing to apply");
+    log("INFO", "[commands] Set stroke width: no-op");
     return null;
   }
 
@@ -778,18 +768,18 @@ function cmdSetStrokeWidth(payload) {
       prev.push({ id: shape._id, width: before });
       applyStrokeWidthToShape(shape, w);
     } catch (e) {
-      log("WARN", "[commands] SET_STROKE_WIDTH: apply failed", { id: shape?._id, error: e });
+      log("WARN", "[commands] Set stroke width failed", e);
     }
   });
 
   requestRender();
-  log("INFO", "[commands] Stroke width applied", { count: targets.length, width: items && items.length ? 'per-item' : width });
+  log("INFO", "[commands] Stroke width applied", { count: targets.length });
   return { type: 'SET_STROKE_WIDTH', payload: { items: prev } };
 }
 
 export function executeCommand(cmd) {
   if (!cmd || typeof cmd.type !== 'string') {
-    log("WARN", "[commands] executeCommand: invalid cmd", { cmd });
+    log("WARN", "[commands] executeCommand: invalid command");
     return null;
   }
   const t = cmd.type;
@@ -837,7 +827,7 @@ export function executeCommand(cmd) {
       return cmdSetStrokeWidth(p);
 
     default:
-      log("WARN", "[commands] Unknown command type", { type: t });
+      log("WARN", "[commands] Unknown command", { type: t });
       return null;
   }
 }

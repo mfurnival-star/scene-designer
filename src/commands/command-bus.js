@@ -29,12 +29,8 @@ export function dispatch(cmd, options = {}) {
     return null;
   }
 
-  const key =
-    typeof options.coalesceKey === 'string' && options.coalesceKey
-      ? options.coalesceKey
-      : null;
-  const windowMs =
-    Number(options.coalesceWindowMs) > 0 ? Number(options.coalesceWindowMs) : 800;
+  const key = typeof options.coalesceKey === 'string' && options.coalesceKey ? options.coalesceKey : null;
+  const windowMs = Number(options.coalesceWindowMs) > 0 ? Number(options.coalesceWindowMs) : 800;
 
   try {
     const inverse = executeCommand(cmd);
@@ -54,8 +50,6 @@ export function dispatch(cmd, options = {}) {
         undoStack.push(inverse);
         redoStack.length = 0;
       }
-    } else {
-      log("DEBUG", "[command-bus] dispatch: no inverse returned", { type: cmd.type });
     }
 
     notify('dispatch', { cmdType: cmd.type, undoDepth: undoStack.length, redoDepth: redoStack.length });
@@ -73,8 +67,6 @@ export function undo() {
     const redoForward = executeCommand(inverseCmd);
     if (redoForward && typeof redoForward.type === 'string') {
       redoStack.push(redoForward);
-    } else {
-      log("DEBUG", "[command-bus] undo: no redo-forward returned", { type: inverseCmd?.type });
     }
     notify('undo', { cmdType: inverseCmd?.type, undoDepth: undoStack.length, redoDepth: redoStack.length });
     return inverseCmd || null;
@@ -91,8 +83,6 @@ export function redo() {
     const undoInverse = executeCommand(redoCmd);
     if (undoInverse && typeof undoInverse.type === 'string') {
       undoStack.push(undoInverse);
-    } else {
-      log("DEBUG", "[command-bus] redo: no undo-inverse returned", { type: redoCmd?.type });
     }
     notify('redo', { cmdType: redoCmd?.type, undoDepth: undoStack.length, redoDepth: redoStack.length });
     return redoCmd || null;
