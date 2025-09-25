@@ -13,19 +13,51 @@ function notify(event, extra = {}) {
   });
 }
 
+function canCoalesce(top, key, type, windowMs) {
+  if (!top || !key) return false;
+  const sameKey = top.__coalesceKey === key;
+  const sameType = top.__cmdType === type;
+  const within = typeof top.__coalesceAt === 'number'
+    ? (Date.now() - top.__coalesceAt) <= windowMs
+    : false;
+  return sameKey && sameType && within;
+}
+
 export function dispatch(cmd, options = {}) {
   if (!cmd || typeof cmd.type !== 'string') {
     log("WARN", "[command-bus] dispatch: invalid command", { cmd });
     return null;
   }
+
+  const key =
+    typeof options.coalesceKey === 'string' && options.coalesceKey
+      ? options.coalesceKey
+      : null;
+  const windowMs =
+    Number(options.coalesceWindowMs) > 0 ? Number(options.coalesceWindowMs) : 800;
+
   try {
     const inverse = executeCommand(cmd);
+
     if (inverse && typeof inverse.type === 'string') {
-      undoStack.push(inverse);
-      redoStack.length = 0;
+      if (key && canCoalesce(undoStack[undoStack.length - 1], key, cmd.type, windowMs)) {
+        const top = undoStack[undoStack.length - 1];
+        top.__coalesceAt = Date.now();
+        redoStack.length = 0;
+      } else if (key) {
+        inverse.__coalesceKey = key;
+        inverse.__cmdType = cmd.type;
+        inverse.__coalesceAt = Date.now();
+        undoStack.push(inverse);
+        redoStack.length = 0;
+      } else {
+        undoStack.push(inverse);
+        redoStack.length = 0;
+      }
     } else {
       log("DEBUG", "[command-bus] dispatch: no inverse returned", { type: cmd.type });
     }
+
     notify('dispatch', { cmdType: cmd.type, undoDepth: undoStack.length, redoDepth: redoStack.length });
     return inverse || null;
   } catch (e) {
