@@ -1,28 +1,6 @@
-/**
- * settings-core.js
- * -------------------------------------------------------------------
- * Scene Designer – Settings Core Module (ESM ONLY)
- * Purpose:
- * - Centralized settings registry, persistence, mutators, and side effects.
- * - No UI logic; only registry, load/save, and mutator functions.
- * - Used by settings.js (facade), settings-ui.js (panel), and toolbar-color.js.
- *
- * Exports:
- * - LOG_LEVELS, LOG_LEVEL_LABEL_TO_NUM, LOG_LEVEL_NUM_TO_LABEL
- * - settingsRegistry
- * - loadSettings, saveSettings
- * - setSettingAndSave, setSettingsAndSave
- *
- * Dependencies:
- * - state.js (getState, setSettings, setSetting)
- * - log.js (log, reconfigureLoggingFromSettings)
- * -------------------------------------------------------------------
- */
-
 import { getState, setSettings, setSetting } from './state.js';
 import { log, reconfigureLoggingFromSettings } from './log.js';
 
-// --- Log Level Constants ---
 export const LOG_LEVELS = {
   Silent: 0,
   Error: 1,
@@ -47,8 +25,6 @@ export const LOG_LEVEL_NUM_TO_LABEL = {
   4: "Debug"
 };
 
-// --- Settings Registry ---
-// Each entry: { key, label, type, default, [min, max, step, options] }
 export const settingsRegistry = [
   { key: "defaultStrokeWidth", label: "Stroke Width", type: "number", default: 1, min: 1, max: 20, step: 1 },
   { key: "defaultStrokeColor", label: "Stroke Color", type: "color", default: "#2176ff" },
@@ -72,8 +48,6 @@ export const settingsRegistry = [
       { value: "target", label: "Target (ring + cross)" }
     ]
   },
-
-  // --- Logging / Diagnostics ---
   { key: "DEBUG_LOG_LEVEL", label: "Debug Log Level", type: "select", default: "Info", options: [
       { value: "Silent", label: "Silent" },
       { value: "Error", label: "Error" },
@@ -91,8 +65,6 @@ export const settingsRegistry = [
   { key: "showErrorLogPanel", label: "Show Error Log Panel", type: "boolean", default: false },
   { key: "showScenarioRunner", label: "Show Scenario Runner Panel", type: "boolean", default: false },
   { key: "canvasResponsive", label: "Responsive Canvas", type: "boolean", default: true },
-
-  // --- Loupe (Magnifier) Settings ---
   { key: "loupeEnabled", label: "Loupe (Enable)", type: "boolean", default: false },
   { key: "loupeSizePx", label: "Loupe Size (px)", type: "number", default: 160, min: 40, max: 400, step: 10 },
   { key: "loupeMagnification", label: "Loupe Magnification", type: "number", default: 2, min: 1, max: 8, step: 0.5 },
@@ -100,19 +72,14 @@ export const settingsRegistry = [
   { key: "loupeOffsetXPx", label: "Loupe Offset X (px)", type: "number", default: 140, min: -800, max: 800, step: 10 },
   { key: "loupeOffsetYPx", label: "Loupe Offset Y (px)", type: "number", default: -140, min: -800, max: 800, step: 10 },
   { key: "loupeSmartTether", label: "Loupe Smart Tether", type: "boolean", default: true },
-  { key: "loupeShowTether", label: "Loupe Show Tether", type: "boolean", default: true }
-
-  // Add more settings here as needed
+  { key: "loupeShowTether", label: "Loupe Show Tether", type: "boolean", default: true },
+  { key: "showRightSidebarPanel", label: "Show Right Sidebar", type: "boolean", default: true },
+  { key: "showSettingsPanel", label: "Show Settings Panel", type: "boolean", default: true },
+  { key: "showHistoryPanel", label: "Show History Panel", type: "boolean", default: false }
 ];
 
-// --- Persistence Helpers ---
 const STORAGE_KEY = "sceneDesignerSettings";
 
-/**
- * Load settings from localStorage, apply defaults for missing keys,
- * and update the store.
- * Returns a Promise for async compatibility.
- */
 export function loadSettings() {
   log("DEBUG", "[settings-core] loadSettings ENTRY");
   let stored = {};
@@ -122,31 +89,22 @@ export function loadSettings() {
   } catch (e) {
     log("ERROR", "[settings-core] loadSettings: failed to parse", e);
   }
-
-  // Apply defaults for missing keys
   const settingsOut = {};
   for (const reg of settingsRegistry) {
     const key = reg.key;
     const val = (key in stored) ? stored[key] : reg.default;
     settingsOut[key] = val;
   }
-
   setSettings(settingsOut);
-
-  // Side effect: reconfigure logging if relevant settings present
   reconfigureLoggingFromSettings({
     level: settingsOut.DEBUG_LOG_LEVEL,
     dest: settingsOut.LOG_OUTPUT_DEST
   });
-
   log("INFO", "[settings-core] Settings loaded and applied", { settings: settingsOut });
   log("DEBUG", "[settings-core] loadSettings EXIT");
   return Promise.resolve(settingsOut);
 }
 
-/**
- * Save current settings to localStorage.
- */
 export function saveSettings() {
   log("DEBUG", "[settings-core] saveSettings ENTRY");
   try {
@@ -159,43 +117,29 @@ export function saveSettings() {
   log("DEBUG", "[settings-core] saveSettings EXIT");
 }
 
-/**
- * Set a single setting and persist.
- * Triggers relevant side effects.
- */
 export function setSettingAndSave(key, value) {
   log("DEBUG", "[settings-core] setSettingAndSave ENTRY", { key, value });
   setSetting(key, value);
-
-  // Side effect: if log settings, update logger
   if (key === "DEBUG_LOG_LEVEL" || key === "LOG_OUTPUT_DEST") {
     reconfigureLoggingFromSettings({
       level: key === "DEBUG_LOG_LEVEL" ? value : getState().settings.DEBUG_LOG_LEVEL,
       dest: key === "LOG_OUTPUT_DEST" ? value : getState().settings.LOG_OUTPUT_DEST
     });
   }
-
   saveSettings();
   log("INFO", "[settings-core] Setting updated and saved", { key, value });
   log("DEBUG", "[settings-core] setSettingAndSave EXIT");
 }
 
-/**
- * Set multiple settings and persist.
- * Accepts an object of key-value pairs.
- */
 export function setSettingsAndSave(settingsObj) {
   log("DEBUG", "[settings-core] setSettingsAndSave ENTRY", { settingsObj });
   for (const [key, value] of Object.entries(settingsObj)) {
     setSetting(key, value);
   }
-
-  // Side effect: reconfigure logger if log settings present
   reconfigureLoggingFromSettings({
     level: settingsObj.DEBUG_LOG_LEVEL ?? getState().settings.DEBUG_LOG_LEVEL,
     dest: settingsObj.LOG_OUTPUT_DEST ?? getState().settings.LOG_OUTPUT_DEST
   });
-
   saveSettings();
   log("INFO", "[settings-core] Multiple settings updated and saved", { settingsObj });
   log("DEBUG", "[settings-core] setSettingsAndSave EXIT");

@@ -6,6 +6,7 @@ import { buildCanvasToolbarPanel } from './toolbar.js';
 import { getSetting, subscribe } from './state.js';
 import { log } from './log.js';
 import { installUndoRedoKeybindings } from './keybindings.js';
+import { buildHistoryPanel } from './history-panel.js';
 
 let layout = null;
 let mlRoot = null;
@@ -19,36 +20,34 @@ export function isErrorLogPanelOpen() {
 export function isScenarioPanelOpen() { return false; }
 export function showScenarioPanel() { log("INFO", "[layout] Scenario Runner is disabled (no-op)"); }
 export function hideScenarioPanel() { log("INFO", "[layout] Scenario Runner is disabled (no-op)"); }
-export function setScenarioRunnerPanelVisible(_visible) { /* no-op (disabled) */ }
+export function setScenarioRunnerPanelVisible(_visible) {}
 
 export function showErrorLogPanel() {
   if (!layout) { log("ERROR", "[layout] showErrorLogPanel: layout not initialized"); return; }
   if (isErrorLogPanelOpen()) { log("INFO", "[layout] Error Log already open"); return; }
-  rebuildLayout(true, false);
+  rebuildLayout();
   log("INFO", "[layout] Error Log panel added");
 }
 export function hideErrorLogPanel() {
   if (!layout) { log("ERROR", "[layout] hideErrorLogPanel: layout not initialized"); return; }
   if (!isErrorLogPanelOpen()) { log("INFO", "[layout] Error Log already hidden"); return; }
-  rebuildLayout(false, false);
+  rebuildLayout();
   log("INFO", "[layout] Error Log panel removed");
 }
-export function setErrorLogPanelVisible(visible) {
-  if (visible) showErrorLogPanel();
-  else hideErrorLogPanel();
+export function setErrorLogPanelVisible(_visible) {
+  rebuildLayout();
 }
 
 subscribe((state, details) => {
   if (!details || details.type !== "setSetting") return;
-  if (details.key === "showErrorLogPanel") {
-    setErrorLogPanelVisible(details.value);
-  }
-  if (details.key === "showScenarioRunner") {
-    setScenarioRunnerPanelVisible(details.value);
-  }
+  if (details.key === "showErrorLogPanel") rebuildLayout();
+  if (details.key === "showScenarioRunner") rebuildLayout();
+  if (details.key === "showRightSidebarPanel") rebuildLayout();
+  if (details.key === "showSettingsPanel") rebuildLayout();
+  if (details.key === "showHistoryPanel") rebuildLayout();
 });
 
-function rebuildLayout(includeErrorLogPanel, _includeScenarioPanel) {
+function rebuildLayout() {
   if (!mlRoot) {
     mlRoot = document.getElementById("ml-root");
     if (!mlRoot) { log("ERROR", "[layout] #ml-root not found"); return; }
@@ -58,9 +57,36 @@ function rebuildLayout(includeErrorLogPanel, _includeScenarioPanel) {
     try { layout.destroy(); } catch {}
   }
 
+  const showErrorLog = getSetting("showErrorLogPanel") !== false;
+  const sidebarEnabled = getSetting("showRightSidebarPanel") !== false;
+  const settingsEnabled = getSetting("showSettingsPanel") !== false;
+  const historyEnabled = !!getSetting("showHistoryPanel");
+
+  const rightSidebarContent = [];
+  if (sidebarEnabled) {
+    if (settingsEnabled) {
+      rightSidebarContent.push({
+        type: 'component',
+        componentName: 'SettingsPanel',
+        title: 'Settings',
+        height: historyEnabled ? 60 : 100,
+        closable: false
+      });
+    }
+    if (historyEnabled) {
+      rightSidebarContent.push({
+        type: 'component',
+        componentName: 'HistoryPanel',
+        title: 'History',
+        height: settingsEnabled ? 40 : 100,
+        closable: false
+      });
+    }
+  }
+
   const mainColumn = {
     type: 'column',
-    width: 70,
+    width: rightSidebarContent.length ? 70 : 100,
     content: [
       {
         type: 'component',
@@ -86,27 +112,26 @@ function rebuildLayout(includeErrorLogPanel, _includeScenarioPanel) {
     ]
   };
 
-  let panelLayout = {
-    root: {
-      type: 'row',
-      content: [
-        mainColumn,
-        {
-          type: 'component',
-          componentName: 'SettingsPanel',
-          title: 'Settings',
-          width: 30,
-          closable: false
-        }
-      ]
-    }
+  const rowContent = [mainColumn];
+  if (rightSidebarContent.length) {
+    rowContent.push({
+      type: 'column',
+      width: 30,
+      content: rightSidebarContent,
+      closable: false
+    });
+  }
+
+  let rootLayout = {
+    type: 'row',
+    content: rowContent
   };
 
-  if (includeErrorLogPanel) {
-    panelLayout.root = {
+  if (showErrorLog) {
+    rootLayout = {
       type: 'column',
       content: [
-        panelLayout.root,
+        rootLayout,
         {
           type: 'component',
           componentName: 'ErrorLogPanel',
@@ -118,19 +143,29 @@ function rebuildLayout(includeErrorLogPanel, _includeScenarioPanel) {
     };
   }
 
+  const panelLayout = { root: rootLayout };
+
   layout = new MiniLayout(panelLayout, mlRoot);
 
   layout.registerComponent('CanvasToolbarPanel', buildCanvasToolbarPanel);
   layout.registerComponent('CanvasPanel', buildCanvasPanel);
   layout.registerComponent('SettingsPanel', buildSettingsPanel);
   layout.registerComponent('ErrorLogPanel', buildErrorLogPanel);
+  layout.registerComponent('HistoryPanel', buildHistoryPanel);
 
   registerErrorLogSink();
 
   layout.init();
 
+  if (typeof window !== "undefined") {
+    try { window.layout = layout; } catch {}
+  }
+
   log("INFO", "[layout] Layout initialized", {
-    withErrorLog: !!includeErrorLogPanel
+    withErrorLog: !!showErrorLog,
+    sidebarEnabled: !!rightSidebarContent.length,
+    settingsPanel: !!settingsEnabled,
+    historyPanel: !!historyEnabled
   });
 }
 
@@ -138,16 +173,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   mlRoot = document.getElementById("ml-root");
   if (!mlRoot) { log("ERROR", "[layout] #ml-root not found"); return; }
 
-  let showErrorLog = true;
   try {
     await loadSettings();
-    showErrorLog = getSetting("showErrorLogPanel") !== false;
   } catch (e) {
     log("ERROR", "[layout] Error loading settings, using defaults", e);
-    showErrorLog = true;
   }
 
-  rebuildLayout(showErrorLog, false);
+  rebuildLayout();
 
   if (!detachKeybindings) {
     try {

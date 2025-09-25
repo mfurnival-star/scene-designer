@@ -72,11 +72,13 @@ Actions
 Settings
 - settings-core.js            – registry, persistence, side effects (logging, console)
   - Includes loupe controls: loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair
+  - UI/Sidebar toggles: showRightSidebarPanel, showSettingsPanel, showHistoryPanel
 - settings-ui.js              – Tweakpane panel binding to settings
 
 Layout / Panels / Diagnostics
-- layout.js                   – MiniLayout bootstrap; installs global undo/redo keybindings
+- layout.js                   – MiniLayout bootstrap; right sidebar stack (Settings top, History bottom); toggles via settings; installs global undo/redo keybindings
 - errorlog.js                 – passive Error Log panel (Console.Re streaming in use)
+- history-panel.js            – read-only command history panel (list + Undo/Redo/Clear)
 - global-errors.js            – window error/unhandledrejection → logger
 - debug.js                    – Debug Snapshot Collector (direct selection trace + tolerant bleed + unified geometry)
 - scenario-runner.js          – scriptable scenarios for dev/QA
@@ -95,6 +97,10 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-25 (Phase 2 – History Inspector + Right Sidebar Toggles)
+  - history-panel.js: new History panel (read-only list + Undo/Redo/Clear).
+  - settings-core.js: added showRightSidebarPanel, showSettingsPanel, showHistoryPanel (persisted).
+  - layout.js: renders right sidebar when enabled; stacks Settings (top) and History (bottom); rebuilds on toggle changes.
 - 2025-09-25 (Phase 2 – Stroke Width Command)
   - commands/commands.js: added SET_STROKE_WIDTH (batch per-id, undoable; inverse captures previous widths).
   - actions.js: added setStrokeWidthForSelected(width) intent that dispatches SET_STROKE_WIDTH for unlocked selection.
