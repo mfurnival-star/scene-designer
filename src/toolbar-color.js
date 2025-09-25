@@ -107,11 +107,6 @@ export function installColorPickers(refs) {
         save: false
       }
     },
-    strings: {
-      save: 'Apply',
-      clear: 'Clear',
-      cancel: 'Close'
-    }
   };
 
   const strokePickr = Pickr.create({
@@ -127,11 +122,14 @@ export function installColorPickers(refs) {
     default: makeHex8(defaultFillHex6, defaultFillAlphaPct)
   });
 
-  const applyStroke = (hex6) => {
+  let strokeSession = 0;
+  let fillSession = 0;
+
+  const applyStroke = (hex6, opts = {}) => {
     try {
       if (hasSelection()) {
-        setStrokeColorForSelected(hex6);
-        log("INFO", "[toolbar-color] Applied stroke to selection", { hex6 });
+        setStrokeColorForSelected(hex6, opts);
+        log("INFO", "[toolbar-color] Applied stroke to selection", { hex6, coalesceKey: opts.coalesceKey });
       } else {
         const hex8 = makeHex8(hex6, 100);
         setSettingAndSave("defaultStrokeColor", hex8);
@@ -141,12 +139,12 @@ export function installColorPickers(refs) {
       log("ERROR", "[toolbar-color] applyStroke error", e);
     }
   };
-  const applyFill = (hex6, alphaPct) => {
+  const applyFill = (hex6, alphaPct, opts = {}) => {
     try {
       if (hasSelection()) {
         const rgba = rgbaStringFromHex6(hex6, alphaPct);
-        setFillColorForSelected(rgba);
-        log("INFO", "[toolbar-color] Applied fill to selection", { rgba });
+        setFillColorForSelected(rgba, opts);
+        log("INFO", "[toolbar-color] Applied fill to selection", { rgba, coalesceKey: opts.coalesceKey });
       } else {
         const hex8 = makeHex8(hex6, alphaPct);
         setSettingAndSave("defaultFillColor", hex8);
@@ -157,40 +155,52 @@ export function installColorPickers(refs) {
     }
   };
 
-  const debouncedStroke = debounce(applyStroke, 140);
-  const debouncedFill = debounce(applyFill, 140);
+  const debouncedStroke = debounce((hex6, key) => {
+    applyStroke(hex6, { coalesceKey: key, coalesceWindowMs: 1000 });
+  }, 140);
+  const debouncedFill = debounce((hex6, alphaPct, key) => {
+    applyFill(hex6, alphaPct, { coalesceKey: key, coalesceWindowMs: 1000 });
+  }, 140);
 
   const onStrokeChange = (color) => {
     if (!color) return;
     const hex6 = pickrColorToHex6(color);
-    debouncedStroke(hex6);
+    const key = `stroke-color-${strokeSession}`;
+    debouncedStroke(hex6, key);
   };
   const onStrokeSwatch = (color) => {
     if (!color) return;
     const hex6 = pickrColorToHex6(color);
-    applyStroke(hex6);
+    strokeSession += 1;
+    const key = `stroke-color-${strokeSession}-swatch`;
+    applyStroke(hex6, { coalesceKey: key, coalesceWindowMs: 1000 });
   };
 
   const onFillChange = (color) => {
     if (!color) return;
     const hex6 = pickrColorToHex6(color);
     const alphaPct = pickrColorToAlphaPct(color);
-    debouncedFill(hex6, alphaPct);
+    const key = `fill-color-${fillSession}`;
+    debouncedFill(hex6, alphaPct, key);
   };
   const onFillSwatch = (color) => {
     if (!color) return;
     const hex6 = pickrColorToHex6(color);
     const alphaPct = pickrColorToAlphaPct(color);
-    applyFill(hex6, alphaPct);
+    fillSession += 1;
+    const key = `fill-color-${fillSession}-swatch`;
+    applyFill(hex6, alphaPct, { coalesceKey: key, coalesceWindowMs: 1000 });
   };
 
+  strokePickr.on('show', () => { strokeSession += 1; });
   strokePickr.on('change', onStrokeChange);
   strokePickr.on('swatchselect', onStrokeSwatch);
 
+  fillPickr.on('show', () => { fillSession += 1; });
   fillPickr.on('change', onFillChange);
   fillPickr.on('swatchselect', onFillSwatch);
 
-  log("INFO", "[toolbar-color] Pickr color pickers installed");
+  log("INFO", "[toolbar-color] Pickr color pickers installed (with history coalescing)");
   return function detach() {
     try {
       strokePickr && strokePickr.destroyAndRemove();

@@ -98,7 +98,7 @@ export function resetRotationForSelectedShapes() {
   });
 }
 
-export function setStrokeColorForSelected(color) {
+export function setStrokeColorForSelected(color, options = {}) {
   const selected = getState().selectedShapes || [];
   const ids = selected.filter(s => s && !s.locked).map(s => s._id);
   if (!ids.length) {
@@ -112,10 +112,10 @@ export function setStrokeColorForSelected(color) {
   dispatch({
     type: 'SET_STROKE_COLOR',
     payload: { ids, color }
-  });
+  }, options);
 }
 
-export function setFillColorForSelected(fill) {
+export function setFillColorForSelected(fill, options = {}) {
   const selected = getState().selectedShapes || [];
   const ids = selected.filter(s => s && !s.locked).map(s => s._id);
   if (!ids.length) {
@@ -129,7 +129,7 @@ export function setFillColorForSelected(fill) {
   dispatch({
     type: 'SET_FILL_COLOR',
     payload: { ids, fill }
-  });
+  }, options);
 }
 
 export function setStrokeWidthForSelected(width) {

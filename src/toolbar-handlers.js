@@ -351,7 +351,18 @@ export function attachToolbarHandlers(refs) {
     return w;
   }
 
-  const applyStrokeWidth = (source = 'input') => {
+  // Coalescing session for Stroke Width typing
+  let strokeWidthSession = 0;
+  let strokeWidthKey = null;
+  const beginStrokeWidthSession = () => {
+    strokeWidthSession += 1;
+    strokeWidthKey = `stroke-width-${strokeWidthSession}`;
+  };
+  const endStrokeWidthSession = () => {
+    strokeWidthKey = null;
+  };
+
+  const applyStrokeWidth = (source = 'input', key = null) => {
     try {
       if (!strokeWidthInput) return;
       const w = coerceStrokeWidth(strokeWidthInput.value);
@@ -364,8 +375,11 @@ export function attachToolbarHandlers(refs) {
       const selected = Array.isArray(getState().selectedShapes) ? getState().selectedShapes.filter(Boolean) : [];
       const anyUnlocked = selected.some(s => s && !s.locked);
       if (selected.length > 0 && anyUnlocked) {
-        setStrokeWidthForSelected(w);
-        log("INFO", "[toolbar-handlers] Stroke width applied to selection", { width: w, source });
+        // Pass coalesceKey if provided (command-bus will merge within window)
+        const opts = key ? { coalesceKey: key, coalesceWindowMs: 1000 } : undefined;
+        // setStrokeWidthForSelected may ignore extra args; command-bus coalescing requires updated actions.js
+        setStrokeWidthForSelected(w, opts);
+        log("INFO", "[toolbar-handlers] Stroke width applied to selection", { width: w, source, coalesceKey: key || null });
       } else {
         setSettingAndSave("defaultStrokeWidth", w);
         log("INFO", "[toolbar-handlers] Default stroke width updated", { width: w, source });
@@ -375,12 +389,26 @@ export function attachToolbarHandlers(refs) {
     }
   };
 
-  const debouncedApplyStrokeWidth = debounce(() => applyStrokeWidth('debounced'));
+  const debouncedApplyStrokeWidth = debounce((key) => applyStrokeWidth('debounced', key));
 
   if (strokeWidthInput) {
-    on(strokeWidthInput, 'input', () => debouncedApplyStrokeWidth());
-    on(strokeWidthInput, 'change', () => applyStrokeWidth('change'));
-    on(strokeWidthInput, 'blur', () => applyStrokeWidth('blur'));
+    on(strokeWidthInput, 'focus', () => {
+      if (!strokeWidthKey) beginStrokeWidthSession();
+    });
+    on(strokeWidthInput, 'input', () => {
+      if (!strokeWidthKey) beginStrokeWidthSession();
+      debouncedApplyStrokeWidth(strokeWidthKey);
+    });
+    on(strokeWidthInput, 'change', () => {
+      if (!strokeWidthKey) beginStrokeWidthSession();
+      applyStrokeWidth('change', strokeWidthKey);
+      endStrokeWidthSession();
+    });
+    on(strokeWidthInput, 'blur', () => {
+      if (!strokeWidthKey) beginStrokeWidthSession();
+      applyStrokeWidth('blur', strokeWidthKey);
+      endStrokeWidthSession();
+    });
   } else {
     log("WARN", "[toolbar-handlers] strokeWidthInput ref missing; stroke width control not wired");
   }

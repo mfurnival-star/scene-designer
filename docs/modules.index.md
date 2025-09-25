@@ -26,7 +26,7 @@ Core Modules
 - fabric-wrapper.js           – ESM wrapper for Fabric constructors (exports Ellipse)
 
 Commands
-- commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
+- commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions; supports history coalescing via options.coalesceKey (+ coalesceWindowMs)
 - commands/commands.js        – core command implementations:
   - Public: ADD_SHAPE, ADD_SHAPES, DELETE_SHAPES, DUPLICATE_SHAPES, SET_SELECTION, MOVE_SHAPES_DELTA, RESET_ROTATION, LOCK_SHAPES, UNLOCK_SHAPES, ALIGN_SELECTED, SET_TRANSFORMS, SET_STROKE_COLOR, SET_FILL_COLOR, SET_STROKE_WIDTH
   - Internal (history helpers): SET_POSITIONS, SET_ANGLES_POSITIONS
@@ -51,9 +51,9 @@ Toolbar
 - toolbar-panel.js            – assemble styles, DOM, handlers, state sync
 - toolbar-styles.js           – injects toolbar CSS (two-row layout); includes numeric input styling (stroke width), scale-aware
 - toolbar-dom.js              – renders toolbar DOM; returns element refs (Ellipse option, Debug button, Undo/Redo buttons, Stroke Width input)
-- toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot; Undo/Redo buttons; Stroke Width input → command bus or defaults
+- toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot; Undo/Redo buttons; Stroke Width input → command bus or defaults; passes coalesceKey for stroke width typing/changes
 - toolbar-state.js            – enable/disable logic; scale sync; subscribes to history for Undo/Redo enabled state
-- toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha) using command bus; debounced live updates
+- toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha) using command bus; debounced live updates; history coalescing during drags
 
 Selection
 - selection-core.js           – single/multi selection; transformer lifecycle
@@ -66,7 +66,7 @@ Shapes
 - shape-state.js              – per-shape state machine (selected/dragging/locked)
 
 Actions
-- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation/align via command bus; style intents setStrokeColorForSelected and setFillColorForSelected; stroke width intent setStrokeWidthForSelected dispatches SET_STROKE_WIDTH
+- actions.js                  – dispatches add/delete/duplicate/lock/unlock/resetRotation/align via command bus; style intents setStrokeColorForSelected and setFillColorForSelected; stroke width intent setStrokeWidthForSelected dispatches SET_STROKE_WIDTH; style intents accept optional { coalesceKey, coalesceWindowMs } passthrough for history coalescing
 - actions-alignment.js        – dispatches ALIGN_SELECTED command (alignSelected(mode, ref))
 
 Settings
@@ -97,6 +97,11 @@ Other Notes
 - Index.html should inject the Console.Re connector only if remote logging is desired.
 
 Recent Changes (brief)
+- 2025-09-25 (Phase 2 – History Coalescing)
+  - commands/command-bus.js: added history coalescing with options.coalesceKey and options.coalesceWindowMs; consecutive matching commands within the window merge into one undo entry; redo stack cleared on coalesced updates.
+  - actions.js: style intents (setStrokeColorForSelected, setFillColorForSelected) now accept an optional options object that is passed to dispatch for coalescing; stroke width intent remains unchanged (selection path handled by toolbar).
+  - toolbar-color.js: while dragging in Pickr, emits updates with a stable coalesceKey per interaction; swatch selections coalesce per click.
+  - toolbar-handlers.js: stroke width typing/changing wrapped with a session coalesceKey so a whole typing interaction is a single undo step.
 - 2025-09-25 (Phase 2 – History Inspector + Right Sidebar Toggles)
   - history-panel.js: new History panel (read-only list + Undo/Redo/Clear).
   - settings-core.js: added showRightSidebarPanel, showSettingsPanel, showHistoryPanel (persisted).
