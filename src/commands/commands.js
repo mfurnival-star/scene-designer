@@ -92,6 +92,83 @@ function duplicateShapeFallback(src, dx = 20, dy = 20) {
   return null;
 }
 
+/* NEW: Prefer to duplicate preserving transforms and styles */
+function getPrimaryDrawableChild(group) {
+  if (!group || !Array.isArray(group._objects)) return null;
+  const priority = ['ellipse', 'circle', 'rect', 'line'];
+  for (const t of priority) {
+    const obj = group._objects.find(o => o && !o._isDiagnosticLabel && o.type === t);
+    if (obj) return obj;
+  }
+  return group._objects.find(o => o && !o._isDiagnosticLabel) || null;
+}
+
+function duplicateShapePreservingTransforms(src, dx = 20, dy = 20) {
+  if (!src) return null;
+  const type = src._type || src.type;
+  const center = (typeof src.getCenterPoint === "function") ? src.getCenterPoint() : getShapeCenter(src);
+  if (!center) return null;
+
+  const sx = Number.isFinite(src.scaleX) ? src.scaleX : 1;
+  const sy = Number.isFinite(src.scaleY) ? src.scaleY : 1;
+  const angle = Number.isFinite(src.angle) ? src.angle : 0;
+  const destCenter = { x: center.x + dx, y: center.y + dy };
+
+  let dup = null;
+
+  try {
+    if (type === 'point') {
+      // Points don't carry scale/angle; style is embedded in primitives
+      dup = makePointShape(destCenter.x, destCenter.y);
+    } else if (type === 'circle') {
+      // Use raw radius if available
+      const child = getPrimaryDrawableChild(src);
+      const r = Number.isFinite(child?.radius) ? Number(child.radius) : getShapeOuterRadius(src) || 10;
+      dup = makeCircleShape(destCenter.x, destCenter.y, r);
+      // Apply transforms (circles are uniform scale)
+      dup.set({ scaleX: sx, scaleY: sy, angle });
+      setAngleAndCenter(dup, angle, destCenter);
+    } else if (type === 'ellipse') {
+      const child = getPrimaryDrawableChild(src);
+      const rx = Number.isFinite(child?.rx) ? Number(child.rx) : Math.max(1, (getShapeBoundingBox(src)?.width || 20) / 2);
+      const ry = Number.isFinite(child?.ry) ? Number(child.ry) : Math.max(1, (getShapeBoundingBox(src)?.height || 12) / 2);
+      dup = makeEllipseShape(destCenter.x, destCenter.y, rx * 2, ry * 2);
+      dup.set({ scaleX: sx, scaleY: sy, angle });
+      setAngleAndCenter(dup, angle, destCenter);
+    } else if (type === 'rect') {
+      const child = getPrimaryDrawableChild(src);
+      const baseW = Number.isFinite(child?.width) ? Number(child.width) : (getShapeBoundingBox(src)?.width || 40);
+      const baseH = Number.isFinite(child?.height) ? Number(child.height) : (getShapeBoundingBox(src)?.height || 24);
+      // Factory expects top-left; we'll re-center after applying transforms
+      dup = makeRectShape(destCenter.x - baseW / 2, destCenter.y - baseH / 2, baseW, baseH);
+      dup.set({ scaleX: sx, scaleY: sy, angle });
+      setAngleAndCenter(dup, angle, destCenter);
+    } else {
+      // Unknown shape type: fallback
+      dup = duplicateShapeFallback(src, dx, dy);
+    }
+  } catch (e) {
+    log("WARN", "[commands] duplicateShapePreservingTransforms build failed; using fallback", e);
+    dup = null;
+  }
+
+  // Copy style if possible
+  try {
+    if (dup) {
+      const stroke = getFirstChildStroke(src);
+      const fill = getFirstChildFill(src);
+      const sw = getFirstChildStrokeWidth(src);
+      if (stroke) applyStrokeColorToShape(dup, stroke);
+      if (fill) applyFillColorToShape(dup, fill);
+      if (Number.isFinite(sw) && sw > 0) applyStrokeWidthToShape(dup, sw);
+    }
+  } catch (e) {
+    log("WARN", "[commands] duplicate style copy failed", e);
+  }
+
+  return dup;
+}
+
 function cmdAddShape(payload) {
   const { shapeType, opts } = payload || {};
   const shape = createShapeByType(shapeType, opts || {});
@@ -145,7 +222,9 @@ function cmdDuplicateShapes(payload) {
   }
 
   const created = sources.map(src => {
-    const dup = duplicateShapeFallback(src, dx, dy);
+    // Prefer transform-preserving duplicate; fallback if needed
+    let dup = duplicateShapePreservingTransforms(src, dx, dy);
+    if (!dup) dup = duplicateShapeFallback(src, dx, dy);
     if (dup) {
       dup.locked = false;
       dup.selectable = true;
