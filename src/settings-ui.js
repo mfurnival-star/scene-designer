@@ -7,64 +7,6 @@ import {
   setSettingAndSave
 } from './settings-core.js';
 
-function isLikelyIOS() {
-  try {
-    const ua = (navigator.userAgent || '').toLowerCase();
-    const platform = (navigator.platform || '').toLowerCase();
-    const touchMac = /mac/i.test(platform) && navigator.maxTouchPoints > 1;
-    return /iphone|ipad|ipod/.test(ua) || touchMac;
-  } catch {
-    return false;
-  }
-}
-
-function applyScrollableAncestorFixes(rootEl) {
-  try {
-    let el = rootEl;
-    let hops = 0;
-    while (el && hops < 5) {
-      if (el.classList && el.classList.contains('minilayout-panel-body')) {
-        el.style.overflow = 'hidden';
-        el.style.minHeight = '0';
-        el.style.display = 'flex';
-        el.style.flexDirection = 'column';
-      }
-      if (el.classList && el.classList.contains('minilayout-panel')) {
-        el.style.minHeight = '0';
-        el.style.flex = el.style.flex || '1 1 auto';
-      }
-      el = el.parentElement;
-      hops++;
-    }
-  } catch (e) {
-    log("WARN", "[settings-ui] applyScrollableAncestorFixes failed", e);
-  }
-}
-
-function ensureBottomSpacer(container, opts = {}) {
-  try {
-    const { iosExtraPx = 120 } = opts;
-    let spacer = container.querySelector('#settings-ios-bottom-spacer');
-    if (!spacer) {
-      spacer = document.createElement('div');
-      spacer.id = 'settings-ios-bottom-spacer';
-      spacer.setAttribute('aria-hidden', 'true');
-      spacer.style.width = '100%';
-      spacer.style.flex = '0 0 auto';
-      spacer.style.pointerEvents = 'none';
-      container.appendChild(spacer);
-    }
-    const onIOS = isLikelyIOS();
-    if (onIOS) {
-      spacer.style.height = `calc(${iosExtraPx}px + env(safe-area-inset-bottom))`;
-    } else {
-      spacer.style.height = '0px';
-    }
-  } catch (e) {
-    log("WARN", "[settings-ui] ensureBottomSpacer failed", e);
-  }
-}
-
 export function buildSettingsPanel({ element, title, componentName }) {
   log("DEBUG", "[settings-ui] buildSettingsPanel ENTRY", {
     PaneType: typeof Pane,
@@ -74,13 +16,19 @@ export function buildSettingsPanel({ element, title, componentName }) {
   });
 
   try {
+    log("INFO", "[settings-ui] buildSettingsPanel called", { elementType: element?.tagName, title, componentName });
+
     if (!element) {
       log("ERROR", "[settings-ui] buildSettingsPanel: element is null/undefined");
       alert("Settings panel root element not found! (No content will be shown)");
       return;
     }
+    if (element.offsetParent === null) {
+      log("DEBUG", "[settings-ui] buildSettingsPanel: element is not visible (may be hidden)");
+    }
     if (typeof Pane !== "function") {
-      element.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed: Tweakpane (Pane) not loaded as ES module.<br>Check your npm dependencies.</div>`;
+      element.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed: Tweakpane (Pane) not loaded as ES module.<br>
+      Check your npm dependencies: tweakpane@4.x must be imported as <code>import { Pane } from 'tweakpane'</code>.</div>`;
       log("ERROR", "[settings-ui] Pane (Tweakpane) is not a constructor/function! Check import.");
       return;
     }
@@ -98,25 +46,20 @@ export function buildSettingsPanel({ element, title, componentName }) {
             min-height:0;
             overflow:auto;
             -webkit-overflow-scrolling:touch;
+            padding:0 8px 56px 8px;
+            padding-bottom: calc(56px + env(safe-area-inset-bottom));
             overscroll-behavior: contain;
             scroll-behavior: smooth;
-            padding: 0 8px 56px 8px;
-            padding-bottom: calc(56px + env(safe-area-inset-bottom));
-            display:flex;
-            flex-direction:column;
           "></div>
         </div>
       `;
 
-      const container = element.querySelector("#settings-panel-container");
       const fieldsDiv = element.querySelector("#tweakpane-fields-div");
-      if (!fieldsDiv || !container) {
-        log("ERROR", "[settings-ui] settings container nodes missing");
-        element.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed to render (missing container)</div>`;
+      if (!fieldsDiv) {
+        log("ERROR", "[settings-ui] tweakpane-fields-div not found in DOM");
+        element.innerHTML = `<div style="color:red;padding:2em;">Settings panel failed to render (missing tweakpane-fields-div)</div>`;
         return;
       }
-
-      applyScrollableAncestorFixes(element);
 
       let pane;
       try {
@@ -166,28 +109,7 @@ export function buildSettingsPanel({ element, title, componentName }) {
         }
       });
 
-      ensureBottomSpacer(fieldsDiv, { iosExtraPx: 120 });
-
-      const onResize = () => {
-        applyScrollableAncestorFixes(element);
-        ensureBottomSpacer(fieldsDiv, { iosExtraPx: 120 });
-      };
-      window.addEventListener('orientationchange', onResize);
-      window.addEventListener('resize', onResize);
-
-      const cleanup = () => {
-        try {
-          window.removeEventListener('orientationchange', onResize);
-          window.removeEventListener('resize', onResize);
-        } catch {}
-        log("INFO", "[settings-ui] Settings panel cleaned up");
-      };
-      if (typeof element.on === "function") {
-        try { element.on("destroy", cleanup); } catch {}
-      }
-      window.addEventListener('beforeunload', cleanup, { once: true });
-
-      log("INFO", "[settings-ui] Settings panel rendered with iOS scroll workarounds");
+      log("INFO", "[settings-ui] Settings panel rendered (Tweakpane, iOS-safe bottom padding)");
     };
 
     const hasSettingsInStore = !!(getState().settings && Object.keys(getState().settings).length > 0);
