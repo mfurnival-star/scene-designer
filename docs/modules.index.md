@@ -12,9 +12,9 @@ Status Legend:
 | File | Status | Notes |
 |------|--------|-------|
 | log.js | STABLE | Central logging (levels: ERROR,WARN,INFO,DEBUG) |
-| state.js | MOD | Holds sceneName, sceneLogic, imageURL/imageObj (scene commands now active) |
+| state.js | MOD | Scene metadata + background image + settings store |
 | fabric-wrapper.js | STABLE | ESM Fabric constructors wrapper |
-| main.js | STABLE | Entry point (remote logging init) |
+| main.js | STABLE | Entry (remote logging init) |
 | layout.js | STABLE | MiniLayout bootstrap & dynamic rebuild |
 | keybindings.js | STABLE | Undo/redo, movement & common shortcuts |
 | history-panel.js | STABLE | History UI (raw command types listed) |
@@ -24,58 +24,58 @@ Status Legend:
 |------|--------|-------|
 | commands/command-bus.js | STABLE | dispatch / undo / redo / coalescing |
 | commands/commands.js | STABLE | Dispatcher: scene → structure → style |
-| commands/commands-structure.js | STABLE | Structural ops (add/delete/duplicate/move/selection/lock/align/transforms) |
+| commands/commands-structure.js | MOD | Added SELECT_ALL / DESELECT_ALL wrapper commands |
 | commands/commands-style.js | STABLE | Style ops (stroke/fill/strokeWidth) |
-| commands/commands-scene.js | MOD | Scene ops: SET_IMAGE, SET_SCENE_NAME, SET_SCENE_LOGIC, SET_DIAGNOSTIC_LABEL_VISIBILITY (new) |
+| commands/commands-scene.js | MOD | Scene ops (image, name, logic, diagnostic labels) |
 
-## Actions (Intent Layer – pending refactor to pure thin wrappers)
+## Actions (Intent Layer – pending full thin-refactor)
 | File | Status | Notes |
 |------|--------|-------|
-| actions.js | MOD | Added setDiagnosticLabelsVisibility + prior scene wrappers |
+| actions.js | MOD | Added selectAllCommand / deselectAllCommand wrappers |
 | actions-alignment.js | STABLE | Align intent dispatch |
 
 ## Selection & Transformer
 | File | Status | Notes |
 |------|--------|-------|
-| selection-core.js | STABLE | Dual-path selection (Fabric ↔ store) pre-Phase 3 |
-| selection.js | STABLE | Public re-exports / window hooks |
-| transformer.js | STABLE | Per-shape control visibility & circle scaling guard |
-| canvas-events.js | STABLE | Fabric selection sync with suppression tokens |
+| selection-core.js | STABLE | Dual-path selection (pre-Phase 3) |
+| selection.js | STABLE | Public selection facade |
+| transformer.js | STABLE | Transformer attach/update (circle scale guard) |
+| canvas-events.js | STABLE | Fabric ↔ store selection sync (token suppression) |
 
 ## Geometry
 | File | Status | Notes |
 |------|--------|-------|
-| geometry/shape-rect.js | STABLE | Canonical per-shape bbox/center/aspect/outerRadius |
+| geometry/shape-rect.js | STABLE | Canonical bbox/center/aspect/outerRadius |
 | geometry/selection-rects.js | STABLE | Multi-selection member & hull rects |
-| dev/geometry-sanity.js | STABLE | Dev validation script (not production bundled) |
+| dev/geometry-sanity.js | STABLE | Dev validation script |
 
 ## Shapes & Rendering
 | File | Status | Notes |
 |------|--------|-------|
 | shapes-core.js | STABLE | Rect/Circle/Ellipse factories + stroke normalization |
 | shapes-point.js | STABLE | Point reticle variants |
-| shape-defs.js | STABLE | Shape transform/edit capabilities |
-| shape-state.js | STABLE | Simple internal state flags |
+| shape-defs.js | STABLE | Per-shape transform/edit capabilities |
+| shape-state.js | STABLE | Per-shape state tracking |
 | shapes.js | STABLE | Facade re-exports |
-| canvas-core.js | STABLE | Fabric canvas lifecycle, background image application |
-| canvas-constraints.js | STABLE | Movement clamping & lock-aware group moves |
+| canvas-core.js | STABLE | Canvas lifecycle + background image adaptation |
+| canvas-constraints.js | STABLE | Movement clamping & lock-aware dragging |
 | canvas-transform-history.js | STABLE | Gesture aggregation → SET_TRANSFORMS |
 
 ## Overlays & Visuals
 | File | Status | Notes |
 |------|--------|-------|
-| selection-outlines.js | STABLE | Dashed hull + member boxes |
+| selection-outlines.js | STABLE | Hull + member overlay painter |
 | loupe.js | STABLE | Magnifier overlay |
-| loupe-controller.js | STABLE | Selection-aware loupe lifecycle |
+| loupe-controller.js | STABLE | Loupe anchoring & settings integration |
 
 ## Toolbar
 | File | Status | Notes |
 |------|--------|-------|
 | toolbar-panel.js | STABLE | Panel assembler |
-| toolbar-dom.js | STABLE | DOM structure & element refs |
-| toolbar-handlers.js | STABLE | Image operations now command-based (SET_IMAGE) |
-| toolbar-state.js | STABLE | Button enable/disable & scale sync |
-| toolbar-styles.js | STABLE | Injected styles (responsive) |
+| toolbar-dom.js | STABLE | DOM structure & refs |
+| toolbar-handlers.js | MOD | Now dispatches SELECT_ALL command (history-backed) |
+| toolbar-state.js | STABLE | Button enable/disable + scale sync |
+| toolbar-styles.js | STABLE | Toolbar CSS injection |
 | toolbar-color.js | STABLE | Pickr integration (stroke/fill with coalescing) |
 
 ## Settings
@@ -88,32 +88,39 @@ Status Legend:
 ## Serialization
 | File | Status | Notes |
 |------|--------|-------|
-| serialization/scene-io.js | STABLE | Versioned scene (v1) serialize / deserialize |
+| serialization/scene-io.js | STABLE | Versioned scene serialize/deserialize (v1) |
 
 ## Debug / Diagnostics
 | File | Status | Notes |
 |------|--------|-------|
-| debug.js | (Not shown here) | Debug snapshot collector |
-| errorlog.js | (Not shown) | Error log panel sink |
-| console-re-wrapper.js | (Not shown) | Remote logging bridge (temporary) |
+| debug.js | (Not listed earlier) | Debug snapshot collector |
+| errorlog.js | (Not listed) | Error log panel sink |
+| console-re-wrapper.js | (Not listed) | Remote logging bridge (temp) |
 
 ## Phase 2 Additions / Changes (Recent Batches)
-- commands/commands-scene.js (added earlier; now extended with SET_DIAGNOSTIC_LABEL_VISIBILITY)
-- actions.js (scene command dispatchers + diagnostic labels intent)
-- toolbar-handlers.js (image set/clear via commands)
-- modules.index.md (this file) initialized then updated
-- docs/PHASED_ARCHITECTURE_PATH.md (Phase 2 checklist – scene commands pending tick update next batch)
+- commands/commands-scene.js (scene commands: SET_IMAGE, SET_SCENE_NAME, SET_SCENE_LOGIC, SET_DIAGNOSTIC_LABEL_VISIBILITY)
+- actions.js (scene command intents + diagnostic label visibility; now selection wrapper intents)
+- commands/commands-structure.js (added SELECT_ALL / DESELECT_ALL command types)
+- toolbar-handlers.js (Select All now via command for history entry)
+- modules.index.md (this file)
+- docs/PHASED_ARCHITECTURE_PATH.md (checklist progressing)
+
+## Implemented Selection Wrapper Commands
+- SELECT_ALL: Captures previous selection; inverse is SET_SELECTION (prev IDs)
+- DESELECT_ALL: Captures previous selection; inverse is SET_SELECTION (prev IDs)
+(Note: Toolbar wired for SELECT_ALL; Escape key → DESELECT_ALL TBD)
 
 ## Upcoming (Planned Next Batches)
-- SELECT_ALL / DESELECT_ALL wrapper commands (decide explicit types vs alias to SET_SELECTION)
-- Actions refactor (remove filtering; move validation into command executors)
+- Actions refactor (move filtering/validation into command executors)
+- Style command payload normalization + explicit coalescing policy doc in command-bus.js
 - Inversion test harness (dev/commands-inversion-test.js)
-- Optional BATCH meta-command
-- Style command payload normalization + documented coalescing policy
+- Optional BATCH meta-command decision (implement or defer)
+- History panel friendly label mapping (cosmetic)
+- Phase 2 completion docs pass
 
 ## Notes
-- Keep this index <500 lines; trim historical notes once Phase 2 finishes.
-- Do not duplicate long-form architectural rationale here (see PHASED_ARCHITECTURE_PATH.md).
-- When Phase 3 begins, add a section for Selection Adapter abstractions.
+- Keep this index <500 lines; trim “Recent Batches” section after Phase 2 closure.
+- Architectural rationale lives in docs/PHASED_ARCHITECTURE_PATH.md.
+- Phase 3 will introduce a Selection Adapter section once store → Fabric becomes one-way.
 
-_Last updated: 2025-09-26 (Batch 3B – added SET_DIAGNOSTIC_LABEL_VISIBILITY, updated actions.js)_
+_Last updated: 2025-09-26 (Batch 4 – selection wrapper commands integrated)_

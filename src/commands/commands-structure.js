@@ -259,6 +259,8 @@ function applyLockFlags(shape, locked) {
   }
 }
 
+/* ---------- Structural Commands ---------- */
+
 function cmdAddShape(payload) {
   const { shapeType, opts } = payload || {};
   const shape = createShapeByType(shapeType, opts || {});
@@ -324,13 +326,44 @@ function cmdDuplicateShapes(payload) {
   return { type: 'DELETE_SHAPES', payload: { ids: created.map(s => s._id) } };
 }
 
+function setsEqual(aIds, bIds) {
+  if (aIds.length !== bIds.length) return false;
+  const a = [...aIds].sort();
+  const b = [...bIds].sort();
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 function cmdSetSelection(payload) {
   const { ids } = payload || {};
   const prevIds = getSelectedIds();
   const next = getShapesByIds(ids || []);
+  const nextIds = next.map(s => s._id);
   selectionSetSelectedShapes(next);
+  // Even if identical, we still return inverse (history semantics rely on forward intent).
   return { type: 'SET_SELECTION', payload: { ids: prevIds } };
 }
+
+/* NEW: Explicit wrapper commands for user intent */
+
+function cmdSelectAll() {
+  const shapes = (getState().shapes || []).filter(Boolean);
+  if (!shapes.length) return null;
+  const prevIds = getSelectedIds();
+  const allIds = shapes.map(s => s._id).filter(Boolean);
+  // We allow pushing history even if already all selected, per plan (explicit user intent).
+  selectionSetSelectedShapes(shapes);
+  return { type: 'SET_SELECTION', payload: { ids: prevIds } };
+}
+
+function cmdDeselectAll() {
+  const prevIds = getSelectedIds();
+  if (!prevIds.length) return null; // no-op if already empty
+  selectionSetSelectedShapes([]);
+  return { type: 'SET_SELECTION', payload: { ids: prevIds } };
+}
+
+/* Movement / Position */
 
 function cmdMoveShapesDelta(payload) {
   const { ids, dx = 0, dy = 0, clamp = true } = payload || {};
@@ -389,6 +422,8 @@ function cmdSetPositions(payload) {
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
 }
 
+/* Rotation / Angles */
+
 function cmdResetRotation(payload) {
   const { ids } = payload || {};
   const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
@@ -441,6 +476,8 @@ function cmdSetAnglesPositions(payload) {
   return { type: 'SET_ANGLES_POSITIONS', payload: { items: prev } };
 }
 
+/* Locking */
+
 function cmdLockShapes(payload) {
   const { ids } = payload || {};
   const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
@@ -490,6 +527,8 @@ function cmdUnlockShapes(payload) {
   requestRender();
   return { type: 'LOCK_SHAPES', payload: { ids: affected } };
 }
+
+/* Alignment */
 
 function cmdAlignSelected(payload) {
   const mode = payload?.mode;
@@ -575,6 +614,8 @@ function cmdAlignSelected(payload) {
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
 }
 
+/* Transform aggregate (gesture) */
+
 function cmdSetTransforms(payload) {
   const { items } = payload || {};
   const arr = Array.isArray(items) ? items.filter(i => i && i.id != null) : [];
@@ -614,6 +655,8 @@ function cmdSetTransforms(payload) {
   return { type: 'SET_TRANSFORMS', payload: { items: prev } };
 }
 
+/* Dispatcher */
+
 export function executeStructureCommand(cmd) {
   if (!cmd || typeof cmd.type !== 'string') return null;
   const p = cmd.payload || {};
@@ -623,6 +666,8 @@ export function executeStructureCommand(cmd) {
     case 'DELETE_SHAPES': return cmdDeleteShapes(p);
     case 'DUPLICATE_SHAPES': return cmdDuplicateShapes(p);
     case 'SET_SELECTION': return cmdSetSelection(p);
+    case 'SELECT_ALL': return cmdSelectAll();
+    case 'DESELECT_ALL': return cmdDeselectAll();
     case 'MOVE_SHAPES_DELTA': return cmdMoveShapesDelta(p);
     case 'SET_POSITIONS': return cmdSetPositions(p);
     case 'RESET_ROTATION': return cmdResetRotation(p);

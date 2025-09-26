@@ -10,9 +10,9 @@ import {
   alignSelected,
   setStrokeWidthForSelected,
   setSceneImage,
-  clearSceneImage
+  clearSceneImage,
+  selectAllCommand
 } from './actions.js';
-import { selectAllShapes } from './selection.js';
 import { installColorPickers } from './toolbar-color.js';
 import { runDebugCapture } from './debug.js';
 import { undo, redo } from './commands/command-bus.js';
@@ -166,12 +166,12 @@ export function attachToolbarHandlers(refs) {
       };
       reader.onload = function (ev) {
         try {
-            const dataUrl = ev?.target?.result;
-            if (!dataUrl) {
-              log("ERROR", "[toolbar-handlers] FileReader produced empty result");
-              return;
-            }
-            const imgObj = new Image();
+          const dataUrl = ev?.target?.result;
+          if (!dataUrl) {
+            log("ERROR", "[toolbar-handlers] FileReader produced empty result");
+            return;
+          }
+          const imgObj = new Image();
             imgObj.onload = function () {
               setSceneImage(dataUrl, imgObj);
               log("INFO", "[toolbar-handlers] Image set from upload (command)", { size: file.size, name: file.name });
@@ -281,13 +281,14 @@ export function attachToolbarHandlers(refs) {
   };
   on(resetRotationBtn, 'click', onResetRotationClick);
 
+  // Updated: Use command-based selection wrapper for history (SELECT_ALL)
   const onSelectAllClick = (ev) => {
     try {
       if (!selectAllBtn || selectAllBtn.disabled) {
         ev && ev.preventDefault && ev.preventDefault();
         return;
       }
-      selectAllShapes();
+      selectAllCommand();
     } catch (err) {
       log("ERROR", "[toolbar-handlers] Select All failed", err);
     }
@@ -564,7 +565,7 @@ export function attachToolbarHandlers(refs) {
   on(importJsonBtn, 'click', onImportJsonClick);
   on(importJsonFile, 'change', onImportJsonFileChange);
 
-  log("INFO", "[toolbar-handlers] Toolbar handlers attached (image commands wired)");
+  log("INFO", "[toolbar-handlers] Toolbar handlers attached (image & selection wrapper commands wired)");
   return function detach() {
     try {
       handlers.forEach(off => { try { off(); } catch {} });

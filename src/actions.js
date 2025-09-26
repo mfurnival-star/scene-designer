@@ -7,6 +7,11 @@ import { dispatch } from './commands/command-bus.js';
   This file still contains some filtering / validation logic (locked shape checks, etc.).
   Full refactor to make these pure thin intent wrappers is scheduled for a later batch
   (Step 5 in the Phase 2 completion plan).
+
+  Batch 4 addition:
+  - Added selectAllCommand() and deselectAllCommand() which dispatch explicit
+    SELECT_ALL / DESELECT_ALL wrapper commands so selection intents are captured
+    in history (distinct from generic SET_SELECTION).
 */
 
 export function addShapeOfType(type, opts = {}) {
@@ -186,6 +191,14 @@ export function setDiagnosticLabelsVisibility(visible, options = {}) {
     type: 'SET_DIAGNOSTIC_LABEL_VISIBILITY',
     payload: { visible: !!visible }
   }, options);
+}
+
+/* Selection wrapper commands (Batch 4) */
+export function selectAllCommand(options = {}) {
+  dispatch({ type: 'SELECT_ALL' }, options);
+}
+export function deselectAllCommand(options = {}) {
+  dispatch({ type: 'DESELECT_ALL' }, options);
 }
 
 export { alignSelected } from './actions-alignment.js';

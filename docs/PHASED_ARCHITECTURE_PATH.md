@@ -81,7 +81,7 @@ Documentation:
 1. Coverage: Every in-scope mutation path uses a command (no direct state mutation from UI handlers).
 2. Inversion: Each command returns a valid inverse command pushed onto undo stack (or documented no-op).
 3. Consistency: `actions.js` contains only intent dispatch (no filtering, validation, or locked-shape logic).
-4. Selection: UI select-all and deselect-all produce history entries (SET_SELECTION or SELECT_ALL / DESELECT_ALL wrapper).
+4. Selection: UI select-all and deselect-all produce history entries (SELECT_ALL / DESELECT_ALL or SET_SELECTION wrapper).
 5. Style Coalescing: Color / fill / stroke width drags each produce ≤1 history frame per continuous interaction.
 6. Image & Metadata: SET_IMAGE (and CLEAR_IMAGE if separate), SET_SCENE_NAME, SET_SCENE_LOGIC, SET_DIAGNOSTIC_LABEL_VISIBILITY are undoable.
 7. Optional BATCH (decide implemented or deferred; state documented).
@@ -90,14 +90,16 @@ Documentation:
 10. No Regression: Manual smoke test: add → duplicate → align → style changes → transform gesture → undo chain restores initial clean state.
 
 ### Command Inventory & Status
-(Updated through Batch 3B – diagnostic labels visibility command added)
+(Updated through Batch 4 – selection wrapper commands added)
 
 | Command | Purpose | Status | Notes |
 |---------|---------|--------|-------|
 | ADD_SHAPE / ADD_SHAPES | Create shapes | Implemented | Inverse: DELETE_SHAPES |
 | DELETE_SHAPES | Remove shapes | Implemented | Inverse: ADD_SHAPES |
 | DUPLICATE_SHAPES | Clone shapes | Implemented | Inverse: DELETE_SHAPES |
-| SET_SELECTION | Set explicit selection | Implemented (partial usage) | Needs uniform usage for all UI selection intents |
+| SET_SELECTION | Set explicit selection | Implemented (internal) | Used by inverses & direct programmatic sets |
+| SELECT_ALL | Wrapper intent (all shapes) | Implemented | Inverse returned as SET_SELECTION (prev IDs) |
+| DESELECT_ALL | Wrapper intent (clear selection) | Implemented | Inverse returned as SET_SELECTION (prev IDs) |
 | MOVE_SHAPES_DELTA | Keyboard nudge move | Implemented | Inverse: SET_POSITIONS |
 | SET_POSITIONS | Apply absolute positions | Implemented | Self-inverse pattern |
 | RESET_ROTATION | Zero rotation | Implemented | Inverse: SET_ANGLES_POSITIONS |
@@ -114,8 +116,6 @@ Documentation:
 | SET_SCENE_NAME | Update scene name | Implemented | Inverse captures previous |
 | SET_SCENE_LOGIC | Update logic flag | Implemented | Inverse captures previous |
 | SET_DIAGNOSTIC_LABEL_VISIBILITY | Toggle labels | Implemented | Inverse captures prior boolean |
-| SELECT_ALL (alias) | Convenience wrapper | TODO | Will expand to SET_SELECTION (wrapper) |
-| DESELECT_ALL (alias) | Convenience wrapper | TODO | Will expand to SET_SELECTION (wrapper) |
 | BATCH (optional) | Group commands | TBD | Pending decision (may defer) |
 
 ### Phase 2 Detailed Checklist
@@ -142,7 +142,7 @@ New / Missing:
 - [x] SET_SCENE_NAME
 - [x] SET_SCENE_LOGIC
 - [x] SET_DIAGNOSTIC_LABEL_VISIBILITY
-- [ ] SELECT_ALL (wrapper) / DESELECT_ALL (wrapper)
+- [x] SELECT_ALL (wrapper) / DESELECT_ALL (wrapper)
 - [ ] Actions refactor: remove filtering / validation logic from actions.js
 - [ ] Style command payload normalization (unified structure, documented)
 - [ ] Coalescing policy doc comment (command-bus.js header)
@@ -154,7 +154,7 @@ New / Missing:
 
 Testing:
 - [ ] Add inversion test cases for each existing command
-- [ ] Add new tests for SET_IMAGE / SET_SCENE_NAME / SET_SCENE_LOGIC / SET_DIAGNOSTIC_LABEL_VISIBILITY
+- [ ] Add new tests for SET_IMAGE / SET_SCENE_NAME / SET_SCENE_LOGIC / SET_DIAGNOSTIC_LABEL_VISIBILITY / SELECT_ALL / DESELECT_ALL
 - [ ] Tolerance constants documented (e.g., position EPS=0.01, scale EPS=0.0001, angle EPS=0.01)
 
 Docs & Manifest:
@@ -165,16 +165,16 @@ Docs & Manifest:
 - Style drags (stroke color, fill color/alpha, stroke width) coalesce via coalesceKey + rolling timestamp window (default 800–1000ms).
 - Transform gestures already produce a single SET_TRANSFORMS.
 - BATCH (if implemented) bypasses time window and commits once per meta-command.
-- Selection commands never coalesce (explicit user intent).
+- Selection commands (SELECT_ALL / DESELECT_ALL / SET_SELECTION) never coalesce (explicit user intent).
 
 ### Planned Incremental Batches (Subject to adjustment)
 1. (Done) Scope lock + checklist (no behavior change).
 2. (Done) Implement SET_IMAGE (+ inverse) & SET_SCENE_NAME / SET_SCENE_LOGIC.
 3. (Done) Add SET_DIAGNOSTIC_LABEL_VISIBILITY command.
-4. (Pending) Selection wrappers SELECT_ALL / DESELECT_ALL; wire toolbar & future keybinding.
-5. (Pending) Refactor actions.js (strip filtering logic); migrate validation into command executors; introduce consistent no-op log pattern.
-6. (Pending) Style command payload normalization + add command-bus coalescing header comments.
-7. (Pending) Inversion test harness (dev script) + baseline tests for existing commands.
+4. (Done) Selection wrappers SELECT_ALL / DESELECT_ALL; toolbar now uses SELECT_ALL.
+5. (Pending) Refactor actions.js (strip filtering logic); migrate validation into command executors; consistent no-op logging.
+6. (Pending) Style command payload normalization + command-bus coalescing header comments.
+7. (Pending) Inversion test harness (dev script) + baseline tests.
 8. (Pending) Implement (or explicitly defer) BATCH; update docs accordingly.
 9. (Pending) History panel friendly label map (optional), doc polish, final checklist pass → mark Phase 2 complete.
 
@@ -235,7 +235,7 @@ Goals:
 | Phase | Status | Date | Summary |
 |-------|--------|------|---------|
 | 1 – Stabilize Selection & Geometry | ✅ Complete | 2025-09-24 | Unified geometry + stable selection sync foundation. |
-| 2 – Command Layer & History | ⏳ In Progress | 2025-09-26 | Scene + diagnostic label commands added; selection wrappers & harness pending. |
+| 2 – Command Layer & History | ⏳ In Progress | 2025-09-26 | Selection wrapper commands added; actions refactor & harness pending. |
 | 3 – Model-Driven Selection | ⏳ Pending | — | One-way (store→Fabric) selection model. |
 | 4 – Central Geometry & Hit-Testing | ⏳ Pending | — | Hit-test & marquee via geometry layer. |
 | 5 – Domain Model Adapter | ⏳ Pending | — | POJO scene graph with Fabric adapter. |
@@ -269,4 +269,4 @@ All new geometry-dependent features MUST use geometry helpers—never direct Fab
 
 ---
 
-_Last updated: 2025-09-26 (Batch 3B: Scene + Diagnostic Label commands marked implemented)_
+_Last updated: 2025-09-26 (Batch 4: SELECT_ALL / DESELECT_ALL implemented & checklist updated)_
