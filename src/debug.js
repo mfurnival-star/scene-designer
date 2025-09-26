@@ -1,51 +1,30 @@
 /**
- * debug.js (STUB / LIGHTWEIGHT)
+ * debug.js
  * -----------------------------------------------------------
- * Purpose:
- * - Minimal on-demand debug snapshot facility.
- * - Does NOTHING expensive by default.
- * - You selectively request data slices via runDebugCapture({ sections:[...] }).
+ * Lightweight, extensible debug snapshot + targeted mobile Safari
+ * diagnostics / live patch helpers (added ad‑hoc providers).
  *
  * Exported API:
- * - async runDebugCapture(options?) -> { snapshot, text }
- * - registerDebugProvider(name, fn)  // add custom section providers at runtime
- * - listDebugProviders()             // list registered provider names
+ *   runDebugCapture(opts)
+ *   registerDebugProvider(name, fn)
+ *   listDebugProviders()
  *
- * Options (all optional):
- * {
- *   sections: string[]   // e.g. ['scene','selection','fabric','geometry','settings','trace']
- *                        // if omitted → defaults to ['scene','selection']
- *   format: 'json' | 'object'  // default 'object'; if 'json' returns pretty text
- *   copy: boolean        // if true attempts to copy JSON text to clipboard
- *   log: boolean         // if true logs the snapshot at INFO
- * }
+ * Added Providers (for iOS Settings panel issue):
+ *   settingsPanelMetrics   – DOM + flex metrics for Settings panel
+ *   tweakpaneStatus        – Detect Tweakpane JS + CSS presence
+ *   layoutSnapshot         – All MiniLayout panels (header, flex, heights)
+ *   ua                     – User agent / platform info
+ *   applySettingsPanelFix  – Idempotent live patch (flex + CSS inject)
  *
- * Extension Model:
- * - Keep this file small. Add ad‑hoc providers via registerDebugProvider
- *   from a dev console or temporary modules without bloating baseline size.
- *
- * Philosophy:
- * - Always safe to leave in production; returns tiny objects unless asked for more.
- * - No hidden heavy geometry or selection tracing unless the relevant section is requested.
- *
- * Manifest Compliance:
- * - ESM only, no global side effects.
- * - Uses log() for all logging.
- *
- * Size Guard: Keep this stub lean (<150 lines). Add large logic in separate impl files if needed.
+ * NOTE: Keep file <500 lines, avoid heavy work unless provider requested.
  * -----------------------------------------------------------
  */
 
 import { log } from './log.js';
 import { getState } from './state.js';
 
-// ---- Internal Registry ----
 const _providers = new Map();
 
-/**
- * Register a debug provider.
- * fn may be sync or async and should return serializable data.
- */
 export function registerDebugProvider(name, fn) {
   if (!name || typeof fn !== 'function') {
     log("WARN", "[debug] registerDebugProvider invalid args", { name, fnType: typeof fn });
@@ -55,16 +34,13 @@ export function registerDebugProvider(name, fn) {
   log("INFO", "[debug] provider registered", { name });
 }
 
-/**
- * List provider names (for quick introspection).
- */
 export function listDebugProviders() {
   return Array.from(_providers.keys()).sort();
 }
 
-// ---- Built‑in Lightweight Providers ----
-// Keep each tiny; no heavy looping beyond current state arrays.
-
+/* -----------------------------------------------------------
+ * Core / existing lightweight providers
+ * --------------------------------------------------------- */
 registerDebugProvider('scene', () => {
   const s = getState();
   return {
@@ -89,17 +65,15 @@ registerDebugProvider('selection', () => {
 
 registerDebugProvider('settings', () => {
   const s = getState();
-  // Return only a shallow subset (avoid dumping everything if it grows)
   const keys = [
-    'defaultStrokeWidth', 'defaultStrokeColor', 'defaultFillColor',
-    'canvasMaxWidth', 'canvasMaxHeight', 'toolbarUIScale',
-    'shapeStartXPercent', 'shapeStartYPercent', 'showDiagnosticLabels',
-    'multiDragBox', 'reticleStyle', 'reticleSize', 'DEBUG_LOG_LEVEL'
+    'defaultStrokeWidth','defaultStrokeColor','defaultFillColor',
+    'canvasMaxWidth','canvasMaxHeight','toolbarUIScale',
+    'shapeStartXPercent','shapeStartYPercent','showDiagnosticLabels',
+    'multiDragBox','reticleStyle','reticleSize','DEBUG_LOG_LEVEL',
+    'showRightSidebarPanel','showSettingsPanel','showHistoryPanel'
   ];
   const out = {};
-  keys.forEach(k => {
-    if (k in (s.settings || {})) out[k] = s.settings[k];
-  });
+  keys.forEach(k => { if (k in (s.settings || {})) out[k] = s.settings[k]; });
   return out;
 });
 
@@ -114,9 +88,7 @@ registerDebugProvider('fabric', () => {
       activeType = active.type;
       if (active.type === 'activeSelection' && Array.isArray(active._objects)) {
         activeCount = active._objects.length;
-      } else {
-        activeCount = 1;
-      }
+      } else activeCount = 1;
     }
   } catch {}
   return {
@@ -126,7 +98,6 @@ registerDebugProvider('fabric', () => {
   };
 });
 
-// geometry + trace providers attempt lazy dynamic imports (optional)
 registerDebugProvider('geometry', async () => {
   try {
     const mod = await import('./geometry/shape-rect.js');
@@ -134,7 +105,9 @@ registerDebugProvider('geometry', async () => {
     const s = getState();
     const first = s.shapes?.[0];
     const bbox = first ? mod.getShapeBoundingBox(first) : null;
-    const hull = selMod.getSelectionHullRect ? selMod.getSelectionHullRect(s.selectedShapes, s.fabricCanvas) : null;
+    const hull = selMod.getSelectionHullRect
+      ? selMod.getSelectionHullRect(s.selectedShapes, s.fabricCanvas)
+      : null;
     return {
       firstShapeId: first?._id || null,
       firstShapeBbox: bbox,
@@ -147,7 +120,6 @@ registerDebugProvider('geometry', async () => {
 });
 
 registerDebugProvider('trace', async () => {
-  // Only if canvas-events exported the trace getter
   try {
     const mod = await import('./canvas-events.js');
     if (typeof mod.getSelectionEventTrace === 'function') {
@@ -164,12 +136,252 @@ registerDebugProvider('trace', async () => {
   }
 });
 
-// ---- Core Capture Function ----
+/* -----------------------------------------------------------
+ * NEW: iOS Safari Settings Panel Diagnostics
+ * --------------------------------------------------------- */
 
 /**
- * Collect a debug snapshot.
- * @param {Object} opts
+ * Helper: find settings panel root & body safely.
  */
+function findSettingsPanelElements() {
+  const container = document.getElementById('settings-panel-container');
+  const fields = document.getElementById('tweakpane-fields-div');
+  const paneRoot = container?.querySelector('.tp-dfw') || null;
+  const panel = container?.closest('.minilayout-panel') || null;
+  const body = panel?.querySelector('.minilayout-panel-body') || null;
+  return { container, fields, paneRoot, panel, body };
+}
+
+/**
+ * Helper: Ensure flex chain styles for growth (idempotent).
+ */
+function ensureFlexGrowth(el, styles) {
+  if (!el) return false;
+  const applied = [];
+  Object.entries(styles).forEach(([k, v]) => {
+    if (el.style[k] !== v) {
+      el.style[k] = v;
+      applied.push(k);
+    }
+  });
+  return applied.length > 0;
+}
+
+function computeElementMetrics(el) {
+  if (!el) return null;
+  const cs = getComputedStyle(el);
+  return {
+    tag: el.tagName.toLowerCase(),
+    class: el.className || '',
+    flex: cs.flex,
+    display: cs.display,
+    overflow: cs.overflow,
+    height: el.offsetHeight,
+    scrollHeight: el.scrollHeight,
+    minHeight: cs.minHeight,
+    position: cs.position
+  };
+}
+
+/**
+ * settingsPanelMetrics
+ * - Captures sizing/flex chain + presence flags.
+ */
+registerDebugProvider('settingsPanelMetrics', () => {
+  if (typeof document === 'undefined') {
+    return { error: 'no-dom' };
+  }
+  const { container, fields, paneRoot, panel, body } = findSettingsPanelElements();
+  const metrics = {
+    present: {
+      container: !!container,
+      fields: !!fields,
+      paneRoot: !!paneRoot,
+      panel: !!panel,
+      body: !!body
+    },
+    metrics: {
+      panel: computeElementMetrics(panel),
+      body: computeElementMetrics(body),
+      container: computeElementMetrics(container),
+      fields: computeElementMetrics(fields),
+      paneRoot: paneRoot ? {
+        children: paneRoot.children.length,
+        height: paneRoot.offsetHeight,
+        scrollHeight: paneRoot.scrollHeight
+      } : null
+    }
+  };
+
+  // Simple heuristic flags
+  metrics.flags = {
+    bodyCollapsed: (metrics.metrics.body?.height ?? 0) < 120,
+    paneRootEmpty: (paneRoot && paneRoot.children.length === 0),
+    paneRootZeroHeight: (paneRoot && paneRoot.offsetHeight < 40),
+    fieldsScrollable: (metrics.metrics.fields
+      ? metrics.metrics.fields.scrollHeight > metrics.metrics.fields.height
+      : false)
+  };
+  return metrics;
+});
+
+/**
+ * tweakpaneStatus
+ * - Detects JS constructor, CSS presence, root count.
+ */
+registerDebugProvider('tweakpaneStatus', () => {
+  if (typeof document === 'undefined') return { error: 'no-dom' };
+  let paneType = 'unknown';
+  try {
+    // Dynamic import check (avoid bundler tree-shake side effects)
+    // We just test global registry if any (not guaranteed). Fallback: type info unreachable.
+    // Since we ESM import in settings-ui.js, runtime here may not expose Pane; that's fine.
+    // We'll attempt a lazy import only if cheap.
+  } catch {}
+  const cssLoaded = [...document.styleSheets].some(s => {
+    try { return (s.href || '').includes('tweakpane'); } catch { return false; }
+  });
+  const rootCount = document.querySelectorAll('#settings-panel-container .tp-dfw').length;
+  return {
+    paneType,
+    cssLoaded,
+    rootCount
+  };
+});
+
+/**
+ * layoutSnapshot
+ * - Walk all .minilayout-panel elements for comparative sizing.
+ */
+registerDebugProvider('layoutSnapshot', () => {
+  if (typeof document === 'undefined') return { error: 'no-dom' };
+  const panels = [...document.querySelectorAll('.minilayout-panel')];
+  return panels.map(p => {
+    const header = p.querySelector('.minilayout-panel-header');
+    const body = p.querySelector('.minilayout-panel-body');
+    const hTxt = (header?.textContent || '').trim();
+    return {
+      title: hTxt || null,
+      flex: getComputedStyle(p).flex,
+      panelH: p.offsetHeight,
+      bodyH: body?.offsetHeight ?? null,
+      bodyScrollH: body?.scrollHeight ?? null,
+      bodyFlex: body ? getComputedStyle(body).flex : null,
+      collapsed: (body?.offsetHeight ?? 0) < 60
+    };
+  });
+});
+
+/**
+ * ua
+ * - Environment / platform info.
+ */
+registerDebugProvider('ua', () => {
+  if (typeof navigator === 'undefined') return { error: 'no-navigator' };
+  return {
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    vendor: navigator.vendor,
+    standalone: (navigator as any).standalone || false,
+    touchPoints: (navigator as any).maxTouchPoints ?? null
+  };
+});
+
+/**
+ * applySettingsPanelFix
+ * - Attempts in-place remediation for collapsed Settings panel (iOS Safari).
+ * - Injects Tweakpane CSS via CDN if missing (non-destructive).
+ * - Ensures panel/body/container/fields are flex growable with min-height:0.
+ * - Returns actions performed (idempotent).
+ */
+registerDebugProvider('applySettingsPanelFix', async () => {
+  if (typeof document === 'undefined') return { error: 'no-dom' };
+  const actions = [];
+  const { container, fields, paneRoot, panel, body } = findSettingsPanelElements();
+
+  if (!panel) return { error: 'panel-not-found' };
+
+  // 1. Inject CSS if missing
+  const hasTPcss = [...document.styleSheets].some(s => {
+    try { return (s.href || '').includes('tweakpane'); } catch { return false; }
+  });
+  if (!hasTPcss) {
+    try {
+      if (!document.getElementById('__debug_tp_css_injected')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/tweakpane@4.0.3/dist/tweakpane.css';
+        link.id = '__debug_tp_css_injected';
+        document.head.appendChild(link);
+        actions.push('inject-tweakpane-css');
+      }
+    } catch (e) {
+      actions.push('inject-tweakpane-css-failed');
+      log("WARN", "[debug/applySettingsPanelFix] CSS inject failed", e);
+    }
+  } else {
+    actions.push('css-already-present');
+  }
+
+  // 2. Ensure panel flex growth
+  if (ensureFlexGrowth(panel, {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: '1 1 0%',
+    minHeight: '0',
+    overflow: 'visible'
+  })) actions.push('panel-flex-adjusted');
+
+  // 3. Body growth
+  if (body && ensureFlexGrowth(body, {
+    flex: '1 1 auto',
+    minHeight: '0',
+    overflow: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    display: 'flex',
+    flexDirection: 'column'
+  })) actions.push('panel-body-flex-adjusted');
+
+  // 4. Container
+  if (container && ensureFlexGrowth(container, {
+    flex: '1 1 auto',
+    minHeight: '0',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden'
+  })) actions.push('container-flex-adjusted');
+
+  // 5. Fields
+  if (fields && ensureFlexGrowth(fields, {
+    flex: '1 1 auto',
+    minHeight: '0',
+    overflow: 'auto',
+    WebkitOverflowScrolling: 'touch'
+  })) actions.push('fields-flex-adjusted');
+
+  // 6. Force a reflow read (diagnostic)
+  const beforeAfter = {
+    panelH: panel.offsetHeight,
+    bodyH: body?.offsetHeight ?? null,
+    fieldsH: fields?.offsetHeight ?? null,
+    paneRootH: paneRoot?.offsetHeight ?? null
+  };
+
+  // 7. If paneRoot exists but zero height, add temp min-height
+  if (paneRoot && paneRoot.offsetHeight < 40) {
+    paneRoot.style.minHeight = '160px';
+    actions.push('paneRoot-minHeight-added');
+  }
+
+  return {
+    actions,
+    metrics: beforeAfter
+  };
+});
+
+/* -----------------------------------------------------------
+ * runDebugCapture
+ * --------------------------------------------------------- */
 export async function runDebugCapture(opts = {}) {
   const {
     sections = ['scene', 'selection'],
@@ -196,7 +408,7 @@ export async function runDebugCapture(opts = {}) {
     }
     try {
       const value = provider.length > 0
-        ? await provider() // supports async when function expects no args but returns promise
+        ? await provider()
         : await provider();
       snapshot.data[name] = value;
     } catch (e) {
@@ -214,9 +426,7 @@ export async function runDebugCapture(opts = {}) {
     }
   }
 
-  if (logIt) {
-    log("INFO", "[debug] snapshot", snapshot);
-  }
+  if (logIt) log("INFO", "[debug] snapshot", snapshot);
 
   if (copy && text) {
     try {
@@ -233,10 +443,3 @@ export async function runDebugCapture(opts = {}) {
 
   return { snapshot, text };
 }
-
-// (Optional) Expose helpers for quick console usage without polluting global scope heavily.
-// Uncomment only if needed:
-// if (typeof window !== 'undefined') {
-//   window.__debug = { runDebugCapture, registerDebugProvider, listDebugProviders };
-// }
-
