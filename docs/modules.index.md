@@ -12,7 +12,7 @@ Status Legend:
 | File | Status | Notes |
 |------|--------|-------|
 | log.js | STABLE | Central logging (levels: ERROR,WARN,INFO,DEBUG) |
-| state.js | MOD | Holds sceneName, sceneLogic, imageURL/imageObj |
+| state.js | MOD | Holds sceneName, sceneLogic, imageURL/imageObj (scene commands now active) |
 | fabric-wrapper.js | STABLE | ESM Fabric constructors wrapper |
 | main.js | STABLE | Entry point (remote logging init) |
 | layout.js | STABLE | MiniLayout bootstrap & dynamic rebuild |
@@ -23,15 +23,15 @@ Status Legend:
 | File | Status | Notes |
 |------|--------|-------|
 | commands/command-bus.js | STABLE | dispatch / undo / redo / coalescing |
-| commands/commands.js | MOD | Dispatcher now includes scene commands first |
-| commands/commands-structure.js | STABLE | Structural ops (add/delete/duplicate/move/align/lock/rotation/transform/selection) |
+| commands/commands.js | STABLE | Dispatcher: scene → structure → style |
+| commands/commands-structure.js | STABLE | Structural ops (add/delete/duplicate/move/selection/lock/align/transforms) |
 | commands/commands-style.js | STABLE | Style ops (stroke/fill/strokeWidth) |
-| commands/commands-scene.js | NEW | Scene ops: SET_IMAGE, SET_SCENE_NAME, SET_SCENE_LOGIC |
+| commands/commands-scene.js | MOD | Scene ops: SET_IMAGE, SET_SCENE_NAME, SET_SCENE_LOGIC, SET_DIAGNOSTIC_LABEL_VISIBILITY (new) |
 
 ## Actions (Intent Layer – pending refactor to pure thin wrappers)
 | File | Status | Notes |
 |------|--------|-------|
-| actions.js | MOD | Added scene action wrappers (setSceneImage, clearSceneImage, setSceneName, setSceneLogic) |
+| actions.js | MOD | Added setDiagnosticLabelsVisibility + prior scene wrappers |
 | actions-alignment.js | STABLE | Align intent dispatch |
 
 ## Selection & Transformer
@@ -73,7 +73,7 @@ Status Legend:
 |------|--------|-------|
 | toolbar-panel.js | STABLE | Panel assembler |
 | toolbar-dom.js | STABLE | DOM structure & element refs |
-| toolbar-handlers.js | MOD | Image operations now command-based (SET_IMAGE) |
+| toolbar-handlers.js | STABLE | Image operations now command-based (SET_IMAGE) |
 | toolbar-state.js | STABLE | Button enable/disable & scale sync |
 | toolbar-styles.js | STABLE | Injected styles (responsive) |
 | toolbar-color.js | STABLE | Pickr integration (stroke/fill with coalescing) |
@@ -97,23 +97,23 @@ Status Legend:
 | errorlog.js | (Not shown) | Error log panel sink |
 | console-re-wrapper.js | (Not shown) | Remote logging bridge (temporary) |
 
-## Phase 2 Additions (This Batch)
-- commands/commands-scene.js (scene-level reversible commands)
-- actions.js (scene command dispatchers)
-- toolbar-handlers.js (now uses scene commands instead of direct setImage)
-- modules.index.md (this file) initialized
-- docs/PHASED_ARCHITECTURE_PATH.md already updated in previous batch
+## Phase 2 Additions / Changes (Recent Batches)
+- commands/commands-scene.js (added earlier; now extended with SET_DIAGNOSTIC_LABEL_VISIBILITY)
+- actions.js (scene command dispatchers + diagnostic labels intent)
+- toolbar-handlers.js (image set/clear via commands)
+- modules.index.md (this file) initialized then updated
+- docs/PHASED_ARCHITECTURE_PATH.md (Phase 2 checklist – scene commands pending tick update next batch)
 
 ## Upcoming (Planned Next Batches)
-- SET_DIAGNOSTIC_LABEL_VISIBILITY command (will extend commands-scene.js or new file if growth warrants)
-- SELECT_ALL / DESELECT_ALL wrapper commands (decision: internal alias vs explicit types)
+- SELECT_ALL / DESELECT_ALL wrapper commands (decide explicit types vs alias to SET_SELECTION)
 - Actions refactor (remove filtering; move validation into command executors)
 - Inversion test harness (dev/commands-inversion-test.js)
 - Optional BATCH meta-command
+- Style command payload normalization + documented coalescing policy
 
 ## Notes
 - Keep this index <500 lines; trim historical notes once Phase 2 finishes.
 - Do not duplicate long-form architectural rationale here (see PHASED_ARCHITECTURE_PATH.md).
 - When Phase 3 begins, add a section for Selection Adapter abstractions.
 
-_Last updated: 2025-09-26 (Batch 2B)_
+_Last updated: 2025-09-26 (Batch 3B – added SET_DIAGNOSTIC_LABEL_VISIBILITY, updated actions.js)_

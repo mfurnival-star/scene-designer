@@ -149,10 +149,9 @@ export function setStrokeWidthForSelected(width, options = {}) {
   }, options);
 }
 
-/* Scene-level intent wrappers (new) */
+/* Scene-level intent wrappers */
 
 export function setSceneImage(url, imageObj, options = {}) {
-  // Accept null to clear
   dispatch({
     type: 'SET_IMAGE',
     payload: { url: url || null, imageObj: url ? imageObj || null : null }
@@ -179,6 +178,13 @@ export function setSceneLogic(logic, options = {}) {
   dispatch({
     type: 'SET_SCENE_LOGIC',
     payload: { logic: l }
+  }, options);
+}
+
+export function setDiagnosticLabelsVisibility(visible, options = {}) {
+  dispatch({
+    type: 'SET_DIAGNOSTIC_LABEL_VISIBILITY',
+    payload: { visible: !!visible }
   }, options);
 }
 
