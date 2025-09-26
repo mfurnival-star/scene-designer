@@ -12,7 +12,7 @@ Status Legend:
 | File | Status | Notes |
 |------|--------|-------|
 | log.js | STABLE | Central logging (levels: ERROR,WARN,INFO,DEBUG) |
-| state.js | MOD | Scene metadata + background image + settings store |
+| state.js | STABLE | Scene metadata + background image + settings store |
 | fabric-wrapper.js | STABLE | ESM Fabric constructors wrapper |
 | main.js | STABLE | Entry (remote logging init) |
 | layout.js | STABLE | MiniLayout bootstrap & dynamic rebuild |
@@ -24,14 +24,14 @@ Status Legend:
 |------|--------|-------|
 | commands/command-bus.js | STABLE | dispatch / undo / redo / coalescing |
 | commands/commands.js | STABLE | Dispatcher: scene → structure → style |
-| commands/commands-structure.js | MOD | Added SELECT_ALL / DESELECT_ALL wrapper commands |
-| commands/commands-style.js | STABLE | Style ops (stroke/fill/strokeWidth) |
-| commands/commands-scene.js | MOD | Scene ops (image, name, logic, diagnostic labels) |
+| commands/commands-structure.js | STABLE | SELECT_ALL / DESELECT_ALL wrapper commands |
+| commands/commands-style.js | MOD | **Batch 6:** Style commands now require items[] payload; legacy forms rejected. |
+| commands/commands-scene.js | STABLE | Scene ops (image, name, logic, diagnostic labels) |
 
-## Actions (Intent Layer – pending full thin-refactor)
+## Actions (Intent Layer)
 | File | Status | Notes |
 |------|--------|-------|
-| actions.js | MOD | Added selectAllCommand / deselectAllCommand wrappers |
+| actions.js | MOD | **Batch 6:** setStrokeColorForSelected, setFillColorForSelected, setStrokeWidthForSelected now emit items[] payload. |
 | actions-alignment.js | STABLE | Align intent dispatch |
 
 ## Selection & Transformer
@@ -47,7 +47,6 @@ Status Legend:
 |------|--------|-------|
 | geometry/shape-rect.js | STABLE | Canonical bbox/center/aspect/outerRadius |
 | geometry/selection-rects.js | STABLE | Multi-selection member & hull rects |
-| dev/geometry-sanity.js | STABLE | Dev validation script |
 
 ## Shapes & Rendering
 | File | Status | Notes |
@@ -73,10 +72,10 @@ Status Legend:
 |------|--------|-------|
 | toolbar-panel.js | STABLE | Panel assembler |
 | toolbar-dom.js | STABLE | DOM structure & refs |
-| toolbar-handlers.js | MOD | Now dispatches SELECT_ALL command (history-backed) |
+| toolbar-handlers.js | STABLE | Select All now via command for history entry |
 | toolbar-state.js | STABLE | Button enable/disable + scale sync |
 | toolbar-styles.js | STABLE | Toolbar CSS injection |
-| toolbar-color.js | STABLE | Pickr integration (stroke/fill with coalescing) |
+| toolbar-color.js | MOD | **Batch 6:** Color pickers now call setStrokeColorForSelected/setFillColorForSelected with items[] payload. |
 
 ## Settings
 | File | Status | Notes |
@@ -97,30 +96,13 @@ Status Legend:
 | errorlog.js | (Not listed) | Error log panel sink |
 | console-re-wrapper.js | (Not listed) | Remote logging bridge (temp) |
 
-## Phase 2 Additions / Changes (Recent Batches)
-- commands/commands-scene.js (scene commands: SET_IMAGE, SET_SCENE_NAME, SET_SCENE_LOGIC, SET_DIAGNOSTIC_LABEL_VISIBILITY)
-- actions.js (scene command intents + diagnostic label visibility; now selection wrapper intents)
-- commands/commands-structure.js (added SELECT_ALL / DESELECT_ALL command types)
-- toolbar-handlers.js (Select All now via command for history entry)
-- modules.index.md (this file)
-- docs/PHASED_ARCHITECTURE_PATH.md (checklist progressing)
+## Batch 6: Style Payload Normalization (items[] only)
+- commands/commands-style.js: Now requires items[] array for style commands (SET_STROKE_COLOR, SET_FILL_COLOR, SET_STROKE_WIDTH). Legacy payloads (ids + color/fill/width) are rejected (LEGACY_PAYLOAD reason).
+- actions.js: setStrokeColorForSelected, setFillColorForSelected, setStrokeWidthForSelected now build items[] payload directly from current selection. No legacy mode remains.
+- toolbar-color.js: Color pickers now pass items[] to actions; selectionless updates still set defaults.
+- PHASED_ARCHITECTURE_PATH.md: Checklist ticked, schema added.
+- modules.index.md: This file updated (MOD).
 
-## Implemented Selection Wrapper Commands
-- SELECT_ALL: Captures previous selection; inverse is SET_SELECTION (prev IDs)
-- DESELECT_ALL: Captures previous selection; inverse is SET_SELECTION (prev IDs)
-(Note: Toolbar wired for SELECT_ALL; Escape key → DESELECT_ALL TBD)
+_Keep this index <500 lines; trim “Recent Batches” after Phase 2 closure._
 
-## Upcoming (Planned Next Batches)
-- Actions refactor (move filtering/validation into command executors)
-- Style command payload normalization + explicit coalescing policy doc in command-bus.js
-- Inversion test harness (dev/commands-inversion-test.js)
-- Optional BATCH meta-command decision (implement or defer)
-- History panel friendly label mapping (cosmetic)
-- Phase 2 completion docs pass
-
-## Notes
-- Keep this index <500 lines; trim “Recent Batches” section after Phase 2 closure.
-- Architectural rationale lives in docs/PHASED_ARCHITECTURE_PATH.md.
-- Phase 3 will introduce a Selection Adapter section once store → Fabric becomes one-way.
-
-_Last updated: 2025-09-26 (Batch 4 – selection wrapper commands integrated)_
+_Last updated: 2025-09-26 (Batch 6 – style payload normalization, items[] only)_

@@ -2,20 +2,13 @@ import { log } from '../log.js';
 import { getState } from '../state.js';
 
 /*
-  Batch 5: Authoritative validation + standardized no-op logging
-  - Introduced reason codes + logNoop for consistent diagnostics.
-  - Removed reliance on pre-filtering in actions layer (executors authoritative).
-  - Inverses only record actually changed shapes (skip unchanged).
-  - Supports both legacy payload forms (ids + value) and normalized items[] arrays.
-
-  No-op Reason Codes:
-    NO_CHANGE            → Resolved targets produced no effective mutation (already at requested value).
-    NO_TARGETS           → No shapes resolved / no ids / empty selection.
-    NO_TARGETS_UNLOCKED  → Shapes resolved but all are locked / ineligible.
-    INVALID_PAYLOAD      → Structural payload invalid (missing fields, wrong types).
-    INVALID_COLOR        → Color field missing / not a non-empty string.
-    INVALID_FILL         → Fill field missing / not a non-empty string.
-    INVALID_WIDTH        → Width missing / non-finite / <= 0.
+  Batch 6: Style Payload Normalization (items[] only, legacy form rejected)
+  -------------------------------------------------------------------------
+  - Only accepts payloads of shape { items: [ { id, color } ] }, etc.
+  - Legacy payloads (ids + color/fill/width) are rejected with WARN/LEGACY_PAYLOAD.
+  - All normalization helpers for legacy forms removed.
+  - No-ops and validation codes: NO_CHANGE, NO_TARGETS, NO_TARGETS_UNLOCKED, INVALID_PAYLOAD, INVALID_COLOR, INVALID_FILL, INVALID_WIDTH, LEGACY_PAYLOAD.
+  - Inverse commands record only changed shapes.
 */
 
 const NOOP = {
@@ -25,11 +18,13 @@ const NOOP = {
   INVALID_PAYLOAD: 'INVALID_PAYLOAD',
   INVALID_COLOR: 'INVALID_COLOR',
   INVALID_FILL: 'INVALID_FILL',
-  INVALID_WIDTH: 'INVALID_WIDTH'
+  INVALID_WIDTH: 'INVALID_WIDTH',
+  LEGACY_PAYLOAD: 'LEGACY_PAYLOAD'
 };
 
 function logNoop(cmdType, reason, meta = {}) {
-  log("INFO", `[commands-style] ${cmdType} no-op`, { reason, ...meta });
+  const level = reason === NOOP.LEGACY_PAYLOAD ? "WARN" : "INFO";
+  log(level, `[commands-style] ${cmdType} no-op`, { reason, ...meta });
   return null;
 }
 
@@ -38,15 +33,6 @@ function requestRender() {
   if (!c) return;
   if (typeof c.requestRenderAll === 'function') c.requestRenderAll();
   else c.renderAll();
-}
-
-function getShapesByIds(ids) {
-  const map = new Map((getState().shapes || []).filter(Boolean).map(s => [s._id, s]));
-  return (ids || []).map(id => map.get(id)).filter(Boolean);
-}
-
-function getSelectedIds() {
-  return (getState().selectedShapes || []).map(s => s && s._id).filter(Boolean);
 }
 
 export function isDrawableChild(obj) {
@@ -125,97 +111,55 @@ export function applyStrokeWidthToShape(shape, width) {
   if (typeof shape.setCoords === 'function') { try { shape.setCoords(); } catch {} }
 }
 
-/* ---------- Normalization Helpers ---------- */
+/* ---------- Normalized items[] only: validation ---------- */
 
-function normalizeStrokeTargets(payload) {
-  // Returns { entries, reason? }
-  if (payload?.items) {
-    if (!Array.isArray(payload.items) || !payload.items.length) {
-      return { entries: [], reason: NOOP.INVALID_PAYLOAD };
+function validateStrokeItems(payload) {
+  if (!payload || !Array.isArray(payload.items)) return { valid: false, reason: NOOP.INVALID_PAYLOAD };
+  if (payload.items.length === 0) return { valid: false, reason: NOOP.NO_TARGETS };
+  for (const i of payload.items) {
+    if (!i || i.id == null || typeof i.color !== 'string' || !i.color.trim()) {
+      return { valid: false, reason: NOOP.INVALID_COLOR };
     }
-    const rows = payload.items
-      .filter(i => i && i.id != null && typeof i.color === 'string' && i.color.trim().length)
-      .map(i => ({ id: i.id, color: i.color.trim() }));
-    if (!rows.length) return { entries: [], reason: NOOP.INVALID_COLOR };
-    return { entries: rows };
   }
-
-  const ids = Array.isArray(payload?.ids) && payload.ids.length
-    ? payload.ids
-    : getSelectedIds();
-  if (!ids.length) return { entries: [], reason: NOOP.NO_TARGETS };
-
-  if (typeof payload?.color !== 'string' || !payload.color.trim()) {
-    return { entries: [], reason: NOOP.INVALID_COLOR };
-  }
-  const color = payload.color.trim();
-  return { entries: ids.map(id => ({ id, color })) };
+  return { valid: true };
 }
-
-function normalizeFillTargets(payload) {
-  if (payload?.items) {
-    if (!Array.isArray(payload.items) || !payload.items.length) {
-      return { entries: [], reason: NOOP.INVALID_PAYLOAD };
+function validateFillItems(payload) {
+  if (!payload || !Array.isArray(payload.items)) return { valid: false, reason: NOOP.INVALID_PAYLOAD };
+  if (payload.items.length === 0) return { valid: false, reason: NOOP.NO_TARGETS };
+  for (const i of payload.items) {
+    if (!i || i.id == null || typeof i.fill !== 'string' || !i.fill.trim()) {
+      return { valid: false, reason: NOOP.INVALID_FILL };
     }
-    const rows = payload.items
-      .filter(i => i && i.id != null && typeof i.fill === 'string' && i.fill.trim().length)
-      .map(i => ({ id: i.id, fill: i.fill.trim() }));
-    if (!rows.length) return { entries: [], reason: NOOP.INVALID_FILL };
-    return { entries: rows };
   }
-
-  const ids = Array.isArray(payload?.ids) && payload.ids.length
-    ? payload.ids
-    : getSelectedIds();
-  if (!ids.length) return { entries: [], reason: NOOP.NO_TARGETS };
-
-  if (typeof payload?.fill !== 'string' || !payload.fill.trim()) {
-    return { entries: [], reason: NOOP.INVALID_FILL };
-  }
-  const fill = payload.fill.trim();
-  return { entries: ids.map(id => ({ id, fill })) };
+  return { valid: true };
 }
-
-function normalizeWidthTargets(payload) {
-  if (payload?.items) {
-    if (!Array.isArray(payload.items) || !payload.items.length) {
-      return { entries: [], reason: NOOP.INVALID_PAYLOAD };
+function validateWidthItems(payload) {
+  if (!payload || !Array.isArray(payload.items)) return { valid: false, reason: NOOP.INVALID_PAYLOAD };
+  if (payload.items.length === 0) return { valid: false, reason: NOOP.NO_TARGETS };
+  for (const i of payload.items) {
+    const w = Number(i?.width);
+    if (!i || i.id == null || !Number.isFinite(w) || w <= 0) {
+      return { valid: false, reason: NOOP.INVALID_WIDTH };
     }
-    const rows = payload.items
-      .filter(i => {
-        if (!i || i.id == null) return false;
-        const w = Number(i.width);
-        return Number.isFinite(w) && w > 0;
-      })
-      .map(i => ({ id: i.id, width: Number(i.width) }));
-    if (!rows.length) return { entries: [], reason: NOOP.INVALID_WIDTH };
-    return { entries: rows };
   }
-
-  const ids = Array.isArray(payload?.ids) && payload.ids.length
-    ? payload.ids
-    : getSelectedIds();
-  if (!ids.length) return { entries: [], reason: NOOP.NO_TARGETS };
-
-  const w = Number(payload?.width);
-  if (!Number.isFinite(w) || w <= 0) {
-    return { entries: [], reason: NOOP.INVALID_WIDTH };
-  }
-  return { entries: ids.map(id => ({ id, width: w })) };
+  return { valid: true };
 }
 
 /* ---------- Commands ---------- */
 
 function cmdSetStrokeColor(payload) {
-  const { entries, reason } = normalizeStrokeTargets(payload);
-  if (reason === NOOP.NO_TARGETS) return logNoop('SET_STROKE_COLOR', reason);
-  if (reason) return logNoop('SET_STROKE_COLOR', reason);
+  if (payload && (payload.ids || payload.color)) {
+    // Legacy form: reject with warning
+    return logNoop('SET_STROKE_COLOR', NOOP.LEGACY_PAYLOAD, { legacy: true });
+  }
+  const { valid, reason } = validateStrokeItems(payload);
+  if (!valid) return logNoop('SET_STROKE_COLOR', reason);
 
   const shapesMap = new Map((getState().shapes || []).map(s => [s._id, s]));
-  const resolved = entries
+  const resolved = payload.items
     .map(r => {
       const s = shapesMap.get(r.id);
-      return s ? { shape: s, color: r.color } : null;
+      return s ? { shape: s, color: r.color.trim() } : null;
     })
     .filter(Boolean);
 
@@ -229,7 +173,7 @@ function cmdSetStrokeColor(payload) {
 
   unlocked.forEach(({ shape, color }) => {
     const before = getFirstChildStroke(shape);
-    if (before === color) return; // no effective change
+    if (before === color) return;
     prev.push({ id: shape._id, color: before });
     try { applyStrokeColorToShape(shape, color); changed++; } catch (e) {
       log("ERROR", "[commands-style] stroke apply failed", { id: shape._id, error: e });
@@ -243,15 +187,17 @@ function cmdSetStrokeColor(payload) {
 }
 
 function cmdSetFillColor(payload) {
-  const { entries, reason } = normalizeFillTargets(payload);
-  if (reason === NOOP.NO_TARGETS) return logNoop('SET_FILL_COLOR', reason);
-  if (reason) return logNoop('SET_FILL_COLOR', reason);
+  if (payload && (payload.ids || payload.fill)) {
+    return logNoop('SET_FILL_COLOR', NOOP.LEGACY_PAYLOAD, { legacy: true });
+  }
+  const { valid, reason } = validateFillItems(payload);
+  if (!valid) return logNoop('SET_FILL_COLOR', reason);
 
   const shapesMap = new Map((getState().shapes || []).map(s => [s._id, s]));
-  const resolved = entries
+  const resolved = payload.items
     .map(r => {
       const s = shapesMap.get(r.id);
-      return s ? { shape: s, fill: r.fill } : null;
+      return s ? { shape: s, fill: r.fill.trim() } : null;
     })
     .filter(Boolean);
 
@@ -285,15 +231,17 @@ function cmdSetFillColor(payload) {
 }
 
 function cmdSetStrokeWidth(payload) {
-  const { entries, reason } = normalizeWidthTargets(payload);
-  if (reason === NOOP.NO_TARGETS) return logNoop('SET_STROKE_WIDTH', reason);
-  if (reason) return logNoop('SET_STROKE_WIDTH', reason);
+  if (payload && (payload.ids || payload.width)) {
+    return logNoop('SET_STROKE_WIDTH', NOOP.LEGACY_PAYLOAD, { legacy: true });
+  }
+  const { valid, reason } = validateWidthItems(payload);
+  if (!valid) return logNoop('SET_STROKE_WIDTH', reason);
 
   const shapesMap = new Map((getState().shapes || []).map(s => [s._id, s]));
-  const resolved = entries
+  const resolved = payload.items
     .map(r => {
       const s = shapesMap.get(r.id);
-      return s ? { shape: s, width: r.width } : null;
+      return s ? { shape: s, width: Number(r.width) } : null;
     })
     .filter(Boolean);
 

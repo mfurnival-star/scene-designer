@@ -90,7 +90,7 @@ Documentation:
 10. No Regression: Manual smoke test: add → duplicate → align → style changes → transform gesture → undo chain restores initial clean state.
 
 ### Command Inventory & Status
-(Updated through Batch 5 – executor validation & standardized no-op logging added)
+(Updated through Batch 6 – style payload normalization, items[] only)
 
 | Command | Purpose | Status | Notes |
 |---------|---------|--------|-------|
@@ -108,9 +108,9 @@ Documentation:
 | UNLOCK_SHAPES | Unlock shapes | Implemented | Inverse: LOCK_SHAPES |
 | ALIGN_SELECTED | Align selection | Implemented | Inverse: SET_POSITIONS |
 | SET_TRANSFORMS | Gesture aggregate | Implemented | Inverse: SET_TRANSFORMS |
-| SET_STROKE_COLOR | Style stroke | Implemented | Inverse: SET_STROKE_COLOR (prev items) |
-| SET_FILL_COLOR | Style fill | Implemented | Inverse: SET_FILL_COLOR |
-| SET_STROKE_WIDTH | Style stroke width | Implemented | Inverse: SET_STROKE_WIDTH |
+| SET_STROKE_COLOR | Style stroke | Implemented | Inverse: SET_STROKE_COLOR (prev items); items[] only |
+| SET_FILL_COLOR | Style fill | Implemented | Inverse: SET_FILL_COLOR; items[] only |
+| SET_STROKE_WIDTH | Style stroke width | Implemented | Inverse: SET_STROKE_WIDTH; items[] only |
 | SET_IMAGE | Set / clear background image | Implemented | Null URL clears; inverse stores prior |
 | CLEAR_IMAGE (optional) | Explicit clear | Not needed | Use SET_IMAGE null |
 | SET_SCENE_NAME | Update scene name | Implemented | Inverse captures previous |
@@ -144,7 +144,7 @@ New / Missing / In Progress:
 - [x] SET_DIAGNOSTIC_LABEL_VISIBILITY
 - [x] SELECT_ALL (wrapper) / DESELECT_ALL (wrapper)
 - [ ] Actions refactor (executor parity pass started – standardized no-op reasons added; thinning continues)
-- [ ] Style command payload normalization (full unified items[] form & doc)  (scheduled next batch)
+- [x] Style command payload normalization (full unified items[] form; legacy payloads now rejected)
 - [x] Coalescing policy doc comment (added to command-bus.js)
 - [ ] Inversion test harness script (dev/commands-inversion-test.js)
 - [ ] History panel mapping (friendly labels) – optional cosmetic
@@ -161,7 +161,13 @@ Docs & Manifest:
 - [ ] Manifest updated with any new command modules / test harness
 - [ ] This file marks Phase 2 “Complete” once all above are green (with deferrals clearly labeled)
 
-### Standardized No-op Reason Codes (Batch 5)
+### Style Command Payload Schema (Batch 6)
+- SET_STROKE_COLOR: { items: [ { id, color } ] }
+- SET_FILL_COLOR:   { items: [ { id, fill } ] }
+- SET_STROKE_WIDTH: { items: [ { id, width } ] }
+  - All payloads must include items[] array. Legacy forms (ids + color/fill/width) are rejected with LEGACY_PAYLOAD warning.
+
+### Standardized No-op Reason Codes (Batch 6)
 Used by executors (structure/style) for deterministic logging & future test harness assertions:
 - NO_CHANGE
 - NO_TARGETS
@@ -170,6 +176,7 @@ Used by executors (structure/style) for deterministic logging & future test harn
 - INVALID_COLOR
 - INVALID_FILL
 - INVALID_WIDTH
+- LEGACY_PAYLOAD (new in Batch 6; triggers WARN, not INFO; legacy forms rejected)
 
 (Additional codes may be added with justification; harness will map these to expected skip semantics.)
 
@@ -184,7 +191,8 @@ Used by executors (structure/style) for deterministic logging & future test harn
 ### Policy Update (2025-09-26)
 - Rule 8 revised to Hybrid Option B (command executors authoritative).
 - Batch 5: Implemented standardized no-op logging + coalescing policy header comment.
-- Actions thinning initiated (removed correctness filtering; retained cosmetic early logs).
+- Batch 6: Style command payload normalization (items[] only), legacy forms rejected with LEGACY_PAYLOAD.
+- Actions thinning ongoing; only early UX logs remain.
 
 ### Planned Incremental Batches (Subject to Adjustment)
 1. (Done) Scope lock + checklist.
@@ -192,7 +200,7 @@ Used by executors (structure/style) for deterministic logging & future test harn
 3. (Done) Add SET_DIAGNOSTIC_LABEL_VISIBILITY.
 4. (Done) SELECT_ALL / DESELECT_ALL wrappers + toolbar integration.
 5. (Done) Executor validation + standardized no-op logging + actions thinning (phase 1) + coalescing policy doc.
-6. (Pending) Style payload normalization (mandatory items[] form) + finish actions thinning pass 2.
+6. (Done) Style payload normalization (mandatory items[] form, legacy rejected) + finish actions thinning pass 2.
 7. (Pending) Inversion test harness + baseline equivalence tests.
 8. (Pending) BATCH meta-command decision (implement minimal or document deferral).
 9. (Pending) History panel friendly label map + final doc polish → Phase 2 completion review.
@@ -242,7 +250,7 @@ Goals:
 | Phase | Status | Date | Summary |
 |-------|--------|------|---------|
 | 1 – Stabilize Selection & Geometry | ✅ Complete | 2025-09-24 | Unified geometry + stable selection sync foundation. |
-| 2 – Command Layer & History | ⏳ In Progress | 2025-09-26 | Wrapper commands + executor validation/no-op logging underway. |
+| 2 – Command Layer & History | ⏳ In Progress | 2025-09-26 | Wrapper commands + executor validation/no-op logging + style normalization. |
 | 3 – Model-Driven Selection | ⏳ Pending | — | One-way (store→Fabric) selection model. |
 | 4 – Central Geometry & Hit-Testing | ⏳ Pending | — | Hit-test & marquee via geometry layer. |
 | 5 – Domain Model Adapter | ⏳ Pending | — | POJO scene graph with Fabric adapter. |
@@ -275,4 +283,4 @@ All new geometry-dependent features MUST use geometry helpers—never direct Fab
 
 ---
 
-_Last updated: 2025-09-26 (Batch 5: executor validation, standardized no-op logging, coalescing policy doc, actions thinning pass 1)._
+_Last updated: 2025-09-26 (Batch 6: style payload normalization, items[] only, legacy rejected)._

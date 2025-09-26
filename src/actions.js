@@ -4,20 +4,13 @@ import { dispatch } from './commands/command-bus.js';
 export { alignSelected } from './actions-alignment.js';
 
 /*
-  Batch 5 – Actions Thinning (Hybrid Policy Option B)
-  ---------------------------------------------------
-  - Removed correctness / domain filtering (locked-shape filtering, payload validation).
-  - Command executors (commands-structure.js / commands-style.js / commands-scene.js) are now authoritative.
-  - Retained ONLY lightweight early user-facing no-op logs for UX clarity.
-  - All functions dispatch directly; executors decide actual effect and log standardized no-op reasons.
-  - Future (Phase 2 later batch): May remove even these early logs as we approach fully thin intent registry.
-
-  NOTE:
-  - Selection-dependent actions still read current selection to build an ids array; locked shapes are NOT filtered here.
-  - Executors safely skip locked or ineligible shapes and return null (no history entry) with reason logging.
+  Batch 6 – Style Payload Normalization (items[] only, legacy forms removed)
+  -------------------------------------------------------------------------
+  - setStrokeColorForSelected, setFillColorForSelected, setStrokeWidthForSelected now emit only items[] payloads.
+  - Removed legacy (ids + color/fill/width) command payloads.
+  - Early "no selection" logs remain per Hybrid policy.
+  - All correctness/validation is enforced in command executors.
 */
-
-/* Shape / Structural Intents */
 
 export function addShapeOfType(type, opts = {}) {
   const shapeType = typeof type === 'string' ? type : 'point';
@@ -65,7 +58,6 @@ export function lockSelectedShapes() {
 
 export function unlockSelectedShapes() {
   const selected = getState().selectedShapes || [];
-  // If none selected we intentionally dispatch with empty ids so executor uses fallback logic.
   const ids = selected.map(s => s && s._id).filter(Boolean);
   if (!ids.length) {
     log("INFO", "[actions] No selection – unlocking will target any locked shapes (executor decides)");
@@ -90,7 +82,7 @@ export function resetRotationForSelectedShapes() {
   });
 }
 
-/* Style Intents (selection only; defaults handled elsewhere like toolbar handlers) */
+/* Style Intents (items[] only) */
 
 export function setStrokeColorForSelected(color, options = {}) {
   const selected = getState().selectedShapes || [];
@@ -98,12 +90,13 @@ export function setStrokeColorForSelected(color, options = {}) {
     log("INFO", "[actions] No selection for stroke color");
     return;
   }
+  const items = selected
+    .map(s => s && s._id)
+    .filter(Boolean)
+    .map(id => ({ id, color }));
   dispatch({
     type: 'SET_STROKE_COLOR',
-    payload: {
-      ids: selected.map(s => s && s._id).filter(Boolean),
-      color
-    }
+    payload: { items }
   }, options);
 }
 
@@ -113,12 +106,13 @@ export function setFillColorForSelected(fill, options = {}) {
     log("INFO", "[actions] No selection for fill color");
     return;
   }
+  const items = selected
+    .map(s => s && s._id)
+    .filter(Boolean)
+    .map(id => ({ id, fill }));
   dispatch({
     type: 'SET_FILL_COLOR',
-    payload: {
-      ids: selected.map(s => s && s._id).filter(Boolean),
-      fill
-    }
+    payload: { items }
   }, options);
 }
 
@@ -128,12 +122,13 @@ export function setStrokeWidthForSelected(width, options = {}) {
     log("INFO", "[actions] No selection for stroke width");
     return;
   }
+  const items = selected
+    .map(s => s && s._id)
+    .filter(Boolean)
+    .map(id => ({ id, width }));
   dispatch({
     type: 'SET_STROKE_WIDTH',
-    payload: {
-      ids: selected.map(s => s && s._id).filter(Boolean),
-      width
-    }
+    payload: { items }
   }, options);
 }
 
