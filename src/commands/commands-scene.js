@@ -3,31 +3,40 @@ import {
   getState,
   setImage,
   setSceneName,
-  setSceneLogic
+  setSceneLogic,
+  setSetting
 } from '../state.js';
+import { applyDiagnosticLabelsVisibility } from '../shapes.js';
 
 /*
   Scene-level command executors:
+
   SET_IMAGE
     payload: { url: string|null, imageObj?: HTMLImageElement|null }
-    - Expects caller to supply a preloaded HTMLImageElement when setting (so command runs synchronously & is undoable).
+    - Caller supplies a preloaded HTMLImageElement when setting (so command runs synchronously & is undoable).
     - Clearing: url = null (imageObj ignored)
-    - Inverse restores previous url + imageObj reference (no deep clone; large image data is not duplicated).
+    - Inverse restores previous url + imageObj reference (no deep clone).
+
   SET_SCENE_NAME
     payload: { name: string }
+
   SET_SCENE_LOGIC
-    payload: { logic: string }  (e.g., AND / OR / custom future tokens)
+    payload: { logic: string }  (e.g., AND / OR / future tokens)
+
+  SET_DIAGNOSTIC_LABEL_VISIBILITY
+    payload: { visible: boolean }
+    - Updates settings.showDiagnosticLabels and applies visibility to all existing shapes.
+    - Inverse restores previous boolean.
 */
 
+/* ----------------- SET_IMAGE ----------------- */
 function cmdSetImage(payload) {
   const { url = null, imageObj = null } = payload || {};
   const prevURL = getState().imageURL || null;
   const prevObj = getState().imageObj || null;
 
-  // No-op if nothing changes.
   if ((prevURL || null) === (url || null)) {
-    // If URL unchanged but caller passes a different object we still skip to avoid history noise.
-    return null;
+    return null; // no change
   }
 
   try {
@@ -47,6 +56,7 @@ function cmdSetImage(payload) {
   };
 }
 
+/* ----------------- SET_SCENE_NAME ----------------- */
 function cmdSetSceneName(payload) {
   const { name } = payload || {};
   const next = typeof name === 'string' ? name : '';
@@ -65,6 +75,7 @@ function cmdSetSceneName(payload) {
   };
 }
 
+/* ----------------- SET_SCENE_LOGIC ----------------- */
 function cmdSetSceneLogic(payload) {
   const { logic } = payload || {};
   const next = typeof logic === 'string' && logic ? logic : 'AND';
@@ -83,6 +94,34 @@ function cmdSetSceneLogic(payload) {
   };
 }
 
+/* ----------------- SET_DIAGNOSTIC_LABEL_VISIBILITY ----------------- */
+function cmdSetDiagnosticLabelVisibility(payload) {
+  const visibleRaw = payload ? payload.visible : undefined;
+  const next = !!visibleRaw;
+  const prev = !!getState().settings?.showDiagnosticLabels;
+
+  if (prev === next) return null;
+
+  try {
+    // Update setting first so subsequent logic relying on settings sees new value.
+    setSetting('showDiagnosticLabels', next);
+    applyDiagnosticLabelsVisibility(next);
+    log("INFO", "[commands-scene] Diagnostic labels visibility set", {
+      from: prev,
+      to: next
+    });
+  } catch (e) {
+    log("ERROR", "[commands-scene] Failed applying SET_DIAGNOSTIC_LABEL_VISIBILITY", e);
+    return null;
+  }
+
+  return {
+    type: 'SET_DIAGNOSTIC_LABEL_VISIBILITY',
+    payload: { visible: prev }
+  };
+}
+
+/* ----------------- Dispatcher ----------------- */
 export function executeSceneCommand(cmd) {
   if (!cmd || typeof cmd.type !== 'string') return null;
   const p = cmd.payload || {};
@@ -90,6 +129,7 @@ export function executeSceneCommand(cmd) {
     case 'SET_IMAGE': return cmdSetImage(p);
     case 'SET_SCENE_NAME': return cmdSetSceneName(p);
     case 'SET_SCENE_LOGIC': return cmdSetSceneLogic(p);
+    case 'SET_DIAGNOSTIC_LABEL_VISIBILITY': return cmdSetDiagnosticLabelVisibility(p);
     default: return null;
   }
 }
