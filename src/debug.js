@@ -213,7 +213,6 @@ registerDebugProvider('settingsPanelMetrics', () => {
     }
   };
 
-  // Simple heuristic flags
   metrics.flags = {
     bodyCollapsed: (metrics.metrics.body?.height ?? 0) < 120,
     paneRootEmpty: (paneRoot && paneRoot.children.length === 0),
@@ -233,10 +232,7 @@ registerDebugProvider('tweakpaneStatus', () => {
   if (typeof document === 'undefined') return { error: 'no-dom' };
   let paneType = 'unknown';
   try {
-    // Dynamic import check (avoid bundler tree-shake side effects)
-    // We just test global registry if any (not guaranteed). Fallback: type info unreachable.
-    // Since we ESM import in settings-ui.js, runtime here may not expose Pane; that's fine.
-    // We'll attempt a lazy import only if cheap.
+    // intentionally left minimal; Pane is imported only in settings-ui.js
   } catch {}
   const cssLoaded = [...document.styleSheets].some(s => {
     try { return (s.href || '').includes('tweakpane'); } catch { return false; }
@@ -278,12 +274,17 @@ registerDebugProvider('layoutSnapshot', () => {
  */
 registerDebugProvider('ua', () => {
   if (typeof navigator === 'undefined') return { error: 'no-navigator' };
+  const nav = navigator;
+  const standalone = (nav && typeof nav === 'object' && 'standalone' in nav) ? nav.standalone : false;
+  const touchPoints = (nav && typeof nav === 'object' && 'maxTouchPoints' in nav)
+    ? nav.maxTouchPoints
+    : null;
   return {
-    userAgent: navigator.userAgent,
-    platform: navigator.platform,
-    vendor: navigator.vendor,
-    standalone: (navigator as any).standalone || false,
-    touchPoints: (navigator as any).maxTouchPoints ?? null
+    userAgent: nav.userAgent,
+    platform: nav.platform,
+    vendor: nav.vendor,
+    standalone: !!standalone,
+    touchPoints
   };
 });
 
@@ -443,4 +444,3 @@ export async function runDebugCapture(opts = {}) {
 
   return { snapshot, text };
 }
-
