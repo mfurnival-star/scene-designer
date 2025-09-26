@@ -16,7 +16,7 @@ let detachKeybindings = null;
 // Auto‑force & enforcement guards
 let sidebarAutoForced = false;
 let enforcingSidebar = false;
-const PREVENT_HIDING = true; // hard rule: user cannot fully hide settings sidebar now
+const PREVENT_HIDING = true; // user cannot fully hide settings sidebar now
 
 export function isErrorLogPanelOpen() {
   if (!layout || !layout._panelRefs) return false;
@@ -44,7 +44,6 @@ function ensureSidebarVisibleInitial(reason) {
   if (sidebarAutoForced) return;
   const right = getSetting("showRightSidebarPanel");
   const settings = getSetting("showSettingsPanel");
-  // If either flag is falsy we force them both on
   if (right === false || settings === false || right === undefined || settings === undefined) {
     sidebarAutoForced = true;
     try {
@@ -57,7 +56,6 @@ function ensureSidebarVisibleInitial(reason) {
   }
 }
 
-// Enforce attempts to hide (runtime) by immediately turning flags back on
 function enforceSidebarVisibilityOnSettingChange(key, value) {
   if (!PREVENT_HIDING) return;
   if (key !== "showRightSidebarPanel" && key !== "showSettingsPanel") return;
@@ -145,7 +143,7 @@ function rebuildLayout() {
           width: '28px',
           color: '#2176ff',
           track: '#e0e4ec',
-            radius: '14px',
+          radius: '14px',
           hover: '#0057d8'
         },
         closable: false
@@ -158,8 +156,6 @@ function rebuildLayout() {
     rowContent.push({
       type: 'column',
       width: 30,
-      // Add an informal minWidth hint (MiniLayout may ignore custom prop;
-      // we also enforce via DOM styling after init)
       minWidth: 220,
       content: rightSidebarContent,
       closable: false
@@ -179,7 +175,7 @@ function rebuildLayout() {
         {
           type: 'component',
           componentName: 'ErrorLogPanel',
-          title: 'Error Log',
+            title: 'Error Log',
           height: 18,
           closable: false
         }
@@ -209,19 +205,50 @@ function rebuildLayout() {
   log("INFO", "[layout] Layout initialized");
 }
 
+/**
+ * Updated: Allow Settings panel to grow (flexible height) especially for iOS Safari.
+ * Previous implementation forced flex: 0 0 auto which collapsed the body to header height.
+ * History panel can stay auto-sized unless we later need it flexible.
+ */
 function enforceSidebarDomStyles() {
   try {
     if (!layout || !mlRoot) return;
-    // Find right sidebar panels (heuristic: titles Settings / History)
     const panels = mlRoot.querySelectorAll('.minilayout-panel');
     panels.forEach(p => {
       const header = p.querySelector('.minilayout-panel-header');
       if (!header) return;
-      const txt = header.textContent || '';
-      if (/Settings|History/i.test(txt)) {
+      const txt = (header.textContent || '').trim();
+
+      if (/^Settings$/i.test(txt)) {
+        // Growable flex column
         p.style.minWidth = '220px';
-        p.style.flex = '0 0 auto';
+        p.style.display = 'flex';
+        p.style.flexDirection = 'column';
+        p.style.flex = '1 1 0%';
+        p.style.minHeight = '0';
+        // Panel itself hides overflow; inner scrolling handled by settings-ui container.
         p.style.overflow = 'hidden';
+
+        const body = p.querySelector('.minilayout-panel-body');
+        if (body) {
+          body.style.flex = '1 1 auto';
+          body.style.minHeight = '0';
+          body.style.overflow = 'hidden'; // inner div (#tweakpane-fields-div) scrolls
+        }
+      } else if (/^History$/i.test(txt)) {
+        // Keep a minimum width; allow it to size per layout proportions.
+        p.style.minWidth = '220px';
+        // We purposely do NOT force 0 0 auto anymore; let MiniLayout assigned height stand.
+        if (!p.style.flex || p.style.flex === '0 0 auto') {
+          p.style.flex = '1 1 0%';
+        }
+        p.style.overflow = 'hidden';
+        const body = p.querySelector('.minilayout-panel-body');
+        if (body) {
+          body.style.minHeight = '0';
+          body.style.overflow = 'auto';
+          body.style.WebkitOverflowScrolling = 'touch';
+        }
       }
     });
   } catch (e) {
@@ -239,9 +266,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     log("ERROR", "[layout] Settings load failed; using defaults", e);
   }
 
-  // Force sidebar/settings panel on initial load if hidden
   ensureSidebarVisibleInitial("initial-load");
-
   rebuildLayout();
 
   if (!detachKeybindings) {
