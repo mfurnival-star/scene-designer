@@ -15,6 +15,7 @@
  *   layoutSnapshot         – All MiniLayout panels (header, flex, heights)
  *   ua                     – User agent / platform info
  *   applySettingsPanelFix  – Idempotent live patch (flex + CSS inject)
+ *   copySupport            – Clipboard capability report (async + fallback)
  *
  * NOTE: Keep file <500 lines, avoid heavy work unless provider requested.
  * -----------------------------------------------------------
@@ -25,6 +26,9 @@ import { getState } from './state.js';
 
 const _providers = new Map();
 
+/* -----------------------------------------------------------
+ * Registration API
+ * --------------------------------------------------------- */
 export function registerDebugProvider(name, fn) {
   if (!name || typeof fn !== 'function') {
     log("WARN", "[debug] registerDebugProvider invalid args", { name, fnType: typeof fn });
@@ -36,6 +40,55 @@ export function registerDebugProvider(name, fn) {
 
 export function listDebugProviders() {
   return Array.from(_providers.keys()).sort();
+}
+
+/* -----------------------------------------------------------
+ * Helpers
+ * --------------------------------------------------------- */
+function copyTextRobust(text) {
+  // Returns a Promise resolving to { ok, method, error? }
+  return new Promise(async (resolve) => {
+    if (!text || typeof text !== 'string') {
+      return resolve({ ok: false, method: 'none', error: 'no-text' });
+    }
+
+    // Try async Clipboard API first
+    try {
+      if (typeof navigator !== 'undefined' &&
+          navigator.clipboard &&
+          typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(text);
+        return resolve({ ok: true, method: 'async' });
+      }
+    } catch (e) {
+      // fall through to fallback
+    }
+
+    // Fallback: execCommand('copy')
+    try {
+      if (typeof document !== 'undefined') {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        ta.style.fontSize = '12px';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.selectionStart = 0;
+        ta.selectionEnd = text.length;
+        const ok = document.execCommand && document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (ok) {
+          return resolve({ ok: true, method: 'fallback' });
+        }
+        return resolve({ ok: false, method: 'fallback', error: 'execCommand returned false' });
+      }
+      return resolve({ ok: false, method: 'fallback', error: 'no-document' });
+    } catch (e) {
+      return resolve({ ok: false, method: 'fallback', error: e?.message || 'fallback-failed' });
+    }
+  });
 }
 
 /* -----------------------------------------------------------
@@ -137,12 +190,8 @@ registerDebugProvider('trace', async () => {
 });
 
 /* -----------------------------------------------------------
- * NEW: iOS Safari Settings Panel Diagnostics
+ * iOS Safari Settings Panel Diagnostics
  * --------------------------------------------------------- */
-
-/**
- * Helper: find settings panel root & body safely.
- */
 function findSettingsPanelElements() {
   const container = document.getElementById('settings-panel-container');
   const fields = document.getElementById('tweakpane-fields-div');
@@ -152,9 +201,6 @@ function findSettingsPanelElements() {
   return { container, fields, paneRoot, panel, body };
 }
 
-/**
- * Helper: Ensure flex chain styles for growth (idempotent).
- */
 function ensureFlexGrowth(el, styles) {
   if (!el) return false;
   const applied = [];
@@ -183,10 +229,6 @@ function computeElementMetrics(el) {
   };
 }
 
-/**
- * settingsPanelMetrics
- * - Captures sizing/flex chain + presence flags.
- */
 registerDebugProvider('settingsPanelMetrics', () => {
   if (typeof document === 'undefined') {
     return { error: 'no-dom' };
@@ -224,15 +266,11 @@ registerDebugProvider('settingsPanelMetrics', () => {
   return metrics;
 });
 
-/**
- * tweakpaneStatus
- * - Detects JS constructor, CSS presence, root count.
- */
 registerDebugProvider('tweakpaneStatus', () => {
   if (typeof document === 'undefined') return { error: 'no-dom' };
   let paneType = 'unknown';
   try {
-    // intentionally left minimal; Pane is imported only in settings-ui.js
+    // intentionally minimal; Pane imported only where needed
   } catch {}
   const cssLoaded = [...document.styleSheets].some(s => {
     try { return (s.href || '').includes('tweakpane'); } catch { return false; }
@@ -245,10 +283,6 @@ registerDebugProvider('tweakpaneStatus', () => {
   };
 });
 
-/**
- * layoutSnapshot
- * - Walk all .minilayout-panel elements for comparative sizing.
- */
 registerDebugProvider('layoutSnapshot', () => {
   if (typeof document === 'undefined') return { error: 'no-dom' };
   const panels = [...document.querySelectorAll('.minilayout-panel')];
@@ -268,10 +302,6 @@ registerDebugProvider('layoutSnapshot', () => {
   });
 });
 
-/**
- * ua
- * - Environment / platform info.
- */
 registerDebugProvider('ua', () => {
   if (typeof navigator === 'undefined') return { error: 'no-navigator' };
   const nav = navigator;
@@ -288,13 +318,6 @@ registerDebugProvider('ua', () => {
   };
 });
 
-/**
- * applySettingsPanelFix
- * - Attempts in-place remediation for collapsed Settings panel (iOS Safari).
- * - Injects Tweakpane CSS via CDN if missing (non-destructive).
- * - Ensures panel/body/container/fields are flex growable with min-height:0.
- * - Returns actions performed (idempotent).
- */
 registerDebugProvider('applySettingsPanelFix', async () => {
   if (typeof document === 'undefined') return { error: 'no-dom' };
   const actions = [];
@@ -302,7 +325,6 @@ registerDebugProvider('applySettingsPanelFix', async () => {
 
   if (!panel) return { error: 'panel-not-found' };
 
-  // 1. Inject CSS if missing
   const hasTPcss = [...document.styleSheets].some(s => {
     try { return (s.href || '').includes('tweakpane'); } catch { return false; }
   });
@@ -324,7 +346,6 @@ registerDebugProvider('applySettingsPanelFix', async () => {
     actions.push('css-already-present');
   }
 
-  // 2. Ensure panel flex growth
   if (ensureFlexGrowth(panel, {
     display: 'flex',
     flexDirection: 'column',
@@ -333,7 +354,6 @@ registerDebugProvider('applySettingsPanelFix', async () => {
     overflow: 'visible'
   })) actions.push('panel-flex-adjusted');
 
-  // 3. Body growth
   if (body && ensureFlexGrowth(body, {
     flex: '1 1 auto',
     minHeight: '0',
@@ -343,7 +363,6 @@ registerDebugProvider('applySettingsPanelFix', async () => {
     flexDirection: 'column'
   })) actions.push('panel-body-flex-adjusted');
 
-  // 4. Container
   if (container && ensureFlexGrowth(container, {
     flex: '1 1 auto',
     minHeight: '0',
@@ -352,7 +371,6 @@ registerDebugProvider('applySettingsPanelFix', async () => {
     overflow: 'hidden'
   })) actions.push('container-flex-adjusted');
 
-  // 5. Fields
   if (fields && ensureFlexGrowth(fields, {
     flex: '1 1 auto',
     minHeight: '0',
@@ -360,7 +378,6 @@ registerDebugProvider('applySettingsPanelFix', async () => {
     WebkitOverflowScrolling: 'touch'
   })) actions.push('fields-flex-adjusted');
 
-  // 6. Force a reflow read (diagnostic)
   const beforeAfter = {
     panelH: panel.offsetHeight,
     bodyH: body?.offsetHeight ?? null,
@@ -368,7 +385,6 @@ registerDebugProvider('applySettingsPanelFix', async () => {
     paneRootH: paneRoot?.offsetHeight ?? null
   };
 
-  // 7. If paneRoot exists but zero height, add temp min-height
   if (paneRoot && paneRoot.offsetHeight < 40) {
     paneRoot.style.minHeight = '160px';
     actions.push('paneRoot-minHeight-added');
@@ -377,6 +393,33 @@ registerDebugProvider('applySettingsPanelFix', async () => {
   return {
     actions,
     metrics: beforeAfter
+  };
+});
+
+/* -----------------------------------------------------------
+ * Clipboard capability provider
+ * --------------------------------------------------------- */
+registerDebugProvider('copySupport', () => {
+  if (typeof window === 'undefined') {
+    return { error: 'no-window' };
+  }
+  let secureContext = false;
+  let asyncClipboard = false;
+  let fallbackExecCommand = false;
+  try { secureContext = !!window.isSecureContext; } catch {}
+  try { asyncClipboard = !!(navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function'); } catch {}
+  try {
+    fallbackExecCommand = !!(document && document.queryCommandSupported && document.queryCommandSupported('copy'));
+  } catch {}
+  let predictedMethod = 'none';
+  if (asyncClipboard) predictedMethod = 'async';
+  else if (fallbackExecCommand) predictedMethod = 'fallback';
+
+  return {
+    secureContext,
+    asyncClipboard,
+    fallbackExecCommand,
+    predictedMethod
   };
 });
 
@@ -429,18 +472,21 @@ export async function runDebugCapture(opts = {}) {
 
   if (logIt) log("INFO", "[debug] snapshot", snapshot);
 
+  let copyResult = null;
   if (copy && text) {
     try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        log("INFO", "[debug] snapshot copied to clipboard");
+      copyResult = await copyTextRobust(text);
+      if (copyResult.ok) {
+        log("INFO", "[debug] snapshot copied", { method: copyResult.method });
       } else {
-        log("WARN", "[debug] clipboard API unavailable");
+        log("WARN", "[debug] snapshot copy failed", copyResult);
       }
     } catch (e) {
-      log("WARN", "[debug] clipboard copy failed", e);
+      copyResult = { ok: false, method: 'error', error: e?.message || 'unexpected-copy-error' };
+      log("WARN", "[debug] snapshot copy threw", e);
     }
   }
 
-  return { snapshot, text };
+  return { snapshot, text, copyResult };
 }
+
