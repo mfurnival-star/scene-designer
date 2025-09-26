@@ -1,5 +1,5 @@
 import { log } from './log.js';
-import { setImage, getState } from './state.js';
+import { getState } from './state.js';
 import {
   addShapeOfType,
   deleteSelectedShapes,
@@ -8,7 +8,9 @@ import {
   unlockSelectedShapes,
   resetRotationForSelectedShapes,
   alignSelected,
-  setStrokeWidthForSelected
+  setStrokeWidthForSelected,
+  setSceneImage,
+  clearSceneImage
 } from './actions.js';
 import { selectAllShapes } from './selection.js';
 import { installColorPickers } from './toolbar-color.js';
@@ -164,20 +166,20 @@ export function attachToolbarHandlers(refs) {
       };
       reader.onload = function (ev) {
         try {
-          const dataUrl = ev?.target?.result;
-          if (!dataUrl) {
-            log("ERROR", "[toolbar-handlers] FileReader produced empty result");
-            return;
-          }
-          const imgObj = new Image();
-          imgObj.onload = function () {
-            setImage(dataUrl, imgObj);
-            log("INFO", "[toolbar-handlers] Image set from upload", { size: file.size, name: file.name });
-          };
-          imgObj.onerror = (err) => {
-            log("ERROR", "[toolbar-handlers] HTMLImageElement error (upload data URL)", err);
-          };
-          imgObj.src = dataUrl;
+            const dataUrl = ev?.target?.result;
+            if (!dataUrl) {
+              log("ERROR", "[toolbar-handlers] FileReader produced empty result");
+              return;
+            }
+            const imgObj = new Image();
+            imgObj.onload = function () {
+              setSceneImage(dataUrl, imgObj);
+              log("INFO", "[toolbar-handlers] Image set from upload (command)", { size: file.size, name: file.name });
+            };
+            imgObj.onerror = (err) => {
+              log("ERROR", "[toolbar-handlers] HTMLImageElement error (upload data URL)", err);
+            };
+            imgObj.src = dataUrl;
         } catch (e2) {
           log("ERROR", "[toolbar-handlers] Upload onload handler failed", e2);
         }
@@ -194,8 +196,8 @@ export function attachToolbarHandlers(refs) {
     try {
       const filename = e?.target?.value || "";
       if (!filename) {
-        setImage(null, null);
-        log("INFO", "[toolbar-handlers] Server image cleared");
+        clearSceneImage();
+        log("INFO", "[toolbar-handlers] Server image cleared (command)");
         return;
       }
 
@@ -215,8 +217,8 @@ export function attachToolbarHandlers(refs) {
 
       const blob = await resp.blob();
       loadImageFromBlob(blob, (imgEl, canonicalUrl) => {
-        setImage(canonicalUrl, imgEl);
-        log("INFO", "[toolbar-handlers] Server image loaded", {
+        setSceneImage(canonicalUrl, imgEl);
+        log("INFO", "[toolbar-handlers] Server image loaded (command)", {
           canonicalUrl,
           w: imgEl.naturalWidth,
           h: imgEl.naturalHeight
@@ -562,7 +564,7 @@ export function attachToolbarHandlers(refs) {
   on(importJsonBtn, 'click', onImportJsonClick);
   on(importJsonFile, 'change', onImportJsonFileChange);
 
-  log("INFO", "[toolbar-handlers] Toolbar handlers attached");
+  log("INFO", "[toolbar-handlers] Toolbar handlers attached (image commands wired)");
   return function detach() {
     try {
       handlers.forEach(off => { try { off(); } catch {} });

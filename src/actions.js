@@ -2,6 +2,13 @@ import { log } from './log.js';
 import { getState } from './state.js';
 import { dispatch } from './commands/command-bus.js';
 
+/*
+  NOTE (Phase 2 interim):
+  This file still contains some filtering / validation logic (locked shape checks, etc.).
+  Full refactor to make these pure thin intent wrappers is scheduled for a later batch
+  (Step 5 in the Phase 2 completion plan).
+*/
+
 export function addShapeOfType(type, opts = {}) {
   const valid = new Set(["point", "rect", "circle", "ellipse"]);
   const shapeType = valid.has(type) ? type : "point";
@@ -139,6 +146,39 @@ export function setStrokeWidthForSelected(width, options = {}) {
   dispatch({
     type: 'SET_STROKE_WIDTH',
     payload: { ids, width: w }
+  }, options);
+}
+
+/* Scene-level intent wrappers (new) */
+
+export function setSceneImage(url, imageObj, options = {}) {
+  // Accept null to clear
+  dispatch({
+    type: 'SET_IMAGE',
+    payload: { url: url || null, imageObj: url ? imageObj || null : null }
+  }, options);
+}
+
+export function clearSceneImage(options = {}) {
+  dispatch({
+    type: 'SET_IMAGE',
+    payload: { url: null, imageObj: null }
+  }, options);
+}
+
+export function setSceneName(name, options = {}) {
+  const n = typeof name === 'string' ? name : '';
+  dispatch({
+    type: 'SET_SCENE_NAME',
+    payload: { name: n }
+  }, options);
+}
+
+export function setSceneLogic(logic, options = {}) {
+  const l = typeof logic === 'string' && logic ? logic : 'AND';
+  dispatch({
+    type: 'SET_SCENE_LOGIC',
+    payload: { logic: l }
   }, options);
 }
 
