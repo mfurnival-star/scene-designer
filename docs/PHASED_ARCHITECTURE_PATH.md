@@ -80,7 +80,7 @@ Documentation:
 ### Phase 2 Completion Criteria (All must be true)
 1. Coverage: Every in-scope mutation path uses a command (no direct state mutation from UI handlers).
 2. Inversion: Each command returns a valid inverse command pushed onto undo stack (or documented no-op).
-3. Consistency: `actions.js` contains only intent dispatch (no filtering, validation, or locked-shape logic).
+3. Consistency: `actions.js` contains only intent dispatch (no correctness‑critical logic); authoritative validation in command executors.
 4. Selection: UI select-all and deselect-all produce history entries (SELECT_ALL / DESELECT_ALL or SET_SELECTION wrapper).
 5. Style Coalescing: Color / fill / stroke width drags each produce ≤1 history frame per continuous interaction.
 6. Image & Metadata: SET_IMAGE (and CLEAR_IMAGE if separate), SET_SCENE_NAME, SET_SCENE_LOGIC, SET_DIAGNOSTIC_LABEL_VISIBILITY are undoable.
@@ -143,7 +143,7 @@ New / Missing:
 - [x] SET_SCENE_LOGIC
 - [x] SET_DIAGNOSTIC_LABEL_VISIBILITY
 - [x] SELECT_ALL (wrapper) / DESELECT_ALL (wrapper)
-- [ ] Actions refactor: remove filtering / validation logic from actions.js
+- [ ] Actions refactor (policy adopted Hybrid Option B; mechanical thinning & migration of remaining validation to commands still pending)
 - [ ] Style command payload normalization (unified structure, documented)
 - [ ] Coalescing policy doc comment (command-bus.js header)
 - [ ] Inversion test harness script (dev/commands-inversion-test.js)
@@ -167,12 +167,18 @@ Docs & Manifest:
 - BATCH (if implemented) bypasses time window and commits once per meta-command.
 - Selection commands (SELECT_ALL / DESELECT_ALL / SET_SELECTION) never coalesce (explicit user intent).
 
+### Policy Update (2025-09-26)
+Rule 8 revised to Hybrid Option B:  
+- Command executors own authoritative validation, normalization, locked-shape filtering, inversion guarantees.  
+- actions.js may emit early no-op user feedback logs but must not contain correctness-critical logic.  
+- Completion of “Actions refactor” requires: (a) executor parity audit, (b) removal or downgrade of redundant filtering in actions.js, (c) standardized no-op logging pattern.
+
 ### Planned Incremental Batches (Subject to adjustment)
 1. (Done) Scope lock + checklist (no behavior change).
 2. (Done) Implement SET_IMAGE (+ inverse) & SET_SCENE_NAME / SET_SCENE_LOGIC.
 3. (Done) Add SET_DIAGNOSTIC_LABEL_VISIBILITY command.
 4. (Done) Selection wrappers SELECT_ALL / DESELECT_ALL; toolbar now uses SELECT_ALL.
-5. (Pending) Refactor actions.js (strip filtering logic); migrate validation into command executors; consistent no-op logging.
+5. (Pending) Actions thinning (per Hybrid Option B) + standardized no-op logs.
 6. (Pending) Style command payload normalization + command-bus coalescing header comments.
 7. (Pending) Inversion test harness (dev script) + baseline tests.
 8. (Pending) Implement (or explicitly defer) BATCH; update docs accordingly.
@@ -235,7 +241,7 @@ Goals:
 | Phase | Status | Date | Summary |
 |-------|--------|------|---------|
 | 1 – Stabilize Selection & Geometry | ✅ Complete | 2025-09-24 | Unified geometry + stable selection sync foundation. |
-| 2 – Command Layer & History | ⏳ In Progress | 2025-09-26 | Selection wrapper commands added; actions refactor & harness pending. |
+| 2 – Command Layer & History | ⏳ In Progress | 2025-09-26 | Selection wrapper commands + policy shift (Hybrid B) adopted. |
 | 3 – Model-Driven Selection | ⏳ Pending | — | One-way (store→Fabric) selection model. |
 | 4 – Central Geometry & Hit-Testing | ⏳ Pending | — | Hit-test & marquee via geometry layer. |
 | 5 – Domain Model Adapter | ⏳ Pending | — | POJO scene graph with Fabric adapter. |
@@ -269,4 +275,4 @@ All new geometry-dependent features MUST use geometry helpers—never direct Fab
 
 ---
 
-_Last updated: 2025-09-26 (Batch 4: SELECT_ALL / DESELECT_ALL implemented & checklist updated)_
+_Last updated: 2025-09-26 (Policy update: Hybrid Option B for Rule 8; actions refactor now “policy adopted, thinning pending”)._

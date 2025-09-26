@@ -1,121 +1,176 @@
-# Scene Designer – Module Manifest (Concise)
+# Scene Designer – Manifest & Core Engineering Rules
 
-Purpose
-- Curated, human-readable list of modules and facades in this repo.
-- Keep it short: what exists, where to import from, and recent changes.
-- For rules/philosophy, see SCENE_DESIGNER_MANIFESTO.txt.
+This manifesto captures the living engineering rules, architectural intent, and current transitional policies.  
+It supersedes any stale wording embedded in earlier batch notes or comments.
 
-Update Policy
-- Edit this file when modules are added/removed/renamed.
-- Keep entries brief; link to source when needed.
+---
 
-**Comment Policy:**  
-- During development, header and function-level comments may be omitted from source files to reduce file size and speed iteration.  
-- Before production/release, restore concise summary headers and key function comments as per engineering rules.
+## Core Principles (Stable)
 
-Facades (public import paths)
-- ./canvas.js → buildCanvasPanel (delegates to canvas-core.js)
-- ./toolbar.js → buildCanvasToolbarPanel (delegates to toolbar-panel.js)
-- ./selection.js → public selection API (from selection-core.js)
-- ./settings.js → core + UI (from settings-core.js, settings-ui.js)
-- ./shapes.js → shape helpers/factories (from shapes-core.js, shapes-point.js)
+1. ES Modules Only  
+   All runtime code is authored as ESM. No globals, no implicit window pollution (temporary exception: Console.Re CDN until ESM build is available).
 
-Core Modules
-- log.js                      – central logger (ESM)
-- state.js                    – Zustand-style store and mutators
-- fabric-wrapper.js           – ESM wrapper for Fabric constructors (exports Ellipse)
+2. Real Exports / Real Imports  
+   Every import must resolve to a concrete export. Dead or speculative imports are removed immediately.
 
-Commands
-- commands/command-bus.js     – command history bus: dispatch, undo/redo, subscriptions
-- commands/commands.js        – core command implementations (add/delete/duplicate/selection)
+3. Incremental, Reviewable Batches  
+   - Deliver complete files (never snippets) one at a time.  
+   - Each batch lists all affected files up-front; requester confirms before next file.  
+   - src/modules.index.md is updated whenever a module is added / removed / renamed (structure visibility is a first-class requirement).
 
-Geometry
-- geometry/selection-rects.js – centralized geometry for selection hulls, overlays, alignment
-- geometry/shape-rect.js      – (NEW) unified single-shape bounding box + center + aspectRatio + outerRadius (Phase 1)
+4. File Size & Cohesion  
+   - Soft cap ≈500 lines per file.  
+   - Split when a file begins mixing orthogonal concerns or nears the cap.  
+   - Splits must move logic atomically with updated imports and index entry.
 
-Canvas
-- canvas-core.js              – Fabric canvas creation, image, sync, overlays (MiniLayout resize API)
-- canvas-events.js            – Fabric selection sync → store selection (ring buffer trace)
-- canvas-constraints.js       – movement clamping + multi-drag lock guard (idempotent, now uses unified single-shape geometry)
-- selection-outlines.js       – overlay painter for multi-select hull/boxes
-- loupe.js                    – magnifier overlay (independent overlay canvas; DPR/zoom-aware)
-- loupe-controller.js         – attaches loupe to selected Point center via settings (loupeEnabled/size/magnification/crosshair)
+5. Logging Discipline  
+   - Use log(level, message, meta?) from log.js.  
+   - Levels: ERROR, WARN, INFO, DEBUG.  
+   - No direct console.* usage outside the logger (except unavoidable third‑party internals).
 
-Toolbar
-- toolbar-panel.js            – assemble styles, DOM, handlers, state sync
-- toolbar-styles.js           – injects toolbar CSS (two-row layout)
-- toolbar-dom.js              – renders toolbar DOM; returns element refs (Debug button, Ellipse option)
-- toolbar-handlers.js         – wires events; actions/selection; Pickr; Debug snapshot button
-- toolbar-state.js            – enable/disable logic; scale sync
-- toolbar-color.js            – Pickr integration (stroke hex, fill hex+alpha)
+6. Comment Policy (Development vs Pre‑Release)  
+   - During active iteration: minimal top-level summaries; function comments optional.  
+   - Prior to release: restore concise module headers + key function doc comments (public API, side effects, tricky inversion logic).  
+   - Naming + logging must keep code understandable even when comments are lean.
 
-Selection
-- selection-core.js           – single/multi selection; transformer lifecycle (stroke fix removed – now transform driven)
-- transformer.js              – attach/detach/update Fabric controls (circle uniform scaling defensive guard added)
-- (uses geometry helpers indirectly via consuming modules)
+7. State Management & Purity of Domain  
+   - Central mutable store (state.js) provides shape list, selection, image metadata, settings, scene metadata.  
+   - No hidden singletons; all mutation through exported store functions or command execution paths.  
+   - UI does not directly mutate store state (must dispatch intents/commands).
 
-Shapes
-- shapes-core.js              – rect / circle / ellipse factories; colors; stroke width; labels; initial placement clamp; transform-based stroke normalization
-- shapes-point.js             – point reticle factory and variants
-- shape-defs.js               – per-shape transform/edit capabilities (ellipse added; circle aspect-lock clarified)
-- shape-state.js              – per-shape state machine (selected/dragging/locked)
+8. Separation of Concerns (UPDATED – Option B Hybrid)  
+   Previous wording (“all business logic lives in actions.js”) is superseded.  
+   a. UI components / handlers emit intents only (via actions.js wrappers or direct command dispatch).  
+   b. Domain & business logic (validation, normalization, locked-shape filtering, command inversion guarantees) resides in command executors (commands/*).  
+   c. actions.js is a transitional thin *ergonomic* layer: it may perform lightweight, non-authoritative early no-op checks (e.g., “Nothing selected”) and user-facing logs, but MUST NOT contain correctness‑critical logic whose omission would change the outcome if a command were dispatched directly.  
+   d. Over Phases 2→3 actions.js will be mechanically thinned. Long term it may collapse into a generated intent registry or direct dispatch sites.  
+   e. Any logic duplicated between actions.js and a command executor must treat the command executor as authoritative (executor cannot assume prior filtering occurred).  
 
-Actions
-- actions.js                  – intent dispatcher for add/delete/duplicate via command bus; other actions unchanged
-- actions-alignment.js        – alignSelected(mode) relative to selection hull only
+9. Command-Centric Mutation  
+   - Every user-visible state change (in-scope for undo) is expressed as a reversible command returning an inverse.  
+   - Commands may no-op (return null) when no state change occurs.  
+   - Inversion must be explicit and side-effect safe (no hidden dependency on transient mutable objects unless documented).
 
-Settings
-- settings-core.js            – registry, persistence, side effects (logging, console)
-  - Includes loupe controls: loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair
-- settings-ui.js              – Tweakpane panel binding to settings
+10. Coalescing & History Integrity  
+    - High-frequency adjustments (color drags, numeric scrubs) use coalesceKey + time window semantics.  
+    - Explicit discrete intents (selection wrappers, add/delete, alignment, gesture aggregate) never coalesce.  
+    - Inverse commands must not merge with unrelated history frames.
 
-Layout / Panels / Diagnostics
-- layout.js                   – MiniLayout bootstrap, panel wiring
-- errorlog.js                 – passive Error Log panel (Console.Re streaming in use)
-- global-errors.js            – window error/unhandledrejection → logger
-- debug.js                    – Debug Snapshot Collector (direct selection trace + tolerant bleed + unified geometry)
-- scenario-runner.js          – scriptable scenarios for dev/QA
-- dev/geometry-sanity.js      – (DEV) compares unified geometry vs Fabric boundingRect for validation
+11. Geometry Single Source of Truth  
+    - geometry/shape-rect.js defines canonical per-shape bbox/center/aspect/outerRadius.  
+    - Consumers (alignment, constraints, diagnostics) must not call Fabric boundingRect directly except where ActiveSelection hulls remain a transitional exception.
 
-MiniLayout (split)
-- minilayout-core.js          – layout engine (panel resizing API)
-- minilayout-splitter-persist.js – splitter + size persistence
-- minilayout.js               – facade export { MiniLayout }
-- minilayout-ui.js            – advanced UI helpers (splitters/tabs/ARIA)
-- minilayout.css              – base styles
-- minilayout.DOCS.md          – docs
+12. Deterministic Undo / Redo  
+    - Undoing a full forward command chain restores prior canonical fields (shape transforms, style values, selection set, scene metadata, background image ref) within documented numeric tolerances.  
+    - A test harness (Phase 2 deliverable) validates forward + inversion equivalence.
 
-Other Notes
-- Console.Re remote logging is documented in README and Manifesto (temporary CDN exception).
-- Index.html should inject the Console.Re connector only if remote logging is desired.
+13. Selection Evolution (Phase-Aware)  
+    - Phase 2: Dual path (Fabric active selection ↔ store) with suppression tokens and wrapper commands (SELECT_ALL / DESELECT_ALL).  
+    - Phase 3: Store-authoritative, Fabric becomes a visual projection only.
 
-Recent Changes (brief)
-- 2025-09-24 (Phase 2 – Step A kickoff)
-  - Added commands/command-bus.js (dispatch, undo/redo, subscribers).
-  - Added commands/commands.js (ADD_SHAPE/ADD_SHAPES/DELETE_SHAPES/DUPLICATE_SHAPES/SET_SELECTION).
-  - actions.js now dispatches commands for add/delete/duplicate.
-- 2025-09-24 (Loupe Overlay)
-  - Added loupe.js (DPR/zoom-aware magnifier overlay) and loupe-controller.js (anchors to selected Point via settings).
-  - settings-core.js: added loupeEnabled, loupeSizePx, loupeMagnification, loupeCrosshair.
-  - canvas-core.js: wires loupe-controller during panel init/cleanup.
-- 2025-09-24 (Phase 1 Completion – Geometry & Selection Stability)
-  - GEO-UNIFY: Added geometry/shape-rect.js – single source for bounding box, center, aspectRatio, outerRadius.
-  - CONSTRAINTS-GEOM: canvas-constraints.js now uses getShapeBoundingBox for single shapes (ActiveSelection hull still Fabric fallback).
-  - DEBUG-GEOM: debug.js shape summaries now reference unified geometry (adds aspectRatio, outerRadius, geometrySource).
-  - CIRCLE-GUARD: transformer.js defensive uniform scaling guard for circle (lockUniScaling + scale normalization).
-  - STROKE-OPT: shapes-core.js + selection-core.js reworked so stroke width reapplies only after actual scale/rotate (transform tracking via _pendingStrokeWidthReapply).
-  - SEL-CLEAN: selection-core.js removed unconditional stroke normalization logic.
-  - DEV-SANITY: dev/geometry-sanity.js script validates unified geometry vs Fabric boundingRect (tolerance-based diff logging).
-  - Phase 1 officially marked COMPLETE (see PHASED_ARCHITECTURE_PATH.md progress section).
-- 2025-09-24 (earlier same day)
-  - EVT-TRACE: canvas-events.js ring buffer (selectionEventTrace) for created/updated/cleared + blank clears (suppression flags, tokens, prev/next IDs) with enforced ActiveSelection visuals (hasControls=false).
-  - DBG-05: debug.js → debug-snapshot-5 (direct trace ingestion, legacy merge, scaled dimensions, tolerant bleed evaluation, unified selectionTrace).
-  - SHP-CLAMP: shapes-core.js clamps initial Rect/Circle placement (now also Ellipse) to non-negative coordinates.
-  - CONSTRAINTS-PATCH: canvas-constraints.js idempotent/non-destructive (no blanket canvas.off('selection:*')), fixing multi-select deletion mismatch.
-  - MULTI-DELETE-FIX: Store/Fabric selection sync stabilized—Delete removes exactly the visually selected set.
-  - SHP-ELLIPSE: Added Ellipse shape (rotatable, free aspect, 8 anchors) – fabric-wrapper.js exports Ellipse, shape-defs.js entry, shapes-core.js factory makeEllipseShape(), actions.js add/duplicate support, toolbar-dom.js option.
-  - SHP-CIRCLE-LOCK: Circle behavior clarified/enforced (non-rotatable, aspect-ratio locked).
+14. Background Image Adaptation  
+    - Canvas dimensions adapt to image (within max constraints).  
+    - Shape movement / alignment respects image bounds when clamping is enabled.
 
-How to add here
-- When you add/rename/remove a module: update the relevant section above and keep the line short.
-- If you add a new facade, list it in “Facades (public import paths)”.
+15. Diagnostic Layers Are Optional Visuals  
+    - No core domain logic depends on debug overlays or diagnostic labels.  
+    - Their visibility toggles must be undoable once command-scoped (implemented).
+
+16. Consistent Lock Semantics  
+    - Locked shapes remain selectable (for inclusion context) but invariant under transform, style changes, or movement commands.  
+    - Commands silently skip locked shapes while recording only effective changes.
+
+17. Performance vs Clarity  
+    - Micro-optimizations are deferred unless a profiler or log points to a concrete bottleneck.  
+    - Readability, testability, and inversion correctness take precedence.
+
+18. Progressive Domain Extraction  
+    - Later phases introduce a pure POJO scene graph; Fabric becomes a render adapter.  
+    - Early code must avoid leaking Fabric-specific assumptions into command or geometry layers.
+
+19. Strict No Hidden Side Effects  
+    - Command executors mutate only intended state; they do not implicitly adjust unrelated settings.  
+    - Any multi-field mutation must be captured in a single command payload for atomic inversion.
+
+20. Explicit Deferral  
+    - Anything deferred (BATCH meta-command, marquee selection, advanced snapping, CRDT strategy) is labeled in docs with rationale, never silently postponed.
+
+---
+
+## Phase 2 Policy: Command-Centric Domain Logic (2025-09-26 Update)
+
+Context: We are mid-migration from an actions-heavy model to a command-authoritative model.  
+Decision: Adopt Hybrid Option B (see Rule 8) to accelerate consolidation while retaining low-friction UI logging.
+
+Key Points:
+- actions.js may still emit user-friendly early INFO/WARN logs and short-circuit trivial empty intents.
+- All permission / validity / normalization (locked filtering, structural shape availability, style value bounds) is (or will be) enforced again inside command executors, ensuring correctness even if future callers bypass actions.js.
+- As thinning proceeds, any early filtering left in actions.js must be duplicated (or safely revalidated) in the command executor until fully removed.
+
+Planned Mechanical Steps (Remaining in Phase 2):
+1. Audit structural & style executors for authoritative validation parity (log standardized no-op reasons).  
+2. Remove or downgrade redundant filtering from actions.js (retain only cosmetic early messages).  
+3. Document standardized no-op log shape (e.g., INFO code + reason token) for inversion harness diagnostics.  
+4. Update PHASED_ARCHITECTURE_PATH.md checklist to mark policy adoption (done) and track mechanical thinning completion.
+
+Success Criterion:
+- A direct dispatch({type: X, payload:...}) path yields identical state mutations & inverses whether or not the equivalent actions.js wrapper was used.
+
+---
+
+## Transitional Notes
+
+- Legacy wording referencing “all business logic in actions.js” should be treated as historical context only.  
+- New commands MUST include an inverse or return null (explicit no-op) and log a concise reason if skipped.  
+- Any temporary duplication (e.g., locked filtering) must not diverge; command executors win.
+
+---
+
+## File / Module Manifest (Abbreviated)
+
+(For a fuller structural index use src/modules.index.md; this section is intentionally short.)
+
+Facades:
+- canvas.js, toolbar.js, selection.js, settings.js, shapes.js
+
+Key Domains:
+- Command Layer: commands/command-bus.js, commands/commands-*.js
+- Geometry: geometry/shape-rect.js, geometry/selection-rects.js
+- Selection Infrastructure: selection-core.js, canvas-events.js
+- Rendering & Canvas Integration: canvas-core.js (+ constraints, outlines, transformer, loupe)
+- Shapes & Styling: shapes-core.js, shapes-point.js, shape-defs.js
+- State & Settings: state.js, settings-core.js, settings-ui.js
+- Tooling / Diagnostics: debug.js, dev/geometry-sanity.js, history-panel.js
+
+---
+
+## Change Log (Policy Relevant Excerpts)
+
+2025-09-26  
+- Adopted Hybrid Separation (Rule 8 Option B).  
+- Added diagnostic labels visibility command.  
+- Added SELECT_ALL / DESELECT_ALL wrapper commands (history-backed).  
+
+2025-09-24  
+- Phase 1 completed (geometry & selection stability).  
+- Core command bus and initial command set established.  
+- Loupe overlay + controller integrated.
+
+---
+
+## Enforcement & Review
+
+- Each batch reviewer confirms: (a) commands enforce domain constraints, (b) no UI mutation bypass, (c) modules.index.md updated if structural changes occurred, (d) rule deviations documented.  
+- Divergences require inline TODO with date & rationale plus entry in PHASED_ARCHITECTURE_PATH.md deferral list if not resolved in the same batch.
+
+---
+
+## Future Rule Evolution (Planned)
+
+- Introduce explicit tolerance constants module for geometric & float comparison (undo equivalence tests).  
+- Formalize command metadata (friendly labels, categories) for history panel enrichment (Phase 2 late / early Phase 3).  
+- Replace actions.js with a declarative intent map once selection becomes store-authoritative (Phase 3+).  
+
+---
+
+_Last updated: 2025-09-26 (Rule 8 Hybrid Policy Adoption – Option B)_
