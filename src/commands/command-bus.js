@@ -1,6 +1,54 @@
 import { log } from '../log.js';
 import { executeCommand } from './commands.js';
 
+/*
+  Command Bus
+  -----------
+  Responsibilities:
+    - Dispatch commands through layered executors (scene → structure → style).
+    - Capture inverse commands onto the undo stack (history).
+    - Provide redo stack management.
+    - Implement coalescing for high‑frequency adjustments (color drags, fill alpha drags,
+      stroke width scrubs, numeric scrubs) via (coalesceKey, coalesceWindowMs).
+    - Notify subscribers on any history-affecting event.
+
+  Coalescing Policy (Phase 2 – see docs/PHASED_ARCHITECTURE_PATH.md):
+    - A dispatch may include options: { coalesceKey: string, coalesceWindowMs: number }.
+    - If a new command of the SAME type AND SAME coalesceKey arrives within the
+      specified window (default ~800ms unless overridden), we DO NOT push a new undo frame.
+      Instead we extend the coalescing window timestamp (__coalesceAt) on the existing frame.
+    - The first command in a coalesced series pushes the inverse; subsequent
+      coalesced commands rely on that original inverse to restore pre-series state.
+    - Discrete intents (selection wrapper commands, structural add/delete/duplicate,
+      alignment, transforms aggregate, scene metadata changes) should NOT use coalescing.
+    - Coalescing is opt-in only (absence of coalesceKey disables it).
+    - Undoing a coalesced frame reverts all merged adjustments in one step.
+    - Redo is symmetrical.
+    - A coalesced history frame stores metadata:
+         __coalesceKey  – string key
+         __cmdType      – forward command type
+         __coalesceAt   – last updated timestamp (ms since epoch)
+    - Any new dispatch that coalesces clears the redo stack (new forward path).
+    - Null inverse (executor returned null) → no history update, no coalescing.
+
+  Standardized No-op Logging:
+    - Executors themselves log no-op reason tokens (NO_CHANGE, NO_TARGETS, etc.).
+    - Command bus remains agnostic; it only records non-null inverses.
+
+  Edge Cases:
+    - If coalesceKey changes or window expires, a new frame is created.
+    - If forward command type differs (even with same key) we DO NOT coalesce.
+
+  Public API:
+    - dispatch(cmd, options?)
+    - undo()
+    - redo()
+    - canUndo(), canRedo()
+    - clearHistory()
+    - getHistorySnapshot()
+    - subscribeHistory(listener)
+*/
+
 const undoStack = [];
 const redoStack = [];
 const listeners = [];
@@ -15,12 +63,11 @@ function notify(event, extra = {}) {
 
 function canCoalesce(top, key, type, windowMs) {
   if (!top || !key) return false;
-  const sameKey = top.__coalesceKey === key;
-  const sameType = top.__cmdType === type;
-  const within = typeof top.__coalesceAt === 'number'
-    ? (Date.now() - top.__coalesceAt) <= windowMs
-    : false;
-  return sameKey && sameType && within;
+  if (top.__coalesceKey !== key) return false;
+  if (top.__cmdType !== type) return false;
+  if (typeof top.__coalesceAt !== 'number') return false;
+  const age = Date.now() - top.__coalesceAt;
+  return age <= windowMs;
 }
 
 export function dispatch(cmd, options = {}) {
@@ -29,24 +76,32 @@ export function dispatch(cmd, options = {}) {
     return null;
   }
 
-  const key = typeof options.coalesceKey === 'string' && options.coalesceKey ? options.coalesceKey : null;
-  const windowMs = Number(options.coalesceWindowMs) > 0 ? Number(options.coalesceWindowMs) : 800;
+  const key = (typeof options.coalesceKey === 'string' && options.coalesceKey.trim())
+    ? options.coalesceKey.trim()
+    : null;
+  const windowMs = Number(options.coalesceWindowMs) > 0
+    ? Number(options.coalesceWindowMs)
+    : 800;
 
   try {
     const inverse = executeCommand(cmd);
 
     if (inverse && typeof inverse.type === 'string') {
       if (key && canCoalesce(undoStack[undoStack.length - 1], key, cmd.type, windowMs)) {
+        // Extend existing coalesced frame window
         const top = undoStack[undoStack.length - 1];
         top.__coalesceAt = Date.now();
+        // On any successful forward command redo path is invalidated
         redoStack.length = 0;
       } else if (key) {
+        // Start a new coalesced frame
         inverse.__coalesceKey = key;
         inverse.__cmdType = cmd.type;
         inverse.__coalesceAt = Date.now();
         undoStack.push(inverse);
         redoStack.length = 0;
       } else {
+        // Normal (non-coalesced) history frame
         undoStack.push(inverse);
         redoStack.length = 0;
       }

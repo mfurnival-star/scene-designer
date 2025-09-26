@@ -90,16 +90,16 @@ Documentation:
 10. No Regression: Manual smoke test: add → duplicate → align → style changes → transform gesture → undo chain restores initial clean state.
 
 ### Command Inventory & Status
-(Updated through Batch 4 – selection wrapper commands added)
+(Updated through Batch 5 – executor validation & standardized no-op logging added)
 
 | Command | Purpose | Status | Notes |
 |---------|---------|--------|-------|
 | ADD_SHAPE / ADD_SHAPES | Create shapes | Implemented | Inverse: DELETE_SHAPES |
 | DELETE_SHAPES | Remove shapes | Implemented | Inverse: ADD_SHAPES |
 | DUPLICATE_SHAPES | Clone shapes | Implemented | Inverse: DELETE_SHAPES |
-| SET_SELECTION | Set explicit selection | Implemented (internal) | Used by inverses & direct programmatic sets |
-| SELECT_ALL | Wrapper intent (all shapes) | Implemented | Inverse returned as SET_SELECTION (prev IDs) |
-| DESELECT_ALL | Wrapper intent (clear selection) | Implemented | Inverse returned as SET_SELECTION (prev IDs) |
+| SET_SELECTION | Set explicit selection | Implemented (internal) | Used by inverses & programmatic sets |
+| SELECT_ALL | Wrapper intent (all shapes) | Implemented | Inverse: SET_SELECTION (prev IDs) |
+| DESELECT_ALL | Wrapper intent (clear selection) | Implemented | Inverse: SET_SELECTION (prev IDs) |
 | MOVE_SHAPES_DELTA | Keyboard nudge move | Implemented | Inverse: SET_POSITIONS |
 | SET_POSITIONS | Apply absolute positions | Implemented | Self-inverse pattern |
 | RESET_ROTATION | Zero rotation | Implemented | Inverse: SET_ANGLES_POSITIONS |
@@ -112,11 +112,11 @@ Documentation:
 | SET_FILL_COLOR | Style fill | Implemented | Inverse: SET_FILL_COLOR |
 | SET_STROKE_WIDTH | Style stroke width | Implemented | Inverse: SET_STROKE_WIDTH |
 | SET_IMAGE | Set / clear background image | Implemented | Null URL clears; inverse stores prior |
-| CLEAR_IMAGE (optional) | Explicit clear | Not needed | Handled by SET_IMAGE with null |
+| CLEAR_IMAGE (optional) | Explicit clear | Not needed | Use SET_IMAGE null |
 | SET_SCENE_NAME | Update scene name | Implemented | Inverse captures previous |
 | SET_SCENE_LOGIC | Update logic flag | Implemented | Inverse captures previous |
 | SET_DIAGNOSTIC_LABEL_VISIBILITY | Toggle labels | Implemented | Inverse captures prior boolean |
-| BATCH (optional) | Group commands | TBD | Pending decision (may defer) |
+| BATCH (optional) | Group commands | TBD | Decision pending |
 
 ### Phase 2 Detailed Checklist
 (Will be ticked in-place as batches land)
@@ -136,16 +136,16 @@ Structural & Style (Existing):
 - [x] SET_FILL_COLOR
 - [x] SET_STROKE_WIDTH
 
-New / Missing:
+New / Missing / In Progress:
 - [x] SET_IMAGE
 - [x] (Optional) CLEAR_IMAGE (handled via SET_IMAGE null)
 - [x] SET_SCENE_NAME
 - [x] SET_SCENE_LOGIC
 - [x] SET_DIAGNOSTIC_LABEL_VISIBILITY
 - [x] SELECT_ALL (wrapper) / DESELECT_ALL (wrapper)
-- [ ] Actions refactor (policy adopted Hybrid Option B; mechanical thinning & migration of remaining validation to commands still pending)
-- [ ] Style command payload normalization (unified structure, documented)
-- [ ] Coalescing policy doc comment (command-bus.js header)
+- [ ] Actions refactor (executor parity pass started – standardized no-op reasons added; thinning continues)
+- [ ] Style command payload normalization (full unified items[] form & doc)  (scheduled next batch)
+- [x] Coalescing policy doc comment (added to command-bus.js)
 - [ ] Inversion test harness script (dev/commands-inversion-test.js)
 - [ ] History panel mapping (friendly labels) – optional cosmetic
 - [ ] BATCH meta command (decide implement or defer; document decision)
@@ -161,59 +161,62 @@ Docs & Manifest:
 - [ ] Manifest updated with any new command modules / test harness
 - [ ] This file marks Phase 2 “Complete” once all above are green (with deferrals clearly labeled)
 
-### Coalescing Policy (Draft – to codify in code comments)
-- Style drags (stroke color, fill color/alpha, stroke width) coalesce via coalesceKey + rolling timestamp window (default 800–1000ms).
+### Standardized No-op Reason Codes (Batch 5)
+Used by executors (structure/style) for deterministic logging & future test harness assertions:
+- NO_CHANGE
+- NO_TARGETS
+- NO_TARGETS_UNLOCKED
+- INVALID_PAYLOAD
+- INVALID_COLOR
+- INVALID_FILL
+- INVALID_WIDTH
+
+(Additional codes may be added with justification; harness will map these to expected skip semantics.)
+
+### Coalescing Policy (Codified)
+(See command-bus.js header comment)
+- Style drags (stroke color, fill color/alpha, stroke width) coalesce via coalesceKey + rolling window (default 800–1000ms).
 - Transform gestures already produce a single SET_TRANSFORMS.
-- BATCH (if implemented) bypasses time window and commits once per meta-command.
-- Selection commands (SELECT_ALL / DESELECT_ALL / SET_SELECTION) never coalesce (explicit user intent).
+- Selection commands (SELECT_ALL / DESELECT_ALL / SET_SELECTION) never coalesce.
+- Structural & scene metadata commands do not coalesce.
+- Coalesced frame retains original inverse until interaction ends.
 
 ### Policy Update (2025-09-26)
-Rule 8 revised to Hybrid Option B:  
-- Command executors own authoritative validation, normalization, locked-shape filtering, inversion guarantees.  
-- actions.js may emit early no-op user feedback logs but must not contain correctness-critical logic.  
-- Completion of “Actions refactor” requires: (a) executor parity audit, (b) removal or downgrade of redundant filtering in actions.js, (c) standardized no-op logging pattern.
+- Rule 8 revised to Hybrid Option B (command executors authoritative).
+- Batch 5: Implemented standardized no-op logging + coalescing policy header comment.
+- Actions thinning initiated (removed correctness filtering; retained cosmetic early logs).
 
-### Planned Incremental Batches (Subject to adjustment)
-1. (Done) Scope lock + checklist (no behavior change).
-2. (Done) Implement SET_IMAGE (+ inverse) & SET_SCENE_NAME / SET_SCENE_LOGIC.
-3. (Done) Add SET_DIAGNOSTIC_LABEL_VISIBILITY command.
-4. (Done) Selection wrappers SELECT_ALL / DESELECT_ALL; toolbar now uses SELECT_ALL.
-5. (Pending) Actions thinning (per Hybrid Option B) + standardized no-op logs.
-6. (Pending) Style command payload normalization + command-bus coalescing header comments.
-7. (Pending) Inversion test harness (dev script) + baseline tests.
-8. (Pending) Implement (or explicitly defer) BATCH; update docs accordingly.
-9. (Pending) History panel friendly label map (optional), doc polish, final checklist pass → mark Phase 2 complete.
+### Planned Incremental Batches (Subject to Adjustment)
+1. (Done) Scope lock + checklist.
+2. (Done) Implement SET_IMAGE + SET_SCENE_NAME / SET_SCENE_LOGIC.
+3. (Done) Add SET_DIAGNOSTIC_LABEL_VISIBILITY.
+4. (Done) SELECT_ALL / DESELECT_ALL wrappers + toolbar integration.
+5. (Done) Executor validation + standardized no-op logging + actions thinning (phase 1) + coalescing policy doc.
+6. (Pending) Style payload normalization (mandatory items[] form) + finish actions thinning pass 2.
+7. (Pending) Inversion test harness + baseline equivalence tests.
+8. (Pending) BATCH meta-command decision (implement minimal or document deferral).
+9. (Pending) History panel friendly label map + final doc polish → Phase 2 completion review.
 
 ---
 
 ## Phase 3: Model-Driven Selection (PLANNED)
-
 Goals:
 - Store is the single source of truth for selection.
 - Fabric ActiveSelection becomes purely a visual derivative.
 - Remove token suppression logic.
 - Provide selection diff instrumentation for deterministic tests.
 
----
-
 ## Phase 4: Central Geometry & Hit-Testing (PLANNED)
-
 Goals:
 - All hit-testing & marquee selection computed via geometry layer.
 - Snap / collision groundwork.
 
----
-
 ## Phase 5: Full Domain Model for Shapes (PLANNED)
-
 Goals:
 - POJO scene graph → Fabric adapter (render-only).
 - Headless testability & potential server-side usage.
 
----
-
 ## Phase 6: History, Persistence, Extensibility (PLANNED)
-
 Goals:
 - Stable, versioned serialization / migration.
 - Plugin / tool registry.
@@ -223,14 +226,12 @@ Goals:
 ---
 
 ## Guiding Principle
-
 > At every phase, prioritize testability, separation of concerns, and extensibility.  
 > No business logic or state lives in UI or Fabric handlers; all domain logic is centralized and pure.
 
 ---
 
 ## Change Management
-
 - Deviations require explicit engineering review and documentation.
 - Update this file and the Manifest before making architectural changes.
 
@@ -241,7 +242,7 @@ Goals:
 | Phase | Status | Date | Summary |
 |-------|--------|------|---------|
 | 1 – Stabilize Selection & Geometry | ✅ Complete | 2025-09-24 | Unified geometry + stable selection sync foundation. |
-| 2 – Command Layer & History | ⏳ In Progress | 2025-09-26 | Selection wrapper commands + policy shift (Hybrid B) adopted. |
+| 2 – Command Layer & History | ⏳ In Progress | 2025-09-26 | Wrapper commands + executor validation/no-op logging underway. |
 | 3 – Model-Driven Selection | ⏳ Pending | — | One-way (store→Fabric) selection model. |
 | 4 – Central Geometry & Hit-Testing | ⏳ Pending | — | Hit-test & marquee via geometry layer. |
 | 5 – Domain Model Adapter | ⏳ Pending | — | POJO scene graph with Fabric adapter. |
@@ -264,7 +265,6 @@ Goals:
 ---
 
 ## Onboarding Note
-
 Before implementing anything in Phase 2+ read:
 1. SCENE_DESIGNER_MANIFESTO.txt (engineering rules)
 2. This file (scope + checklist)
@@ -275,4 +275,4 @@ All new geometry-dependent features MUST use geometry helpers—never direct Fab
 
 ---
 
-_Last updated: 2025-09-26 (Policy update: Hybrid Option B for Rule 8; actions refactor now “policy adopted, thinning pending”)._
+_Last updated: 2025-09-26 (Batch 5: executor validation, standardized no-op logging, coalescing policy doc, actions thinning pass 1)._

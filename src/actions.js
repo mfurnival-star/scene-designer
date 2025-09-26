@@ -1,22 +1,26 @@
 import { log } from './log.js';
 import { getState } from './state.js';
 import { dispatch } from './commands/command-bus.js';
+export { alignSelected } from './actions-alignment.js';
 
 /*
-  NOTE (Phase 2 interim):
-  This file still contains some filtering / validation logic (locked shape checks, etc.).
-  Full refactor to make these pure thin intent wrappers is scheduled for a later batch
-  (Step 5 in the Phase 2 completion plan).
+  Batch 5 – Actions Thinning (Hybrid Policy Option B)
+  ---------------------------------------------------
+  - Removed correctness / domain filtering (locked-shape filtering, payload validation).
+  - Command executors (commands-structure.js / commands-style.js / commands-scene.js) are now authoritative.
+  - Retained ONLY lightweight early user-facing no-op logs for UX clarity.
+  - All functions dispatch directly; executors decide actual effect and log standardized no-op reasons.
+  - Future (Phase 2 later batch): May remove even these early logs as we approach fully thin intent registry.
 
-  Batch 4 addition:
-  - Added selectAllCommand() and deselectAllCommand() which dispatch explicit
-    SELECT_ALL / DESELECT_ALL wrapper commands so selection intents are captured
-    in history (distinct from generic SET_SELECTION).
+  NOTE:
+  - Selection-dependent actions still read current selection to build an ids array; locked shapes are NOT filtered here.
+  - Executors safely skip locked or ineligible shapes and return null (no history entry) with reason logging.
 */
 
+/* Shape / Structural Intents */
+
 export function addShapeOfType(type, opts = {}) {
-  const valid = new Set(["point", "rect", "circle", "ellipse"]);
-  const shapeType = valid.has(type) ? type : "point";
+  const shapeType = typeof type === 'string' ? type : 'point';
   dispatch({
     type: 'ADD_SHAPE',
     payload: { shapeType, opts }
@@ -29,27 +33,21 @@ export function deleteSelectedShapes() {
     log("INFO", "[actions] Nothing selected to delete");
     return;
   }
-  const unlockedIds = selected.filter(s => s && !s.locked).map(s => s._id);
-  if (unlockedIds.length === 0) {
-    log("INFO", "[actions] All selected shapes are locked");
-    return;
-  }
   dispatch({
     type: 'DELETE_SHAPES',
-    payload: { ids: unlockedIds }
+    payload: { ids: selected.map(s => s && s._id).filter(Boolean) }
   });
 }
 
 export function duplicateSelectedShapes() {
   const selected = getState().selectedShapes || [];
-  const unlockedIds = selected.filter(s => s && !s.locked).map(s => s._id);
-  if (unlockedIds.length === 0) {
-    log("INFO", "[actions] No unlocked shapes selected to duplicate");
+  if (!selected.length) {
+    log("INFO", "[actions] Nothing selected to duplicate");
     return;
   }
   dispatch({
     type: 'DUPLICATE_SHAPES',
-    payload: { ids: unlockedIds, offset: { x: 20, y: 20 } }
+    payload: { ids: selected.map(s => s && s._id).filter(Boolean), offset: { x: 20, y: 20 } }
   });
 }
 
@@ -59,107 +57,92 @@ export function lockSelectedShapes() {
     log("INFO", "[actions] Nothing selected to lock");
     return;
   }
-  const unlockedIds = selected.filter(s => s && !s.locked).map(s => s._id);
-  if (!unlockedIds.length) {
-    log("INFO", "[actions] No unlocked shapes to lock");
-    return;
-  }
   dispatch({
     type: 'LOCK_SHAPES',
-    payload: { ids: unlockedIds }
+    payload: { ids: selected.map(s => s && s._id).filter(Boolean) }
   });
 }
 
 export function unlockSelectedShapes() {
   const selected = getState().selectedShapes || [];
-  if (selected.length > 0) {
-    const lockedIds = selected.filter(s => s && s.locked).map(s => s._id);
-    if (!lockedIds.length) {
-      log("INFO", "[actions] No locked shapes selected to unlock");
-      return;
-    }
-    dispatch({
-      type: 'UNLOCK_SHAPES',
-      payload: { ids: lockedIds }
-    });
-  } else {
+  // If none selected we intentionally dispatch with empty ids so executor uses fallback logic.
+  const ids = selected.map(s => s && s._id).filter(Boolean);
+  if (!ids.length) {
+    log("INFO", "[actions] No selection – unlocking will target any locked shapes (executor decides)");
     dispatch({ type: 'UNLOCK_SHAPES' });
+    return;
   }
+  dispatch({
+    type: 'UNLOCK_SHAPES',
+    payload: { ids }
+  });
 }
 
 export function resetRotationForSelectedShapes() {
   const selected = getState().selectedShapes || [];
-  const targets = selected.filter(s =>
-    s && !s.locked && (s._type === 'rect' || s._type === 'circle' || s._type === 'ellipse')
-  );
-  if (targets.length === 0) {
-    log("INFO", "[actions] No eligible shapes for reset rotation");
+  if (!selected.length) {
+    log("INFO", "[actions] Nothing selected for reset rotation");
     return;
   }
   dispatch({
     type: 'RESET_ROTATION',
-    payload: { ids: targets.map(t => t._id) }
+    payload: { ids: selected.map(s => s && s._id).filter(Boolean) }
   });
 }
 
+/* Style Intents (selection only; defaults handled elsewhere like toolbar handlers) */
+
 export function setStrokeColorForSelected(color, options = {}) {
   const selected = getState().selectedShapes || [];
-  const ids = selected.filter(s => s && !s.locked).map(s => s._id);
-  if (!ids.length) {
-    log("INFO", "[actions] No unlocked shapes selected for stroke color");
-    return;
-  }
-  if (typeof color !== 'string' || !color) {
-    log("WARN", "[actions] Invalid stroke color");
+  if (!selected.length) {
+    log("INFO", "[actions] No selection for stroke color");
     return;
   }
   dispatch({
     type: 'SET_STROKE_COLOR',
-    payload: { ids, color }
+    payload: {
+      ids: selected.map(s => s && s._id).filter(Boolean),
+      color
+    }
   }, options);
 }
 
 export function setFillColorForSelected(fill, options = {}) {
   const selected = getState().selectedShapes || [];
-  const ids = selected.filter(s => s && !s.locked).map(s => s._id);
-  if (!ids.length) {
-    log("INFO", "[actions] No unlocked shapes selected for fill color");
-    return;
-  }
-  if (typeof fill !== 'string' || !fill) {
-    log("WARN", "[actions] Invalid fill color");
+  if (!selected.length) {
+    log("INFO", "[actions] No selection for fill color");
     return;
   }
   dispatch({
     type: 'SET_FILL_COLOR',
-    payload: { ids, fill }
+    payload: {
+      ids: selected.map(s => s && s._id).filter(Boolean),
+      fill
+    }
   }, options);
 }
 
 export function setStrokeWidthForSelected(width, options = {}) {
   const selected = getState().selectedShapes || [];
-  const ids = selected.filter(s => s && !s.locked).map(s => s._id);
-  if (!ids.length) {
-    log("INFO", "[actions] No unlocked shapes selected for stroke width");
-    return;
-  }
-  const w = Number(width);
-  if (!Number.isFinite(w) || w <= 0) {
-    log("WARN", "[actions] Invalid stroke width");
+  if (!selected.length) {
+    log("INFO", "[actions] No selection for stroke width");
     return;
   }
   dispatch({
     type: 'SET_STROKE_WIDTH',
-    payload: { ids, width: w }
+    payload: {
+      ids: selected.map(s => s && s._id).filter(Boolean),
+      width
+    }
   }, options);
 }
 
-/* Scene-level intent wrappers */
+/* Scene / Metadata */
 
 export function setSceneImage(url, imageObj, options = {}) {
   dispatch({
     type: 'SET_IMAGE',
-    payload: { url: url || null, imageObj: url ? imageObj || null : null }
+    payload: { url: url || null, imageObj: url ? (imageObj || null) : null }
   }, options);
 }
 
@@ -171,18 +154,16 @@ export function clearSceneImage(options = {}) {
 }
 
 export function setSceneName(name, options = {}) {
-  const n = typeof name === 'string' ? name : '';
   dispatch({
     type: 'SET_SCENE_NAME',
-    payload: { name: n }
+    payload: { name: typeof name === 'string' ? name : '' }
   }, options);
 }
 
 export function setSceneLogic(logic, options = {}) {
-  const l = typeof logic === 'string' && logic ? logic : 'AND';
   dispatch({
     type: 'SET_SCENE_LOGIC',
-    payload: { logic: l }
+    payload: { logic: (typeof logic === 'string' && logic) ? logic : 'AND' }
   }, options);
 }
 
@@ -193,12 +174,12 @@ export function setDiagnosticLabelsVisibility(visible, options = {}) {
   }, options);
 }
 
-/* Selection wrapper commands (Batch 4) */
+/* Selection Wrapper Commands (history-visible user intents) */
+
 export function selectAllCommand(options = {}) {
   dispatch({ type: 'SELECT_ALL' }, options);
 }
+
 export function deselectAllCommand(options = {}) {
   dispatch({ type: 'DESELECT_ALL' }, options);
 }
-
-export { alignSelected } from './actions-alignment.js';

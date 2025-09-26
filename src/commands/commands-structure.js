@@ -28,6 +28,29 @@ import {
   getFirstChildStrokeWidth
 } from './commands-style.js';
 
+/*
+  Batch 5 Changes:
+  - Introduced authoritative validation & standardized no-op logging (logNoop).
+  - Locked-shape filtering moved fully into executors (actions.js now thin).
+  - Added reason codes: NO_CHANGE, NO_TARGETS, NO_TARGETS_UNLOCKED, INVALID_PAYLOAD.
+  - Added internal helper skipLocked() and uniform unlocking / locking logic.
+  - Existing behavior preserved where possible; added explicit logs for silent skips.
+
+  NOTE: File exceeds soft size cap; scheduled for split (structure-add, structure-transform, structure-selection) in a later batch.
+*/
+
+const NOOP = {
+  NO_CHANGE: 'NO_CHANGE',
+  NO_TARGETS: 'NO_TARGETS',
+  NO_TARGETS_UNLOCKED: 'NO_TARGETS_UNLOCKED',
+  INVALID_PAYLOAD: 'INVALID_PAYLOAD'
+};
+
+function logNoop(cmdType, reason, meta = {}) {
+  log("INFO", `[commands-structure] ${cmdType} no-op`, { reason, ...meta });
+  return null;
+}
+
 function requestRender() {
   const c = getState().fabricCanvas;
   if (!c) return;
@@ -61,11 +84,13 @@ function createShapeByType(type, opts = {}) {
     ? opts.y
     : (store.settings?.canvasMaxHeight || 400) * ((store.settings?.shapeStartYPercent ?? 50) / 100);
 
-  if (type === "rect") return makeRectShape(x - w / 2, y - h / 2, w, h);
-  if (type === "circle") return makeCircleShape(x, y, r);
-  if (type === "ellipse") return makeEllipseShape(x, y, w, h);
-  if (type === "point") return makePointShape(x, y);
-  return null;
+  switch (type) {
+    case 'rect': return makeRectShape(x - w / 2, y - h / 2, w, h);
+    case 'circle': return makeCircleShape(x, y, r);
+    case 'ellipse': return makeEllipseShape(x, y, w, h);
+    case 'point': return makePointShape(x, y);
+    default: return null;
+  }
 }
 
 function duplicateShapeFallback(src, dx = 20, dy = 20) {
@@ -259,12 +284,21 @@ function applyLockFlags(shape, locked) {
   }
 }
 
+function skipLocked(shapes) {
+  return (shapes || []).filter(s => s && !s.locked);
+}
+
 /* ---------- Structural Commands ---------- */
 
 function cmdAddShape(payload) {
   const { shapeType, opts } = payload || {};
+  if (typeof shapeType !== 'string') {
+    return logNoop('ADD_SHAPE', NOOP.INVALID_PAYLOAD, { shapeType });
+  }
   const shape = createShapeByType(shapeType, opts || {});
-  if (!shape) return null;
+  if (!shape) {
+    return logNoop('ADD_SHAPE', NOOP.INVALID_PAYLOAD, { shapeType });
+  }
   addShape(shape);
   selectionSetSelectedShapes([shape]);
   return { type: 'DELETE_SHAPES', payload: { ids: [shape._id] } };
@@ -273,23 +307,36 @@ function cmdAddShape(payload) {
 function cmdAddShapes(payload) {
   const { shapes } = payload || {};
   const arr = Array.isArray(shapes) ? shapes.filter(Boolean) : [];
-  if (!arr.length) return null;
+  if (!arr.length) return logNoop('ADD_SHAPES', NOOP.NO_TARGETS);
   arr.forEach(s => addShape(s));
   selectionSetSelectedShapes(arr);
   return { type: 'DELETE_SHAPES', payload: { ids: arr.map(s => s._id) } };
 }
 
 function cmdDeleteShapes(payload) {
-  const { ids } = payload || {};
-  const targets = getShapesByIds(ids || []);
-  if (!targets.length) return null;
+  const rawIds = (payload && Array.isArray(payload.ids) && payload.ids.length)
+    ? payload.ids
+    : getSelectedIds();
+  if (!rawIds.length) return logNoop('DELETE_SHAPES', NOOP.NO_TARGETS);
+
+  const targetsAll = getShapesByIds(rawIds);
+  if (!targetsAll.length) return logNoop('DELETE_SHAPES', NOOP.NO_TARGETS);
+
+  const deletable = skipLocked(targetsAll);
+  if (!deletable.length) {
+    return logNoop('DELETE_SHAPES', NOOP.NO_TARGETS_UNLOCKED, { requested: rawIds.length });
+  }
+
   const removed = [];
-  targets.forEach(shape => {
+  deletable.forEach(shape => {
     removed.push(shape);
     removeShape(shape);
   });
-  const remainingSelected = (getState().selectedShapes || []).filter(s => !ids.includes(s._id));
+
+  // Update selection removing deleted shapes (even if some locked remained)
+  const remainingSelected = (getState().selectedShapes || []).filter(s => !deletable.some(d => d._id === s._id));
   selectionSetSelectedShapes(remainingSelected);
+
   return { type: 'ADD_SHAPES', payload: { shapes: removed } };
 }
 
@@ -298,8 +345,11 @@ function cmdDuplicateShapes(payload) {
   const dx = Number(offset?.x) || 20;
   const dy = Number(offset?.y) || 20;
 
-  const sources = getShapesByIds(ids || getSelectedIds());
-  if (!sources.length) return null;
+  const sourceIds = (Array.isArray(ids) && ids.length) ? ids : getSelectedIds();
+  if (!sourceIds.length) return logNoop('DUPLICATE_SHAPES', NOOP.NO_TARGETS);
+
+  const sources = skipLocked(getShapesByIds(sourceIds));
+  if (!sources.length) return logNoop('DUPLICATE_SHAPES', NOOP.NO_TARGETS_UNLOCKED, { requested: sourceIds.length });
 
   const created = sources.map(src => {
     let dup = duplicateShapePreservingTransforms(src, dx, dy);
@@ -320,18 +370,10 @@ function cmdDuplicateShapes(payload) {
     return dup;
   }).filter(Boolean);
 
-  if (!created.length) return null;
+  if (!created.length) return logNoop('DUPLICATE_SHAPES', NOOP.NO_CHANGE);
 
   selectionSetSelectedShapes(created);
   return { type: 'DELETE_SHAPES', payload: { ids: created.map(s => s._id) } };
-}
-
-function setsEqual(aIds, bIds) {
-  if (aIds.length !== bIds.length) return false;
-  const a = [...aIds].sort();
-  const b = [...bIds].sort();
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
 }
 
 function cmdSetSelection(payload) {
@@ -339,26 +381,27 @@ function cmdSetSelection(payload) {
   const prevIds = getSelectedIds();
   const next = getShapesByIds(ids || []);
   const nextIds = next.map(s => s._id);
+  // Even if identical we still treat as an intent (history semantics)
+  if (prevIds.length === nextIds.length && prevIds.every(id => nextIds.includes(id))) {
+    // Provide inverse anyway (explicit intent)
+    selectionSetSelectedShapes(next);
+    return { type: 'SET_SELECTION', payload: { ids: prevIds } };
+  }
   selectionSetSelectedShapes(next);
-  // Even if identical, we still return inverse (history semantics rely on forward intent).
   return { type: 'SET_SELECTION', payload: { ids: prevIds } };
 }
 
-/* NEW: Explicit wrapper commands for user intent */
-
 function cmdSelectAll() {
   const shapes = (getState().shapes || []).filter(Boolean);
-  if (!shapes.length) return null;
+  if (!shapes.length) return logNoop('SELECT_ALL', NOOP.NO_TARGETS);
   const prevIds = getSelectedIds();
-  const allIds = shapes.map(s => s._id).filter(Boolean);
-  // We allow pushing history even if already all selected, per plan (explicit user intent).
   selectionSetSelectedShapes(shapes);
   return { type: 'SET_SELECTION', payload: { ids: prevIds } };
 }
 
 function cmdDeselectAll() {
   const prevIds = getSelectedIds();
-  if (!prevIds.length) return null; // no-op if already empty
+  if (!prevIds.length) return logNoop('DESELECT_ALL', NOOP.NO_TARGETS);
   selectionSetSelectedShapes([]);
   return { type: 'SET_SELECTION', payload: { ids: prevIds } };
 }
@@ -370,14 +413,16 @@ function cmdMoveShapesDelta(payload) {
   const dxN = Number(dx) || 0;
   const dyN = Number(dy) || 0;
 
-  const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
-  const targets = shapes.filter(s => s && !s.locked);
-  if (!targets.length) return null;
+  const sourceIds = (ids && ids.length) ? ids : getSelectedIds();
+  if (!sourceIds.length) return logNoop('MOVE_SHAPES_DELTA', NOOP.NO_TARGETS);
+
+  const shapes = skipLocked(getShapesByIds(sourceIds));
+  if (!shapes.length) return logNoop('MOVE_SHAPES_DELTA', NOOP.NO_TARGETS_UNLOCKED, { requested: sourceIds.length });
 
   const prevPositions = [];
   const img = getState().bgFabricImage;
 
-  targets.forEach(shape => {
+  shapes.forEach(shape => {
     try {
       prevPositions.push({ id: shape._id, left: shape.left ?? 0, top: shape.top ?? 0 });
       let ddx = dxN, ddy = dyN;
@@ -387,12 +432,18 @@ function cmdMoveShapesDelta(payload) {
         ddx = clamped.dx;
         ddy = clamped.dy;
       }
+      if (ddx === 0 && ddy === 0) {
+        // preserve original in prevPositions, no-op for this shape
+        return;
+      }
       shape.set({ left: (shape.left ?? 0) + ddx, top: (shape.top ?? 0) + ddy });
       if (typeof shape.setCoords === "function") shape.setCoords();
     } catch (e) {
       log("ERROR", "[commands-structure] MOVE_SHAPES_DELTA failed", e);
     }
   });
+
+  if (!prevPositions.length) return logNoop('MOVE_SHAPES_DELTA', NOOP.NO_CHANGE);
 
   requestRender();
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
@@ -401,14 +452,14 @@ function cmdMoveShapesDelta(payload) {
 function cmdSetPositions(payload) {
   const { positions } = payload || {};
   const arr = Array.isArray(positions) ? positions.filter(p => p && p.id != null) : [];
-  if (!arr.length) return null;
+  if (!arr.length) return logNoop('SET_POSITIONS', NOOP.INVALID_PAYLOAD);
 
   const shapesMap = new Map((getState().shapes || []).map(s => [s._id, s]));
   const prevPositions = [];
 
   arr.forEach(p => {
     const shape = shapesMap.get(p.id);
-    if (!shape) return;
+    if (!shape || shape.locked) return;
     try {
       prevPositions.push({ id: shape._id, left: shape.left ?? 0, top: shape.top ?? 0 });
       shape.set({ left: Number(p.left) || 0, top: Number(p.top) || 0 });
@@ -418,6 +469,8 @@ function cmdSetPositions(payload) {
     }
   });
 
+  if (!prevPositions.length) return logNoop('SET_POSITIONS', NOOP.NO_TARGETS_UNLOCKED);
+
   requestRender();
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
 }
@@ -426,11 +479,14 @@ function cmdSetPositions(payload) {
 
 function cmdResetRotation(payload) {
   const { ids } = payload || {};
-  const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
+  const sourceIds = (ids && ids.length) ? ids : getSelectedIds();
+  if (!sourceIds.length) return logNoop('RESET_ROTATION', NOOP.NO_TARGETS);
+
+  const shapes = skipLocked(getShapesByIds(sourceIds));
   const targets = shapes.filter(s =>
-    s && !s.locked && (s._type === 'rect' || s._type === 'circle' || s._type === 'ellipse')
+    s && (s._type === 'rect' || s._type === 'circle' || s._type === 'ellipse')
   );
-  if (!targets.length) return null;
+  if (!targets.length) return logNoop('RESET_ROTATION', NOOP.NO_TARGETS_UNLOCKED, { requested: sourceIds.length });
 
   const prev = targets.map(shape => {
     try {
@@ -438,6 +494,7 @@ function cmdResetRotation(payload) {
         ? shape.getCenterPoint()
         : getShapeCenter(shape);
       const angle = Number(shape.angle) || 0;
+      if (angle === 0) return null;
       setAngleAndCenter(shape, 0, center);
       return { id: shape._id, angle, center };
     } catch (e) {
@@ -446,6 +503,8 @@ function cmdResetRotation(payload) {
     }
   }).filter(Boolean);
 
+  if (!prev.length) return logNoop('RESET_ROTATION', NOOP.NO_CHANGE);
+
   requestRender();
   return { type: 'SET_ANGLES_POSITIONS', payload: { items: prev } };
 }
@@ -453,14 +512,14 @@ function cmdResetRotation(payload) {
 function cmdSetAnglesPositions(payload) {
   const { items } = payload || {};
   const arr = Array.isArray(items) ? items.filter(i => i && i.id != null) : [];
-  if (!arr.length) return null;
+  if (!arr.length) return logNoop('SET_ANGLES_POSITIONS', NOOP.INVALID_PAYLOAD);
 
   const map = new Map((getState().shapes || []).map(s => [s._id, s]));
   const prev = [];
 
   arr.forEach(i => {
     const shape = map.get(i.id);
-    if (!shape) return;
+    if (!shape || shape.locked) return;
     try {
       const currentCenter = (typeof shape.getCenterPoint === "function")
         ? shape.getCenterPoint()
@@ -472,6 +531,8 @@ function cmdSetAnglesPositions(payload) {
     }
   });
 
+  if (!prev.length) return logNoop('SET_ANGLES_POSITIONS', NOOP.NO_TARGETS_UNLOCKED);
+
   requestRender();
   return { type: 'SET_ANGLES_POSITIONS', payload: { items: prev } };
 }
@@ -480,8 +541,11 @@ function cmdSetAnglesPositions(payload) {
 
 function cmdLockShapes(payload) {
   const { ids } = payload || {};
-  const shapes = getShapesByIds(ids && ids.length ? ids : getSelectedIds());
-  if (!shapes.length) return null;
+  const sourceIds = (ids && ids.length) ? ids : getSelectedIds();
+  if (!sourceIds.length) return logNoop('LOCK_SHAPES', NOOP.NO_TARGETS);
+
+  const shapes = getShapesByIds(sourceIds);
+  if (!shapes.length) return logNoop('LOCK_SHAPES', NOOP.NO_TARGETS);
 
   const affected = [];
   shapes.forEach(s => {
@@ -491,7 +555,7 @@ function cmdLockShapes(payload) {
     }
   });
 
-  if (!affected.length) return null;
+  if (!affected.length) return logNoop('LOCK_SHAPES', NOOP.NO_CHANGE);
 
   requestRender();
   selectionSetSelectedShapes(shapes.slice());
@@ -509,7 +573,7 @@ function cmdUnlockShapes(payload) {
     targets = selected.length ? selected.filter(Boolean) : shapes.filter(s => s && s.locked);
   }
 
-  if (!targets.length) return null;
+  if (!targets.length) return logNoop('UNLOCK_SHAPES', NOOP.NO_TARGETS);
 
   const affected = [];
   targets.forEach(s => {
@@ -519,7 +583,7 @@ function cmdUnlockShapes(payload) {
     }
   });
 
-  if (!affected.length) return null;
+  if (!affected.length) return logNoop('UNLOCK_SHAPES', NOOP.NO_CHANGE);
 
   const preserve = (getState().selectedShapes || []).slice();
   selectionSetSelectedShapes(preserve);
@@ -534,15 +598,18 @@ function cmdAlignSelected(payload) {
   const mode = payload?.mode;
   const ref = payload?.ref === 'canvas' ? 'canvas' : 'selection';
   const valid = new Set(['left', 'centerX', 'right', 'top', 'middleY', 'bottom']);
-  if (!valid.has(mode)) return null;
+  if (!valid.has(mode)) return logNoop('ALIGN_SELECTED', NOOP.INVALID_PAYLOAD, { mode });
 
   const store = getState();
   const selected = Array.isArray(store.selectedShapes) ? store.selectedShapes.filter(Boolean) : [];
-  if (selected.length < 2) return null;
+  if (selected.length < 2) return logNoop('ALIGN_SELECTED', NOOP.NO_TARGETS);
 
-  const bboxes = getAbsoluteRectsForSelection(selected, store.fabricCanvas);
+  const selectable = skipLocked(selected);
+  if (selectable.length < 2) return logNoop('ALIGN_SELECTED', NOOP.NO_TARGETS_UNLOCKED, { selected: selected.length });
+
+  const bboxes = getAbsoluteRectsForSelection(selectable, store.fabricCanvas);
   const existingBboxes = bboxes.filter(Boolean);
-  if (existingBboxes.length < 2) return null;
+  if (existingBboxes.length < 2) return logNoop('ALIGN_SELECTED', NOOP.NO_CHANGE);
 
   let referenceValue;
   if (ref === 'canvas' && store.bgFabricImage && Number.isFinite(store.bgFabricImage.width) && Number.isFinite(store.bgFabricImage.height)) {
@@ -564,11 +631,9 @@ function cmdAlignSelected(payload) {
   const img = store.bgFabricImage;
   let movedCount = 0;
 
-  selected.forEach((shape, idx) => {
-    if (!shape) return;
+  selectable.forEach((shape, idx) => {
     const bbox = bboxes[idx];
     if (!bbox) return;
-    if (shape.locked) return;
 
     let dx = 0, dy = 0;
     switch (mode) {
@@ -608,7 +673,7 @@ function cmdAlignSelected(payload) {
     }
   });
 
-  if (movedCount === 0) return null;
+  if (movedCount === 0) return logNoop('ALIGN_SELECTED', NOOP.NO_CHANGE);
 
   requestRender();
   return { type: 'SET_POSITIONS', payload: { positions: prevPositions } };
@@ -619,23 +684,24 @@ function cmdAlignSelected(payload) {
 function cmdSetTransforms(payload) {
   const { items } = payload || {};
   const arr = Array.isArray(items) ? items.filter(i => i && i.id != null) : [];
-  if (!arr.length) return null;
+  if (!arr.length) return logNoop('SET_TRANSFORMS', NOOP.INVALID_PAYLOAD);
 
   const map = new Map((getState().shapes || []).map(s => [s._id, s]));
   const prev = [];
 
   arr.forEach(i => {
     const shape = map.get(i.id);
-    if (!shape) return;
+    if (!shape || shape.locked) return;
     try {
-      prev.push({
+      const snapshot = {
         id: shape._id,
         left: Number.isFinite(shape.left) ? shape.left : 0,
         top: Number.isFinite(shape.top) ? shape.top : 0,
         scaleX: Number.isFinite(shape.scaleX) ? shape.scaleX : 1,
         scaleY: Number.isFinite(shape.scaleY) ? shape.scaleY : 1,
         angle: Number(shape.angle) || 0
-      });
+      };
+      prev.push(snapshot);
 
       const next = {};
       if (i.left !== undefined) next.left = Number(i.left) || 0;
@@ -650,6 +716,8 @@ function cmdSetTransforms(payload) {
       log("ERROR", "[commands-structure] SET_TRANSFORMS failed", e);
     }
   });
+
+  if (!prev.length) return logNoop('SET_TRANSFORMS', NOOP.NO_TARGETS_UNLOCKED);
 
   requestRender();
   return { type: 'SET_TRANSFORMS', payload: { items: prev } };
