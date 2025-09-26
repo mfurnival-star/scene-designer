@@ -3,14 +3,20 @@ import { buildCanvasPanel } from './canvas.js';
 import { buildSettingsPanel, loadSettings } from './settings.js';
 import { buildErrorLogPanel, registerErrorLogSink } from './errorlog.js';
 import { buildCanvasToolbarPanel } from './toolbar.js';
+import { buildHistoryPanel } from './history-panel.js';
 import { getSetting, subscribe } from './state.js';
+import { setSettingAndSave } from './settings.js';
 import { log } from './log.js';
 import { installUndoRedoKeybindings } from './keybindings.js';
-import { buildHistoryPanel } from './history-panel.js';
 
 let layout = null;
 let mlRoot = null;
 let detachKeybindings = null;
+
+// Auto‑force & enforcement guards
+let sidebarAutoForced = false;
+let enforcingSidebar = false;
+const PREVENT_HIDING = true; // hard rule: user cannot fully hide settings sidebar now
 
 export function isErrorLogPanelOpen() {
   if (!layout || !layout._panelRefs) return false;
@@ -24,25 +30,62 @@ export function setScenarioRunnerPanelVisible(_visible) {}
 
 export function showErrorLogPanel() {
   if (!layout) { log("ERROR", "[layout] showErrorLogPanel: layout not initialized"); return; }
-  if (isErrorLogPanelOpen()) { return; }
+  if (isErrorLogPanelOpen()) return;
   rebuildLayout();
 }
 export function hideErrorLogPanel() {
   if (!layout) { log("ERROR", "[layout] hideErrorLogPanel: layout not initialized"); return; }
-  if (!isErrorLogPanelOpen()) { return; }
+  if (!isErrorLogPanelOpen()) return;
   rebuildLayout();
 }
-export function setErrorLogPanelVisible(_visible) {
-  rebuildLayout();
+export function setErrorLogPanelVisible(_visible) { rebuildLayout(); }
+
+function ensureSidebarVisibleInitial(reason) {
+  if (sidebarAutoForced) return;
+  const right = getSetting("showRightSidebarPanel");
+  const settings = getSetting("showSettingsPanel");
+  // If either flag is falsy we force them both on
+  if (right === false || settings === false || right === undefined || settings === undefined) {
+    sidebarAutoForced = true;
+    try {
+      if (right !== true) setSettingAndSave("showRightSidebarPanel", true);
+      if (settings !== true) setSettingAndSave("showSettingsPanel", true);
+      log("INFO", "[layout] Auto-forced Settings sidebar visibility", { reason });
+    } catch (e) {
+      log("ERROR", "[layout] Auto-force failed", e);
+    }
+  }
+}
+
+// Enforce attempts to hide (runtime) by immediately turning flags back on
+function enforceSidebarVisibilityOnSettingChange(key, value) {
+  if (!PREVENT_HIDING) return;
+  if (key !== "showRightSidebarPanel" && key !== "showSettingsPanel") return;
+  if (value === true) return;
+  if (enforcingSidebar) return;
+  enforcingSidebar = true;
+  try {
+    log("WARN", "[layout] Preventing sidebar/settings panel from being hidden", { key, attemptedValue: value });
+    setSettingAndSave(key, true);
+  } catch (e) {
+    log("ERROR", "[layout] Failed to re-enable sidebar setting", { key, error: e });
+  } finally {
+    enforcingSidebar = false;
+  }
 }
 
 subscribe((state, details) => {
   if (!details || details.type !== "setSetting") return;
-  if (details.key === "showErrorLogPanel") rebuildLayout();
-  if (details.key === "showScenarioRunner") rebuildLayout();
-  if (details.key === "showRightSidebarPanel") rebuildLayout();
-  if (details.key === "showSettingsPanel") rebuildLayout();
-  if (details.key === "showHistoryPanel") rebuildLayout();
+  if (
+    details.key === "showErrorLogPanel" ||
+    details.key === "showScenarioRunner" ||
+    details.key === "showRightSidebarPanel" ||
+    details.key === "showSettingsPanel" ||
+    details.key === "showHistoryPanel"
+  ) {
+    enforceSidebarVisibilityOnSettingChange(details.key, details.value);
+    rebuildLayout();
+  }
 });
 
 function rebuildLayout() {
@@ -102,7 +145,7 @@ function rebuildLayout() {
           width: '28px',
           color: '#2176ff',
           track: '#e0e4ec',
-          radius: '14px',
+            radius: '14px',
           hover: '#0057d8'
         },
         closable: false
@@ -115,6 +158,9 @@ function rebuildLayout() {
     rowContent.push({
       type: 'column',
       width: 30,
+      // Add an informal minWidth hint (MiniLayout may ignore custom prop;
+      // we also enforce via DOM styling after init)
+      minWidth: 220,
       content: rightSidebarContent,
       closable: false
     });
@@ -154,11 +200,33 @@ function rebuildLayout() {
   registerErrorLogSink();
   layout.init();
 
+  enforceSidebarDomStyles();
+
   if (typeof window !== "undefined") {
     try { window.layout = layout; } catch {}
   }
 
   log("INFO", "[layout] Layout initialized");
+}
+
+function enforceSidebarDomStyles() {
+  try {
+    if (!layout || !mlRoot) return;
+    // Find right sidebar panels (heuristic: titles Settings / History)
+    const panels = mlRoot.querySelectorAll('.minilayout-panel');
+    panels.forEach(p => {
+      const header = p.querySelector('.minilayout-panel-header');
+      if (!header) return;
+      const txt = header.textContent || '';
+      if (/Settings|History/i.test(txt)) {
+        p.style.minWidth = '220px';
+        p.style.flex = '0 0 auto';
+        p.style.overflow = 'hidden';
+      }
+    });
+  } catch (e) {
+    log("WARN", "[layout] enforceSidebarDomStyles failed", e);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -170,6 +238,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (e) {
     log("ERROR", "[layout] Settings load failed; using defaults", e);
   }
+
+  // Force sidebar/settings panel on initial load if hidden
+  ensureSidebarVisibleInitial("initial-load");
 
   rebuildLayout();
 
