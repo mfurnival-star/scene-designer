@@ -1,11 +1,11 @@
 # Module Index (Auto-Maintained Manually – Phase 2 Interim)
 
-Purpose: Fast lookup of modules, their surface area role, and recent additions.  
+Purpose: Fast lookup of modules, their surface area role, and recent additions / hotfixes.  
 Update this file whenever adding / removing / renaming a module (engineering rule #3).
 
 Status Legend:
 - NEW: Added in current or immediately prior batch.
-- MOD: Recently modified in current batch (structural / API significance).
+- MOD: Recently modified in current batch (structural / API significance or logic hotfix).
 - STABLE: No structural changes this batch.
 
 ## Core / Infrastructure
@@ -24,14 +24,14 @@ Status Legend:
 |------|--------|-------|
 | commands/command-bus.js | STABLE | dispatch / undo / redo / coalescing |
 | commands/commands.js | STABLE | Dispatcher: scene → structure → style |
-| commands/commands-structure.js | STABLE | SELECT_ALL / DESELECT_ALL wrapper commands |
-| commands/commands-style.js | MOD | **Batch 6:** Style commands now require items[] payload; legacy forms rejected. |
+| commands/commands-structure.js | STABLE | Structural + selection + transforms |
+| commands/commands-style.js | MOD | Batch 6: items[] payload only; legacy forms rejected (LEGACY_PAYLOAD). |
 | commands/commands-scene.js | STABLE | Scene ops (image, name, logic, diagnostic labels) |
 
 ## Actions (Intent Layer)
 | File | Status | Notes |
 |------|--------|-------|
-| actions.js | MOD | **Batch 6:** setStrokeColorForSelected, setFillColorForSelected, setStrokeWidthForSelected now emit items[] payload. |
+| actions.js | MOD | Batch 6: style actions emit items[] payload; still thin with early UX logs. |
 | actions-alignment.js | STABLE | Align intent dispatch |
 
 ## Selection & Transformer
@@ -72,10 +72,10 @@ Status Legend:
 |------|--------|-------|
 | toolbar-panel.js | STABLE | Panel assembler |
 | toolbar-dom.js | STABLE | DOM structure & refs |
-| toolbar-handlers.js | STABLE | Select All now via command for history entry |
+| toolbar-handlers.js | STABLE | Select All via command for history entry |
 | toolbar-state.js | STABLE | Button enable/disable + scale sync |
 | toolbar-styles.js | STABLE | Toolbar CSS injection |
-| toolbar-color.js | MOD | **Batch 6:** Color pickers now call setStrokeColorForSelected/setFillColorForSelected with items[] payload. |
+| toolbar-color.js | MOD | Batch 6 + Hotfix: items[] normalization; HOTFIX restored full file & fixed applyStroke/applyFill to pass plain color / rgba to actions (removed incorrect items[] argument). |
 
 ## Settings
 | File | Status | Notes |
@@ -92,17 +92,27 @@ Status Legend:
 ## Debug / Diagnostics
 | File | Status | Notes |
 |------|--------|-------|
-| debug.js | (Not listed earlier) | Debug snapshot collector |
-| errorlog.js | (Not listed) | Error log panel sink |
-| console-re-wrapper.js | (Not listed) | Remote logging bridge (temp) |
+| debug.js | STABLE | Debug snapshot collector |
+| errorlog.js | STABLE | Error log panel sink |
+| console-re-wrapper.js | STABLE | Remote logging bridge (temporary) |
 
-## Batch 6: Style Payload Normalization (items[] only)
-- commands/commands-style.js: Now requires items[] array for style commands (SET_STROKE_COLOR, SET_FILL_COLOR, SET_STROKE_WIDTH). Legacy payloads (ids + color/fill/width) are rejected (LEGACY_PAYLOAD reason).
-- actions.js: setStrokeColorForSelected, setFillColorForSelected, setStrokeWidthForSelected now build items[] payload directly from current selection. No legacy mode remains.
-- toolbar-color.js: Color pickers now pass items[] to actions; selectionless updates still set defaults.
-- PHASED_ARCHITECTURE_PATH.md: Checklist ticked, schema added.
-- modules.index.md: This file updated (MOD).
+## Documentation
+| File | Status | Notes |
+|------|--------|-------|
+| docs/PHASED_ARCHITECTURE_PATH.md | MOD | Batch 6: style payload normalization ticked; schema + reason codes updated. |
+| docs/SCENE_DESIGNER_MANIFESTO.txt | STABLE | Core engineering rules (Rule 8 Hybrid policy adopted). |
 
-_Keep this index <500 lines; trim “Recent Batches” after Phase 2 closure._
+---
 
-_Last updated: 2025-09-26 (Batch 6 – style payload normalization, items[] only)_
+### Recent Batch / Hotfix Summary
+- Batch 6: Style payload normalization (items[] only) across commands-style/actions/toolbar-color.
+- Hotfix (post Batch 6): Replaced incomplete toolbar-color.js (previous placeholder utilities) with full implementation; corrected regression (passing items[] to actions instead of plain color/fill string).
+
+### Upcoming (Planned Modifications)
+- Batch 7: Inversion test harness (will add dev/commands-inversion-test.js).
+- Batch 8: BATCH meta-command decision (may introduce commands/commands-meta.js).
+- Batch 9: History panel friendly labels (likely history-label-map module or extension of history-panel).
+
+_Keep this index <500 lines; prune batch history notes after Phase 2 closure._
+
+_Last updated: 2025-09-26 (Hotfix: toolbar-color.js full restoration & action call fix)._
