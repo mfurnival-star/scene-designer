@@ -239,3 +239,4 @@ export function buildSettingsPanel({ element, title, componentName }) {
     componentName
   });
 }
+
